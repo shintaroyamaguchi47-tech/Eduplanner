@@ -204,7 +204,7 @@
       const [documents, setDocuments] = useState([]); 
       const [studentRecordUrl, setStudentRecordUrl] = useState('');
       
-      // ★追加: 長期休業期間のデータ
+      // 長期休業期間のデータ
       const [vacations, setVacations] = useState([]);
       
       const [quickMemos, setQuickMemos] = useState([]);
@@ -281,7 +281,7 @@
           if (localStorage.getItem('teacherPlanner_v4_todos')) setTodos(load('teacherPlanner_v4_todos'));
           if (localStorage.getItem('teacherPlanner_v4_quickMemos')) setQuickMemos(load('teacherPlanner_v4_quickMemos'));
           if (localStorage.getItem('teacherPlanner_v4_syllabus')) setSyllabusData(load('teacherPlanner_v4_syllabus'));
-          if (localStorage.getItem('teacherPlanner_v4_vacations')) setVacations(load('teacherPlanner_v4_vacations')); // ★追加
+          if (localStorage.getItem('teacherPlanner_v4_vacations')) setVacations(load('teacherPlanner_v4_vacations'));
           
           let loadedYearly = load('teacherPlanner_v4_yearly');
           if (loadedYearly) {
@@ -353,7 +353,7 @@
                  setYearlyData(merged);
               }
               if (d.documents) setDocuments(d.documents);
-              if (d.vacations) setVacations(d.vacations); // ★追加
+              if (d.vacations) setVacations(d.vacations);
             }
           }));
         };
@@ -379,7 +379,6 @@
         }
       };
 
-      // ★変更: 長期休業データ(vacations)も一緒に保存するように修正
       const saveExtraData = async (newYearly, newDocs, newVacations) => {
         setYearlyData(newYearly);
         setDocuments(newDocs);
@@ -504,17 +503,14 @@
         setSelectedDateDetails({ dateObj, dateStr });
       };
 
-      // ★変更: 日課取得時に、長期休業期間内であればデフォルトで holiday を返す
       const getDaySetting = (dateStr, dayIndex) => {
         if (activeTab === 'template') return templateSettings[dayIndex] || DEFAULT_TEMPLATE_SETTINGS[dayIndex];
         
-        // ユーザーが手動で変更した日課（通常日課に戻した等）があればそれを優先
         if (weeklySettings[dateStr]) return weeklySettings[dateStr];
 
-        // 長期休業期間かどうかをチェック
         const isVacation = vacations.some(v => dateStr >= v.start && dateStr <= v.end);
         if (isVacation) {
-            return { type: 'holiday' }; // 長期休業中はデフォルトで休日・部活モード
+            return { type: 'holiday' }; 
         }
 
         return templateSettings[dayIndex] || DEFAULT_TEMPLATE_SETTINGS[dayIndex];
@@ -545,6 +541,11 @@
         if (activeTab === 'template') {
           return baseData;
         } else {
+          const setting = getDaySetting(dateStr, dayIndex);
+          if (setting.type === 'holiday' && (periodId.startsWith('p') || periodId === 'morning' || periodId === 'lunch')) {
+              baseData = { subject: '', memo: '', startTime: '', endTime: '', events: [], handwriting: null };
+          }
+
           const override = weeklyData[wKey];
           if (override && !override.useTemplate) {
               if (periodId === 'event' && !override.subject && baseData.subject) {
@@ -606,6 +607,7 @@
         }
       };
 
+      // ★修正：枠を保存した時の自動カウントを安全に処理
       const handleSaveCell = (data) => {
         if (!editingCell.isTemplate && data.subject) {
            let updatedSyllabus = [...syllabusData];
@@ -619,11 +621,13 @@
                  if (unit) {
                     const expectedText = `${subj.name}（${unit.name} ${subj.currentHour}/${unit.hours}）`;
                     if (data.subject === expectedText) {
-                       subj.currentHour++;
-                       if (subj.currentHour > unit.hours) {
-                          subj.currentHour = 1;
-                          subj.currentUnitIdx++;
+                       let nextHour = subj.currentHour + 1;
+                       let nextUnitIdx = subj.currentUnitIdx;
+                       if (nextHour > unit.hours) {
+                          nextHour = 1;
+                          nextUnitIdx++;
                        }
+                       updatedSyllabus[i] = { ...subj, currentHour: nextHour, currentUnitIdx: nextUnitIdx };
                        syllabusChanged = true;
                        break;
                     }
@@ -632,9 +636,10 @@
                  const match = data.subject.match(new RegExp(`^${subj.name}（(.+)）$`));
                  if (match) {
                     const keyword = match[1];
-                    if (!subj.history) subj.history = [];
-                    if (!subj.history.includes(keyword)) {
-                       subj.history = [keyword, ...subj.history].slice(0, 15);
+                    let newHistory = subj.history || [];
+                    if (!newHistory.includes(keyword)) {
+                       newHistory = [keyword, ...newHistory].slice(0, 15);
+                       updatedSyllabus[i] = { ...subj, history: newHistory };
                        syllabusChanged = true;
                     }
                  }
@@ -716,6 +721,7 @@
         setTempEvents(newEvents);
       };
 
+      // ★修正：手動での微調整（+/-ボタン）時もクラウドに保存するように修正
       const adjustSyllabusManual = (id, delta) => {
          let updated = syllabusData.map(s => {
             if (s.id !== id) return s;
@@ -738,7 +744,8 @@
             }
             return { ...s, currentHour: currentH, currentUnitIdx: currentU };
          });
-         setSyllabusData(updated);
+         
+         saveSyllabus(updated); // <- これが抜けていました！
          
          const changedSubj = updated.find(s => s.id === id);
          const unit = changedSubj.units[changedSubj.currentUnitIdx];
@@ -1082,15 +1089,15 @@
                   {cloudStatus === 'スキップ' ? 'ローカル' : cloudStatus}
                 </div>
                 
-                <div className="flex bg-black/20 rounded-lg p-0.5 backdrop-blur-md overflow-x-auto hide-scrollbar max-w-[60vw]">
+                <div className="flex bg-black/20 rounded-lg p-0.5 backdrop-blur-md overflow-x-auto hide-scrollbar max-w-[60vw] items-center">
                   <button onClick={() => setActiveTab('yearly')} className={`px-2 sm:px-3 py-1 rounded-md text-[10px] sm:text-xs font-bold transition whitespace-nowrap ${activeTab === 'yearly' ? 'bg-white text-indigo-700 shadow-sm' : 'text-indigo-100 hover:text-white'}`}>
                     年間
                   </button>
                   <button onClick={() => setActiveTab('monthly')} className={`px-2 sm:px-3 py-1 rounded-md text-[10px] sm:text-xs font-bold transition whitespace-nowrap ${activeTab === 'monthly' ? 'bg-white text-indigo-700 shadow-sm' : 'text-indigo-100 hover:text-white'}`}>
                     月間
                   </button>
-                  <button onClick={() => setActiveTab('weekly')} className={`px-2 sm:px-3 py-1 rounded-md text-[10px] sm:text-xs font-bold transition whitespace-nowrap ${activeTab === 'weekly' ? 'bg-white text-indigo-700 shadow-sm' : 'text-indigo-100 hover:text-white'}`}>
-                    週案
+                  <button onClick={() => setActiveTab('weekly')} className={`px-3 sm:px-4 py-1.5 mx-1 rounded-lg text-xs sm:text-sm font-black transition-all whitespace-nowrap shadow-md ${activeTab === 'weekly' ? 'bg-amber-300 text-amber-900 scale-105 shadow-lg ring-2 ring-white/50' : 'bg-amber-100/20 text-amber-50 hover:bg-amber-300 hover:text-amber-900 border border-amber-200/50'}`}>
+                    📝 週案
                   </button>
                   <button onClick={() => setActiveTab('syllabus')} className={`px-2 sm:px-3 py-1 rounded-md text-[10px] sm:text-xs font-bold transition whitespace-nowrap ${activeTab === 'syllabus' ? 'bg-white text-indigo-700 shadow-sm' : 'text-indigo-100 hover:text-white'}`}>
                     進度
@@ -1151,7 +1158,6 @@
                             const isSun = isValidDate && date.getDay() === 0;
                             const isSat = isValidDate && date.getDay() === 6;
 
-                            // ★追加: 年間カレンダーの背景色を休暇期間ならオレンジっぽくする
                             const dateStr = formatDate(date);
                             const isVac = vacations.some(v => dateStr >= v.start && dateStr <= v.end);
                             const isToday = dateStr === todayStr;
@@ -1160,7 +1166,6 @@
                             if (isValidDate && isVac) {
                                tdBg = isSun ? 'bg-rose-100/60' : isSat ? 'bg-blue-100/50' : 'bg-amber-50/50';
                             }
-                            // ★追加: 今日なら赤枠で強調
                             if (isToday) {
                                tdBg = 'bg-rose-100 ring-2 ring-rose-400 ring-inset relative z-10';
                             }
@@ -1169,7 +1174,6 @@
                               <td key={`${m}-${d}`} className={`border-b border-r border-slate-200 p-0 align-top w-24 sm:w-32 max-w-[6rem] sm:max-w-[8rem] overflow-hidden ${tdBg}`}>
                                 {isValidDate && (
                                   <div className="flex items-stretch h-full w-full min-h-[32px] sm:min-h-[40px] overflow-hidden group">
-                                    {/* ★変更: 曜日部分をクリック可能にして週案へジャンプできるようにしました */}
                                     <div 
                                       onClick={() => {
                                         setCurrentWeekStart(getMonday(date));
@@ -1248,10 +1252,15 @@
                                   value={subj.rawText !== undefined ? subj.rawText : formatUnits(subj.units)}
                                   onChange={(e) => {
                                      const text = e.target.value;
+                                     const updated = [...syllabusData];
+                                     updated[idx] = { ...updated[idx], rawText: text };
+                                     setSyllabusData(updated);
+                                  }}
+                                  onBlur={(e) => {
+                                     const text = e.target.value;
                                      const newUnits = parseUnits(text);
                                      const updated = [...syllabusData];
-                                     updated[idx].rawText = text;
-                                     updated[idx].units = newUnits;
+                                     updated[idx] = { ...updated[idx], rawText: text, units: newUnits };
                                      if (updated[idx].currentUnitIdx >= newUnits.length) {
                                         updated[idx].currentUnitIdx = Math.max(0, newUnits.length - 1);
                                         updated[idx].currentHour = 1;
@@ -1315,15 +1324,16 @@
                           const name = document.getElementById('newSubjName').value;
                           const type = document.getElementById('newSubjType').value;
                           if(name) {
-                            saveSyllabus([...syllabusData, {
-                               id: Date.now().toString(),
-                               name, type,
-                               units: type === 'auto' ? [] : undefined,
-                               rawText: type === 'auto' ? '' : undefined,
-                               currentUnitIdx: type === 'auto' ? 0 : undefined,
-                               currentHour: type === 'auto' ? 1 : undefined,
-                               history: type === 'history' ? [] : undefined
-                            }]);
+                            const newSubj = { id: Date.now().toString(), name, type };
+                            if (type === 'auto') {
+                               newSubj.units = [];
+                               newSubj.rawText = '';
+                               newSubj.currentUnitIdx = 0;
+                               newSubj.currentHour = 1;
+                            } else {
+                               newSubj.history = [];
+                            }
+                            saveSyllabus([...syllabusData, newSubj]);
                             document.getElementById('newSubjName').value = '';
                           }
                         }} className="bg-indigo-600 text-white font-bold text-xs px-4 py-2 rounded-lg hover:bg-indigo-700 transition">追加</button>
@@ -1396,7 +1406,6 @@
                       let dayIdx = dayObj.date.getDay() - 1; if(dayIdx === -1) dayIdx = 6;
                       const dailyEvents = getDailyEvents(dateStr, dayIdx); 
                       
-                      // ★追加: 月間カレンダーの背景色を長期休業期間中は変更
                       const isVac = vacations.some(v => dateStr >= v.start && dateStr <= v.end);
                       const bgClass = isCurrentMonth 
                         ? (isVac ? 'bg-amber-50/60 border-amber-200 hover:border-amber-400' : 'bg-white border-slate-200 hover:border-indigo-300')
@@ -1575,18 +1584,18 @@
                                 if (!events.some(ev => ev.subject) && cellData.subject) {
                                   const hasTime = cellData.startTime || cellData.endTime;
                                   cellContent = (
-                                    <div className="bg-white rounded p-1 border shadow-sm w-full h-full flex flex-col justify-center overflow-hidden">
+                                    <div className="bg-white rounded p-1 border shadow-sm w-full h-full flex flex-col justify-center">
                                       {hasTime && (
                                         <div className="text-[6.5px] text-indigo-500 font-mono font-bold leading-none mb-0.5">
                                           {cellData.startTime || ''}{cellData.startTime && cellData.endTime ? '-' : ''}{cellData.endTime || ''}
                                         </div>
                                       )}
-                                      <div className="text-[9px] font-black text-slate-800 line-clamp-1">{cellData.subject}</div>
+                                      <div className="text-[9px] font-black text-slate-800 whitespace-pre-wrap break-words">{cellData.subject}</div>
                                     </div>
                                   );
                                 } else {
                                   cellContent = (
-                                    <div className="space-y-0.5 w-full h-full flex flex-col justify-center overflow-hidden">
+                                    <div className="space-y-0.5 w-full h-full flex flex-col justify-center">
                                       {events.map((ev, idx) => ev.subject ? (
                                         <div key={idx} className="bg-white rounded p-0.5 border shadow-[0_1px_2px_-1px_rgba(0,0,0,0.05)] border-l-2 border-l-indigo-400 flex flex-col">
                                           {ev.startTime && (
@@ -1595,7 +1604,7 @@
                                             </div>
                                           )}
                                           <div className="flex items-baseline gap-1">
-                                            <span className="text-[8px] font-black text-slate-800 truncate flex-1">{ev.subject}</span>
+                                            <span className="text-[8px] font-black text-slate-800 whitespace-pre-wrap break-words flex-1">{ev.subject}</span>
                                           </div>
                                         </div>
                                       ) : null)}
@@ -1614,27 +1623,27 @@
                                   const h = Math.max((duration * 0.8), 45); 
                                   cellContent = (
                                     <div 
-                                      className="absolute left-1 right-1 p-1.5 z-20 shadow-[0_4px_10px_rgba(0,0,0,0.1)] border border-indigo-300 border-l-4 border-l-indigo-500 bg-indigo-50/95 backdrop-blur-md rounded-md overflow-hidden flex flex-col transition-all hover:z-30 cursor-pointer top-1"
+                                      className="absolute left-1 right-1 p-1.5 z-20 shadow-[0_4px_10px_rgba(0,0,0,0.1)] border border-indigo-300 border-l-4 border-l-indigo-500 bg-indigo-50/95 backdrop-blur-md rounded-md flex flex-col transition-all hover:z-30 cursor-pointer top-1 overflow-y-auto hide-scrollbar"
                                       style={{ height: `calc(${h}px - 8px)`, minHeight: `calc(100% - 8px)` }}
                                     >
                                       <div className="font-mono font-bold mb-0.5 px-1 py-0.5 rounded inline-flex items-center gap-0.5 self-start leading-none bg-white text-indigo-700 shadow-sm text-[6px] sm:text-[7px]">
                                         <span>🕒</span> <span>{displayTime}</span>
                                       </div>
-                                      <div className="font-black leading-tight text-indigo-900 line-clamp-2 text-[10px] mt-0.5">{cellData.subject}</div>
-                                      <div className="text-[7px] text-indigo-700/80 font-medium whitespace-pre-wrap leading-tight mt-0.5 overflow-hidden">{cellData.memo}</div>
+                                      <div className="font-black leading-tight text-indigo-900 whitespace-pre-wrap break-words text-[10px] mt-0.5">{cellData.subject}</div>
+                                      <div className="text-[7px] text-indigo-700/80 font-medium whitespace-pre-wrap break-words leading-tight mt-0.5">{cellData.memo}</div>
                                       {cellData.handwriting && <div className="absolute top-1 right-1 text-[8px]">✏️</div>}
                                     </div>
                                   );
                                 } else {
                                   cellContent = (
-                                    <div className="h-full flex flex-col justify-center relative overflow-hidden">
+                                    <div className="h-full flex flex-col justify-center relative py-0.5">
                                       {displayTime && row.id !== 'event' && row.id !== 'diary' && (
                                         <div className={`font-mono font-bold mb-0.5 px-1 py-0.5 rounded inline-flex items-center gap-0.5 self-start leading-none ${hasCustomTime ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-500'} text-[6px] sm:text-[7px]`}>
                                           <span>🕒</span> <span>{displayTime}</span>
                                         </div>
                                       )}
-                                      <div className={`font-black leading-tight line-clamp-1 ${row.id === 'event' ? 'text-indigo-700' : isOverridden ? 'text-amber-700' : 'text-slate-800'} text-[10px]`}>{cellData.subject || <span className="text-slate-200 font-normal">-</span>}</div>
-                                      <div className="text-[6px] sm:text-[7px] text-slate-500 font-medium whitespace-pre-wrap leading-tight line-clamp-1 mt-0.5">{cellData.memo}</div>
+                                      <div className={`font-black leading-tight whitespace-pre-wrap break-words ${row.id === 'event' ? 'text-indigo-700' : isOverridden ? 'text-amber-700' : 'text-slate-800'} text-[10px]`}>{cellData.subject || <span className="text-slate-200 font-normal">-</span>}</div>
+                                      <div className="text-[6px] sm:text-[7px] text-slate-500 font-medium whitespace-pre-wrap break-words leading-tight mt-0.5">{cellData.memo}</div>
                                       {cellData.handwriting && <div className="absolute top-0 right-0 text-[8px]">✏️</div>}
                                     </div>
                                   );
@@ -1654,7 +1663,6 @@
                                   cellBgClass = 'bg-transparent'; 
                               }
                               
-                              // ★追加: 今日の列の背景をほんのり色付け
                               if (isToday && !isHoliday && cellBgClass.includes('bg-white')) {
                                   cellBgClass = 'bg-rose-50/40 hover:bg-rose-100/50';
                               }
@@ -1671,7 +1679,6 @@
                       })}
                     </div>
                     
-                    {/* ★追加: 基本設定タブの下部に長期休業設定UIを追加 */}
                     {activeTab === 'template' && (
                       <div className="bg-slate-100 p-4 sm:p-8 border-t border-slate-200 shrink-0">
                         <div className="max-w-4xl mx-auto bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
