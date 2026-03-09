@@ -1,4 +1,4 @@
-[index.html](https://github.com/user-attachments/files/25841913/index.html)
+[index.html](https://github.com/user-attachments/files/25842092/index.html)
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -546,6 +546,12 @@
         if (activeTab === 'template') {
           return baseData;
         } else {
+          // 休日の場合、基本の時間割（朝、1〜6限、昼）はテンプレートから引っ張らない
+          const setting = getDaySetting(dateStr, dayIndex);
+          if (setting.type === 'holiday' && (periodId.startsWith('p') || periodId === 'morning' || periodId === 'lunch')) {
+              baseData = { subject: '', memo: '', startTime: '', endTime: '', events: [], handwriting: null };
+          }
+
           const override = weeklyData[wKey];
           if (override && !override.useTemplate) {
               if (periodId === 'event' && !override.subject && baseData.subject) {
