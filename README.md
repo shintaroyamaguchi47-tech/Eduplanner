@@ -1,4 +1,4 @@
-[index.html](https://github.com/user-attachments/files/25842092/index.html)
+[Uploading index.html…]()
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -205,7 +205,7 @@
       const [documents, setDocuments] = useState([]); 
       const [studentRecordUrl, setStudentRecordUrl] = useState('');
       
-      // ★追加: 長期休業期間のデータ
+      // 長期休業期間のデータ
       const [vacations, setVacations] = useState([]);
       
       const [quickMemos, setQuickMemos] = useState([]);
@@ -282,7 +282,7 @@
           if (localStorage.getItem('teacherPlanner_v4_todos')) setTodos(load('teacherPlanner_v4_todos'));
           if (localStorage.getItem('teacherPlanner_v4_quickMemos')) setQuickMemos(load('teacherPlanner_v4_quickMemos'));
           if (localStorage.getItem('teacherPlanner_v4_syllabus')) setSyllabusData(load('teacherPlanner_v4_syllabus'));
-          if (localStorage.getItem('teacherPlanner_v4_vacations')) setVacations(load('teacherPlanner_v4_vacations')); // ★追加
+          if (localStorage.getItem('teacherPlanner_v4_vacations')) setVacations(load('teacherPlanner_v4_vacations'));
           
           let loadedYearly = load('teacherPlanner_v4_yearly');
           if (loadedYearly) {
@@ -354,7 +354,7 @@
                  setYearlyData(merged);
               }
               if (d.documents) setDocuments(d.documents);
-              if (d.vacations) setVacations(d.vacations); // ★追加
+              if (d.vacations) setVacations(d.vacations);
             }
           }));
         };
@@ -380,7 +380,6 @@
         }
       };
 
-      // ★変更: 長期休業データ(vacations)も一緒に保存するように修正
       const saveExtraData = async (newYearly, newDocs, newVacations) => {
         setYearlyData(newYearly);
         setDocuments(newDocs);
@@ -505,17 +504,14 @@
         setSelectedDateDetails({ dateObj, dateStr });
       };
 
-      // ★変更: 日課取得時に、長期休業期間内であればデフォルトで holiday を返す
       const getDaySetting = (dateStr, dayIndex) => {
         if (activeTab === 'template') return templateSettings[dayIndex] || DEFAULT_TEMPLATE_SETTINGS[dayIndex];
         
-        // ユーザーが手動で変更した日課（通常日課に戻した等）があればそれを優先
         if (weeklySettings[dateStr]) return weeklySettings[dateStr];
 
-        // 長期休業期間かどうかをチェック
         const isVacation = vacations.some(v => dateStr >= v.start && dateStr <= v.end);
         if (isVacation) {
-            return { type: 'holiday' }; // 長期休業中はデフォルトで休日・部活モード
+            return { type: 'holiday' }; 
         }
 
         return templateSettings[dayIndex] || DEFAULT_TEMPLATE_SETTINGS[dayIndex];
@@ -546,7 +542,6 @@
         if (activeTab === 'template') {
           return baseData;
         } else {
-          // 休日の場合、基本の時間割（朝、1〜6限、昼）はテンプレートから引っ張らない
           const setting = getDaySetting(dateStr, dayIndex);
           if (setting.type === 'holiday' && (periodId.startsWith('p') || periodId === 'morning' || periodId === 'lunch')) {
               baseData = { subject: '', memo: '', startTime: '', endTime: '', events: [], handwriting: null };
@@ -613,6 +608,7 @@
         }
       };
 
+      // ★修正：枠を保存した時の自動カウントを安全に処理
       const handleSaveCell = (data) => {
         if (!editingCell.isTemplate && data.subject) {
            let updatedSyllabus = [...syllabusData];
@@ -626,11 +622,13 @@
                  if (unit) {
                     const expectedText = `${subj.name}（${unit.name} ${subj.currentHour}/${unit.hours}）`;
                     if (data.subject === expectedText) {
-                       subj.currentHour++;
-                       if (subj.currentHour > unit.hours) {
-                          subj.currentHour = 1;
-                          subj.currentUnitIdx++;
+                       let nextHour = subj.currentHour + 1;
+                       let nextUnitIdx = subj.currentUnitIdx;
+                       if (nextHour > unit.hours) {
+                          nextHour = 1;
+                          nextUnitIdx++;
                        }
+                       updatedSyllabus[i] = { ...subj, currentHour: nextHour, currentUnitIdx: nextUnitIdx };
                        syllabusChanged = true;
                        break;
                     }
@@ -639,9 +637,10 @@
                  const match = data.subject.match(new RegExp(`^${subj.name}（(.+)）$`));
                  if (match) {
                     const keyword = match[1];
-                    if (!subj.history) subj.history = [];
-                    if (!subj.history.includes(keyword)) {
-                       subj.history = [keyword, ...subj.history].slice(0, 15);
+                    let newHistory = subj.history || [];
+                    if (!newHistory.includes(keyword)) {
+                       newHistory = [keyword, ...newHistory].slice(0, 15);
+                       updatedSyllabus[i] = { ...subj, history: newHistory };
                        syllabusChanged = true;
                     }
                  }
@@ -723,6 +722,7 @@
         setTempEvents(newEvents);
       };
 
+      // ★修正：手動での微調整（+/-ボタン）時もクラウドに保存するように修正
       const adjustSyllabusManual = (id, delta) => {
          let updated = syllabusData.map(s => {
             if (s.id !== id) return s;
@@ -745,7 +745,8 @@
             }
             return { ...s, currentHour: currentH, currentUnitIdx: currentU };
          });
-         setSyllabusData(updated);
+         
+         saveSyllabus(updated); // <- これが抜けていました！
          
          const changedSubj = updated.find(s => s.id === id);
          const unit = changedSubj.units[changedSubj.currentUnitIdx];
@@ -1254,13 +1255,17 @@
                                      const text = e.target.value;
                                      const newUnits = parseUnits(text);
                                      const updated = [...syllabusData];
-                                     updated[idx].rawText = text;
-                                     updated[idx].units = newUnits;
+                                     // ★修正：オブジェクトを新しく作成して状態を更新（画面の表示のみ切り替える）
+                                     updated[idx] = { ...updated[idx], rawText: text, units: newUnits };
                                      if (updated[idx].currentUnitIdx >= newUnits.length) {
                                         updated[idx].currentUnitIdx = Math.max(0, newUnits.length - 1);
                                         updated[idx].currentHour = 1;
                                      }
-                                     saveSyllabus(updated);
+                                     setSyllabusData(updated);
+                                  }}
+                                  onBlur={() => {
+                                     // ★修正：枠からカーソルが外れた時だけクラウドへ保存！
+                                     saveSyllabus(syllabusData);
                                   }}
                                   placeholder="野原はうたう,3&#10;ちょっと立ち止まって,2"
                                 />
