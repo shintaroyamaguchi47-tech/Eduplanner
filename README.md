@@ -1,4 +1,4 @@
-[Uploading index.html…]()
+[index.html](https://github.com/user-attachments/files/25842344/index.html)
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -1253,19 +1253,20 @@
                                   value={subj.rawText !== undefined ? subj.rawText : formatUnits(subj.units)}
                                   onChange={(e) => {
                                      const text = e.target.value;
+                                     const updated = [...syllabusData];
+                                     updated[idx] = { ...updated[idx], rawText: text };
+                                     setSyllabusData(updated);
+                                  }}
+                                  onBlur={(e) => {
+                                     const text = e.target.value;
                                      const newUnits = parseUnits(text);
                                      const updated = [...syllabusData];
-                                     // ★修正：オブジェクトを新しく作成して状態を更新（画面の表示のみ切り替える）
                                      updated[idx] = { ...updated[idx], rawText: text, units: newUnits };
                                      if (updated[idx].currentUnitIdx >= newUnits.length) {
                                         updated[idx].currentUnitIdx = Math.max(0, newUnits.length - 1);
                                         updated[idx].currentHour = 1;
                                      }
-                                     setSyllabusData(updated);
-                                  }}
-                                  onBlur={() => {
-                                     // ★修正：枠からカーソルが外れた時だけクラウドへ保存！
-                                     saveSyllabus(syllabusData);
+                                     saveSyllabus(updated);
                                   }}
                                   placeholder="野原はうたう,3&#10;ちょっと立ち止まって,2"
                                 />
@@ -1324,15 +1325,16 @@
                           const name = document.getElementById('newSubjName').value;
                           const type = document.getElementById('newSubjType').value;
                           if(name) {
-                            saveSyllabus([...syllabusData, {
-                               id: Date.now().toString(),
-                               name, type,
-                               units: type === 'auto' ? [] : undefined,
-                               rawText: type === 'auto' ? '' : undefined,
-                               currentUnitIdx: type === 'auto' ? 0 : undefined,
-                               currentHour: type === 'auto' ? 1 : undefined,
-                               history: type === 'history' ? [] : undefined
-                            }]);
+                            const newSubj = { id: Date.now().toString(), name, type };
+                            if (type === 'auto') {
+                               newSubj.units = [];
+                               newSubj.rawText = '';
+                               newSubj.currentUnitIdx = 0;
+                               newSubj.currentHour = 1;
+                            } else {
+                               newSubj.history = [];
+                            }
+                            saveSyllabus([...syllabusData, newSubj]);
                             document.getElementById('newSubjName').value = '';
                           }
                         }} className="bg-indigo-600 text-white font-bold text-xs px-4 py-2 rounded-lg hover:bg-indigo-700 transition">追加</button>
