@@ -1,4 +1,4 @@
-[index.html](https://github.com/user-attachments/files/25842344/index.html)
+[index.html](https://github.com/user-attachments/files/25842523/index.html)
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -1097,8 +1097,8 @@
                   <button onClick={() => setActiveTab('monthly')} className={`px-2 sm:px-3 py-1 rounded-md text-[10px] sm:text-xs font-bold transition whitespace-nowrap ${activeTab === 'monthly' ? 'bg-white text-indigo-700 shadow-sm' : 'text-indigo-100 hover:text-white'}`}>
                     月間
                   </button>
-                  <button onClick={() => setActiveTab('weekly')} className={`px-3 sm:px-4 py-1.5 mx-0.5 rounded-lg text-xs sm:text-sm font-black transition whitespace-nowrap shadow-md ${activeTab === 'weekly' ? 'bg-white text-indigo-800 border-2 border-indigo-300 scale-105' : 'bg-indigo-500/80 text-white hover:bg-indigo-400 border-2 border-transparent'}`}>
-                    週案
+                  <button onClick={() => setActiveTab('weekly')} className={`px-3 sm:px-4 py-1.5 mx-1 rounded-lg text-xs sm:text-sm font-black transition-all whitespace-nowrap shadow-md ${activeTab === 'weekly' ? 'bg-amber-300 text-amber-900 scale-105 shadow-lg ring-2 ring-white/50' : 'bg-amber-100/20 text-amber-50 hover:bg-amber-300 hover:text-amber-900 border border-amber-200/50'}`}>
+                    📝 週案
                   </button>
                   <button onClick={() => setActiveTab('syllabus')} className={`px-2 sm:px-3 py-1 rounded-md text-[10px] sm:text-xs font-bold transition whitespace-nowrap ${activeTab === 'syllabus' ? 'bg-white text-indigo-700 shadow-sm' : 'text-indigo-100 hover:text-white'}`}>
                     進度
