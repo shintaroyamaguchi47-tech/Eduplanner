@@ -1,4 +1,4 @@
-[index.html](https://github.com/user-attachments/files/25869164/index.html)
+[index.html](https://github.com/user-attachments/files/25869965/index.html)
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -162,7 +162,7 @@
       return diff > 0 ? diff : 45;
     };
 
-    // 先生が新しく作成したFirebaseの鍵です！
+    // Firebaseの鍵（新しい金庫用）
     const FIREBASE_CONFIG = {
       apiKey: "AIzaSyAdOREqv-PvjtjJ__7PwhpVyfcJxmdXPAs",
       authDomain: "eduplanner-v2.firebaseapp.com",
@@ -439,6 +439,7 @@
         }
       };
 
+      // 🔴🔴🔴 さらに分かりやすく、自動でログインに切り替わるように修正！ 🔴🔴🔴
       const handleAuthSubmit = async (e) => {
         e.preventDefault();
         setAuthError('');
@@ -450,9 +451,28 @@
             await signInWithEmailAndPassword(window.__firebaseAuth, authEmail, authPassword);
           }
         } catch(err) {
-          setAuthError(isRegistering ? '登録に失敗しました。パスワードは6文字以上にしてください。' : 'ログインに失敗しました。メールアドレスとパスワードを確認してください。');
+          console.error("Auth Error:", err);
+          let errorMsg = 'エラーが発生しました。';
+          
+          if (err.code === 'auth/operation-not-allowed') {
+            errorMsg = '【原因】Firebaseで「メール/パスワード」のログイン設定が「有効」になっていません！保存ボタンを押し忘れていませんか？';
+          } else if (err.code === 'auth/unauthorized-domain') {
+            errorMsg = '【原因】VercelのURLが「承認済みドメイン」に追加されていません！Firebaseの設定を確認してください。';
+          } else if (err.code === 'auth/email-already-in-use') {
+            // 新規登録しようとしたが、すでにアカウントがあった場合
+            setIsRegistering(false); // 💡 自動的に「ログイン画面」に切り替えます！
+            errorMsg = '🎉 すでに登録済みのメールアドレスです！ログイン画面に切り替えましたので、そのまま「ログイン」ボタンを押してください。';
+          } else if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') {
+            errorMsg = '【原因】メールアドレスかパスワードが間違っています。';
+          } else if (err.code === 'auth/weak-password') {
+            errorMsg = '【原因】パスワードは6文字以上にしてください。';
+          } else {
+            errorMsg = `【原因】${err.message}`;
+          }
+          setAuthError(errorMsg);
         }
       };
+      // 🔴🔴🔴 ここまで 🔴🔴🔴
 
       const handleLogout = async () => {
         try {
