@@ -1,4 +1,4 @@
-[index.html](https://github.com/user-attachments/files/25842523/index.html)
+[index.html](https://github.com/user-attachments/files/25869164/index.html)
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -115,7 +115,6 @@
       6: { type: 'holiday', clean: false },
     };
 
-    // PDFから抽出した初期の年間予定データ
     const NEW_INITIAL_YEARLY_DATA = {
       "2025": {
         "4-4": "新入生体験入学", "4-5": "新入生説明会", "4-8": "始業式/入学式 第1ステージ「出会い」",
@@ -163,20 +162,21 @@
       return diff > 0 ? diff : 45;
     };
 
+    // 先生が新しく作成したFirebaseの鍵です！
     const FIREBASE_CONFIG = {
-      apiKey: "AIzaSyAKYTim9MLz93Flwdo40b3olqnKst8rqr0",
-      authDomain: "smartplanner-2026.firebaseapp.com",
-      projectId: "smartplanner-2026",
-      storageBucket: "smartplanner-2026.firebasestorage.app",
-      messagingSenderId: "160086194590",
-      appId: "1:160086194590:web:c859a65ad8f28502093e8f"
+      apiKey: "AIzaSyAdOREqv-PvjtjJ__7PwhpVyfcJxmdXPAs",
+      authDomain: "eduplanner-v2.firebaseapp.com",
+      projectId: "eduplanner-v2",
+      storageBucket: "eduplanner-v2.firebasestorage.app",
+      messagingSenderId: "931393732389",
+      appId: "1:931393732389:web:60d39fec28a2a2e179e4cc"
     };
 
-    // テキストエリアの中身を単元配列に変換するユーティリティ
     const parseUnits = (text) => {
+       if (!text) return [];
        return text.split('\n').filter(line => line.trim() !== '').map(line => {
           const parts = line.split(',');
-          return { name: parts[0].trim(), hours: parseInt(parts[1]) || 1 };
+          return { name: parts[0]?.trim() || '', hours: parseInt(parts[1]) || 1 };
        });
     };
     const formatUnits = (units) => units ? units.map(u => `${u.name},${u.hours}`).join('\n') : '';
@@ -203,16 +203,11 @@
       const [todos, setTodos] = useState([]);
       const [yearlyData, setYearlyData] = useState(NEW_INITIAL_YEARLY_DATA);
       const [documents, setDocuments] = useState([]); 
-      const [studentRecordUrl, setStudentRecordUrl] = useState('');
-      
-      // 長期休業期間のデータ
       const [vacations, setVacations] = useState([]);
       
       const [quickMemos, setQuickMemos] = useState([]);
       const [showQuickMemoList, setShowQuickMemoList] = useState(false);
       const [handwritingMode, setHandwritingMode] = useState('cell');
-
-      // 進度管理（シラバス）データ
       const [syllabusData, setSyllabusData] = useState([]);
 
       const [newTodoText, setNewTodoText] = useState('');
@@ -230,7 +225,6 @@
       const [showHandwritingPad, setShowHandwritingPad] = useState(false);
 
       const [cloudStatus, setCloudStatus] = useState('ローカル保存');
-
       const canvasRef = useRef(null);
       const [isDrawing, setIsDrawing] = useState(false);
 
@@ -301,8 +295,6 @@
           }
 
           if (localStorage.getItem('teacherPlanner_v4_docs')) setDocuments(load('teacherPlanner_v4_docs') || []);
-          const savedUrl = localStorage.getItem('teacherPlanner_v4_studentUrl');
-          if (savedUrl) setStudentRecordUrl(savedUrl);
         } catch (e) {}
       }, []);
 
@@ -318,7 +310,6 @@
               const d = docSnap.data();
               if (d.baseTemplate) setBaseTemplate(d.baseTemplate);
               if (d.templateSettings) setTemplateSettings(d.templateSettings);
-              if (d.studentRecordUrl) setStudentRecordUrl(d.studentRecordUrl);
             }
           }));
           unsubs.push(onSnapshot(doc(db, 'users', uid, 'teacherPlanner', 'weekly'), (docSnap) => {
@@ -344,8 +335,6 @@
                  let cloudYearly = d.yearlyData;
                  if (cloudYearly["4-8"] && typeof cloudYearly["4-8"] === "string") {
                     cloudYearly = { "2025": cloudYearly };
-                 } else if (cloudYearly["4"] && typeof cloudYearly["4"] === "string") {
-                    cloudYearly = NEW_INITIAL_YEARLY_DATA;
                  }
                  const merged = { ...NEW_INITIAL_YEARLY_DATA };
                  Object.keys(cloudYearly).forEach(year => {
@@ -362,6 +351,25 @@
         return () => unsubs.forEach(u => u());
       }, [cloudUser]);
 
+      const cleanData = (obj) => {
+         if (obj === undefined) return null;
+         if (obj === null || typeof obj !== 'object') return obj;
+         const newObj = Array.isArray(obj) ? [] : {};
+         for (const key in obj) {
+            newObj[key] = cleanData(obj[key]);
+         }
+         return newObj;
+      };
+
+      const saveToFirestore = async (docName, data) => {
+        if (cloudUser && window.__firebaseDb) {
+          try {
+            const { doc, setDoc } = await _importDynamic("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
+            await setDoc(doc(window.__firebaseDb, 'users', cloudUser.uid, 'teacherPlanner', docName), cleanData(data), { merge: true });
+          } catch (e) { console.error(`Save Error (${docName}):`, e); }
+        }
+      };
+
       const saveAll = async (tData, tSettings, wData, wSettings) => {
         try {
           localStorage.setItem('teacherPlanner_v4_template', JSON.stringify(tData));
@@ -369,15 +377,8 @@
           localStorage.setItem('teacherPlanner_v4_weekly', JSON.stringify(wData));
           localStorage.setItem('teacherPlanner_v4_weekly_settings', JSON.stringify(wSettings));
         } catch (e) {}
-        
-        if (cloudUser && window.__firebaseDb) {
-          try {
-            const { doc, setDoc } = await _importDynamic("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
-            const { uid } = cloudUser;
-            await setDoc(doc(window.__firebaseDb, 'users', uid, 'teacherPlanner', 'template'), { baseTemplate: tData, templateSettings: tSettings, studentRecordUrl }, { merge: true });
-            await setDoc(doc(window.__firebaseDb, 'users', uid, 'teacherPlanner', 'weekly'), { weeklyData: wData, weeklySettings: wSettings }, { merge: true });
-          } catch (e) {}
-        }
+        saveToFirestore('template', { baseTemplate: tData, templateSettings: tSettings });
+        saveToFirestore('weekly', { weeklyData: wData, weeklySettings: wSettings });
       };
 
       const saveExtraData = async (newYearly, newDocs, newVacations) => {
@@ -389,45 +390,25 @@
           localStorage.setItem('teacherPlanner_v4_docs', JSON.stringify(newDocs));
           localStorage.setItem('teacherPlanner_v4_vacations', JSON.stringify(newVacations));
         } catch (e) {}
-        if (cloudUser && window.__firebaseDb) {
-          try {
-            const { doc, setDoc } = await _importDynamic("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
-            await setDoc(doc(window.__firebaseDb, 'users', cloudUser.uid, 'teacherPlanner', 'extra'), { yearlyData: newYearly, documents: newDocs, vacations: newVacations }, { merge: true });
-          } catch (e) {}
-        }
+        saveToFirestore('extra', { yearlyData: newYearly, documents: newDocs, vacations: newVacations });
       };
 
       const saveTodos = async (newTodos) => {
         setTodos(newTodos);
         try { localStorage.setItem('teacherPlanner_v4_todos', JSON.stringify(newTodos)); } catch (e) {}
-        if (cloudUser && window.__firebaseDb) {
-          try {
-            const { doc, setDoc } = await _importDynamic("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
-            await setDoc(doc(window.__firebaseDb, 'users', cloudUser.uid, 'teacherPlanner', 'todos'), { todos: newTodos }, { merge: true });
-          } catch (e) {}
-        }
+        saveToFirestore('todos', { todos: newTodos });
       };
 
       const saveQuickMemos = async (newMemos) => {
         setQuickMemos(newMemos);
         try { localStorage.setItem('teacherPlanner_v4_quickMemos', JSON.stringify(newMemos)); } catch (e) {}
-        if (cloudUser && window.__firebaseDb) {
-          try {
-            const { doc, setDoc } = await _importDynamic("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
-            await setDoc(doc(window.__firebaseDb, 'users', cloudUser.uid, 'teacherPlanner', 'quickMemos'), { memos: newMemos }, { merge: true });
-          } catch (e) {}
-        }
+        saveToFirestore('quickMemos', { memos: newMemos });
       };
 
       const saveSyllabus = async (newSyllabus) => {
         setSyllabusData(newSyllabus);
         try { localStorage.setItem('teacherPlanner_v4_syllabus', JSON.stringify(newSyllabus)); } catch (e) {}
-        if (cloudUser && window.__firebaseDb) {
-          try {
-            const { doc, setDoc } = await _importDynamic("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
-            await setDoc(doc(window.__firebaseDb, 'users', cloudUser.uid, 'teacherPlanner', 'syllabus'), { syllabus: newSyllabus }, { merge: true });
-          } catch (e) {}
-        }
+        saveToFirestore('syllabus', { syllabus: newSyllabus });
       };
 
       const shareMemo = async (dataUrl) => {
@@ -469,7 +450,7 @@
             await signInWithEmailAndPassword(window.__firebaseAuth, authEmail, authPassword);
           }
         } catch(err) {
-          setAuthError(isRegistering ? '登録に失敗しました。パスワードは6文字以上にしてください。' : 'ログインに失敗しました。');
+          setAuthError(isRegistering ? '登録に失敗しました。パスワードは6文字以上にしてください。' : 'ログインに失敗しました。メールアドレスとパスワードを確認してください。');
         }
       };
 
@@ -608,7 +589,6 @@
         }
       };
 
-      // ★修正：枠を保存した時の自動カウントを安全に処理
       const handleSaveCell = (data) => {
         if (!editingCell.isTemplate && data.subject) {
            let updatedSyllabus = [...syllabusData];
@@ -618,7 +598,7 @@
               let subj = updatedSyllabus[i];
               
               if (subj.type === 'auto') {
-                 const unit = subj.units[subj.currentUnitIdx];
+                 const unit = subj.units?.[subj.currentUnitIdx];
                  if (unit) {
                     const expectedText = `${subj.name}（${unit.name} ${subj.currentHour}/${unit.hours}）`;
                     if (data.subject === expectedText) {
@@ -722,7 +702,6 @@
         setTempEvents(newEvents);
       };
 
-      // ★修正：手動での微調整（+/-ボタン）時もクラウドに保存するように修正
       const adjustSyllabusManual = (id, delta) => {
          let updated = syllabusData.map(s => {
             if (s.id !== id) return s;
@@ -746,7 +725,7 @@
             return { ...s, currentHour: currentH, currentUnitIdx: currentU };
          });
          
-         saveSyllabus(updated); // <- これが抜けていました！
+         saveSyllabus(updated);
          
          const changedSubj = updated.find(s => s.id === id);
          const unit = changedSubj.units[changedSubj.currentUnitIdx];
@@ -1795,12 +1774,15 @@
           <aside className={`fixed inset-y-0 left-0 w-80 max-w-[85vw] bg-white border-r border-slate-200 z-[50] transition-transform duration-300 flex flex-col pt-[env(safe-area-inset-top)] shadow-2xl ${showQuickMemoList ? 'translate-x-0' : '-translate-x-full'}`}>
             <div className="p-4 bg-slate-50 border-b border-slate-200 font-black text-slate-800 flex justify-between items-center">
               <span>✍️ クイックメモ</span>
-              <button 
-                onClick={() => { setTempHandwriting(null); setHandwritingMode('quick'); setShowHandwritingPad(true); setShowQuickMemoList(false); }} 
-                className="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-indigo-700 transition shadow-sm flex items-center gap-1"
-              >
-                <span>➕</span> 新規メモ
-              </button>
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => { setTempHandwriting(null); setHandwritingMode('quick'); setShowHandwritingPad(true); setShowQuickMemoList(false); }} 
+                  className="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-indigo-700 transition shadow-sm flex items-center gap-1"
+                >
+                  <span>➕</span> 新規メモ
+                </button>
+                <button onClick={() => setShowQuickMemoList(false)} className="text-slate-400 hover:text-slate-600 text-xl font-bold ml-1 px-2">&times;</button>
+              </div>
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-100/50">
                {quickMemos.map(memo => (
@@ -1825,14 +1807,19 @@
             </div>
           </aside>
           
-          <button onClick={() => setShowQuickMemoList(!showQuickMemoList)} className="fixed bottom-[calc(1.5rem+env(safe-area-inset-bottom))] left-4 sm:left-6 bg-gradient-to-r from-emerald-500 to-teal-500 text-white p-4 rounded-full shadow-2xl z-[60] active:scale-95 transition hover:scale-105">
-            <span className="text-xl leading-none block">{showQuickMemoList ? '✕' : '✍️'}</span>
-          </button>
+          {!showQuickMemoList && (
+            <button onClick={() => setShowQuickMemoList(true)} className="fixed bottom-[calc(1.5rem+env(safe-area-inset-bottom))] left-4 sm:left-6 bg-gradient-to-r from-emerald-500 to-teal-500 text-white p-4 rounded-full shadow-2xl z-[60] active:scale-95 transition hover:scale-105">
+              <span className="text-xl leading-none block">✍️</span>
+            </button>
+          )}
 
           {/* ▽▽ TODOリスト（タグ＆重要度対応） ▽▽ */}
           {showTodo && <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[40]" onClick={() => setShowTodo(false)}></div>}
           <aside className={`fixed inset-y-0 right-0 w-[22rem] max-w-[90vw] bg-white border-l border-slate-200 z-[50] transition-transform duration-300 flex flex-col pt-[env(safe-area-inset-top)] shadow-2xl ${showTodo ? 'translate-x-0' : 'translate-x-full'}`}>
-            <div className="p-4 bg-slate-50 border-b border-slate-200 font-black text-slate-800 flex justify-between items-center">📝 TODO</div>
+            <div className="p-4 bg-slate-50 border-b border-slate-200 font-black text-slate-800 flex justify-between items-center">
+              <span>📝 TODO</span>
+              <button onClick={() => setShowTodo(false)} className="text-slate-400 hover:text-slate-600 text-xl font-bold px-2">&times;</button>
+            </div>
             <div className="flex-1 overflow-y-auto p-3 space-y-2.5">
               {sortedIncompleteTodos.map(t => {
                 const isOverdue = !t.completed && t.dueDate && t.dueDate < todayStr;
@@ -1887,9 +1874,12 @@
               </div>
             </form>
           </aside>
-          <button onClick={() => setShowTodo(!showTodo)} className="fixed bottom-[calc(1.5rem+env(safe-area-inset-bottom))] right-4 sm:right-6 bg-gradient-to-r from-indigo-600 to-violet-600 text-white p-4 rounded-full shadow-2xl z-[60] active:scale-95 transition hover:scale-105">
-            <span className="text-xl leading-none block">{showTodo ? '✕' : '📝'}</span>
-          </button>
+          
+          {!showTodo && (
+            <button onClick={() => setShowTodo(true)} className="fixed bottom-[calc(1.5rem+env(safe-area-inset-bottom))] right-4 sm:right-6 bg-gradient-to-r from-indigo-600 to-violet-600 text-white p-4 rounded-full shadow-2xl z-[60] active:scale-95 transition hover:scale-105">
+              <span className="text-xl leading-none block">📝</span>
+            </button>
+          )}
 
           {/* 編集モーダル */}
           {editingCell && !showHandwritingPad && (
@@ -1961,15 +1951,15 @@
                                <div className="flex flex-col gap-2 max-h-40 overflow-y-auto pr-1">
                                  {syllabusData.map(subj => {
                                     if (subj.type === 'auto') {
-                                       const unit = subj.units[subj.currentUnitIdx];
-                                       const isFinished = !unit;
-                                       const text = isFinished ? `${subj.name}（単元終了）` : `${subj.name}（${unit.name} ${subj.currentHour}/${unit.hours}）`;
+                                       const unit = subj.units?.[subj.currentUnitIdx];
+                                       const isFinished = subj.units && subj.units.length > 0 && !unit;
+                                       const text = isFinished ? `${subj.name}（単元終了）` : (unit ? `${subj.name}（${unit.name} ${subj.currentHour}/${unit.hours}）` : subj.name);
                                        return (
                                          <div key={subj.id} className="flex items-center gap-1.5">
                                            <button type="button" onClick={() => setTempSubject(text)} className="flex-1 bg-white border border-indigo-200 text-indigo-700 text-xs font-bold py-1.5 px-3 rounded-lg hover:bg-indigo-50 hover:border-indigo-300 text-left truncate transition-colors shadow-sm">
                                              {text}
                                            </button>
-                                           {!isFinished && (
+                                           {!isFinished && unit && (
                                              <div className="flex bg-white border border-indigo-200 rounded-lg shadow-sm overflow-hidden shrink-0">
                                                <button type="button" onClick={() => adjustSyllabusManual(subj.id, -1)} className="px-2.5 py-1 text-indigo-400 hover:text-indigo-700 hover:bg-indigo-50 font-bold active:bg-indigo-100 transition-colors">-</button>
                                                <div className="w-px bg-indigo-100"></div>
