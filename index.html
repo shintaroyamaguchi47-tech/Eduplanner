@@ -69,7 +69,7 @@
       </svg>
     );
 
-    // --- 日課定義 --- (ライトモード向けのクリーンな色合い)
+    // --- 日課定義 --- (ライトモード向けのクリーンな色合い、枠線をslate-300に)
     const SCHEDULE_TYPES = {
       normal: { id: 'normal', label: '通常日課', color: 'bg-white text-slate-600 border-slate-300' },
       short: { id: 'short', label: '短縮日課', color: 'bg-amber-50 text-amber-700 border-amber-300' },
@@ -1112,7 +1112,7 @@
                   <div className="space-y-2 mb-6">
                     {documents.map((doc, idx) => (
                       <div key={idx} className="flex items-center gap-2 bg-slate-50 p-2 rounded-lg border border-slate-300 group shadow-sm">
-                        <div className="text-lg bg-white border border-slate-200 w-8 h-8 rounded flex items-center justify-center shrink-0 text-slate-600">📎</div>
+                        <div className="text-lg bg-white border border-slate-300 w-8 h-8 rounded flex items-center justify-center shrink-0 text-slate-600">📎</div>
                         <div className="flex-1 min-w-0">
                           <div className="font-black text-xs text-slate-800 truncate">{doc.title}</div>
                           <a href={doc.url} target="_blank" className="text-[9px] text-sky-600 hover:text-sky-700 hover:underline truncate block font-mono">{doc.url}</a>
@@ -1184,7 +1184,6 @@
                               
                               <div className="flex-1 overflow-y-auto space-y-0.5 pr-0.5 hide-scrollbar min-h-0">
                                 {dailyEvents.map((ev, idx) => {
-                                  // カレンダーのラベル：左端のボーダーで色を示すモダンなスタイル
                                   let styleClass = 'bg-slate-50 text-slate-700 border-l-2 border-slate-300';
                                   
                                   if (ev.type === 'event') { styleClass = 'bg-pink-50 text-pink-700 border-l-2 border-pink-400'; }
@@ -1256,7 +1255,7 @@
               </div>
             )}
 
-            {/* 🔽🔽 メイン週案・基本設定 (クリーンでモダンなライトモード) 🔽🔽 */}
+            {/* 🔽🔽 メイン週案・基本設定 🔽🔽 */}
             {(activeTab === 'weekly' || activeTab === 'template') && (
               <main className="flex-1 flex flex-col min-h-0 relative overflow-hidden bg-slate-50">
                 <div className="flex-1 flex flex-col min-h-0 relative overflow-hidden">
@@ -1526,25 +1525,25 @@
                             const dateStr = formatDate(d);
                             const cellData = getCellData(dateStr, 'diary', i);
                             return (
-                              <div key={day} className="border-b border-slate-300 flex p-1.5 hover:bg-slate-50 transition-colors cursor-text min-h-[60px]">
+                              <div key={day} className="flex-1 border-b border-slate-300 flex p-1.5 hover:bg-slate-50 transition-colors cursor-text min-h-0">
                                 <div onClick={() => openEditModal(cellData, dateStr, {id:'diary', name:'日記'}, i, day, false, null, false)} className="w-12 text-center text-[10px] font-black text-slate-500 border-r border-slate-300 pr-1.5 mr-1.5 flex flex-col justify-center items-center shrink-0 cursor-pointer hover:bg-slate-100 rounded-lg">
                                   <div className="bg-slate-50 border border-slate-300 px-1 py-0.5 rounded mb-0.5">{d.getMonth() + 1}/{d.getDate()}</div>
                                   <div>({day})</div>
                                   {cellData.handwriting && <div className="mt-0.5 text-xs opacity-80">✏️</div>}
                                 </div>
-                                <div className="flex-1 text-[11px] text-slate-700 font-bold p-0.5">
+                                <div className="flex-1 text-[11px] text-slate-700 font-bold p-0.5 flex flex-col min-h-0">
                                   <textarea 
                                     key={`${dateStr}-diary-memo`} 
                                     defaultValue={cellData.memo || ''}
                                     onBlur={(e) => updateCellDataDirectly(dateStr, 'diary', i, { memo: e.target.value })}
-                                    className="w-full h-full min-h-[40px] resize-none outline-none bg-transparent placeholder-slate-400 leading-tight"
+                                    className="flex-1 w-full min-h-0 resize-none outline-none bg-transparent placeholder-slate-400 leading-tight"
                                     placeholder="メモを入力..."
                                   />
                                 </div>
                               </div>
                             )
                           })}
-                          <div className="flex min-h-[60px]">
+                          <div className="flex-1 flex min-h-0">
                             {DAYS.slice(5, 7).map((day, i) => {
                               const dayIndex = i + 5;
                               const d = new Date(currentWeekStart); d.setDate(d.getDate() + dayIndex);
@@ -1557,12 +1556,12 @@
                                     <div>({day})</div>
                                     {cellData.handwriting && <div className="mt-0.5 text-xs opacity-80">✏️</div>}
                                   </div>
-                                  <div className="flex-1 text-[11px] text-slate-700 font-bold p-0.5">
+                                  <div className="flex-1 text-[11px] text-slate-700 font-bold p-0.5 flex flex-col min-h-0">
                                     <textarea 
                                       key={`${dateStr}-diary-memo`}
                                       defaultValue={cellData.memo || ''}
                                       onBlur={(e) => updateCellDataDirectly(dateStr, 'diary', dayIndex, { memo: e.target.value })}
-                                      className="w-full h-full min-h-[40px] resize-none outline-none bg-transparent placeholder-slate-400 leading-tight"
+                                      className="flex-1 w-full min-h-0 resize-none outline-none bg-transparent placeholder-slate-400 leading-tight"
                                       placeholder="土日のメモ..."
                                     />
                                   </div>
@@ -1704,7 +1703,7 @@
                  <div className="bg-slate-50 border-b border-slate-300 p-3 text-slate-700 flex justify-between items-center shrink-0">
                    <div className="font-black text-sm">{selectedDateDetails.dateStr}</div>
                    <div className="flex gap-2">
-                     <button onClick={() => { setActiveTab('weekly'); setSelectedDateDetails(null); }} className="text-[10px] font-black bg-sky-50 text-sky-600 border border-sky-200 px-2 py-1 rounded-lg hover:bg-sky-100 shadow-sm transition-colors">週案へ</button>
+                     <button onClick={() => { setActiveTab('weekly'); setSelectedDateDetails(null); }} className="text-[10px] font-black bg-sky-50 text-sky-600 border border-sky-300 px-2 py-1 rounded-lg hover:bg-sky-100 shadow-sm transition-colors">週案へ</button>
                      <button onClick={() => setSelectedDateDetails(null)} className="text-slate-400 hover:text-slate-600 font-black px-1 text-lg">&times;</button>
                    </div>
                  </div>
@@ -1922,4 +1921,3 @@
   </script>
 </body>
 </html>
->>>>
