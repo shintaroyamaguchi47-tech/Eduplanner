@@ -69,12 +69,12 @@
       </svg>
     );
 
-    // --- 日課定義 --- (ライトモード向けのクリーンな色合い、枠線をslate-300に)
+    // --- 日課定義 ---
     const SCHEDULE_TYPES = {
-      normal: { id: 'normal', label: '通常日課', color: 'bg-white text-slate-600 border-slate-300' },
-      short: { id: 'short', label: '短縮日課', color: 'bg-amber-50 text-amber-700 border-amber-300' },
-      special: { id: 'special', label: '特別短縮', color: 'bg-pink-50 text-pink-700 border-pink-300' },
-      holiday: { id: 'holiday', label: '休日・部活', color: 'bg-teal-50 text-teal-700 border-teal-300' },
+      normal: { id: 'normal', label: '通常日課', color: 'bg-white text-slate-700 border-slate-400' },
+      short: { id: 'short', label: '短縮日課', color: 'bg-amber-50 text-amber-700 border-amber-400' },
+      special: { id: 'special', label: '特別短縮', color: 'bg-pink-50 text-pink-700 border-pink-400' },
+      holiday: { id: 'holiday', label: '休日・部活', color: 'bg-teal-50 text-teal-700 border-teal-400' },
     };
 
     // 時間設定
@@ -833,8 +833,8 @@
         
         if (activeTab === 'template') {
           return (
-            <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar w-full px-2 py-1 glass-effect shrink-0 z-20 border-b border-slate-200">
-               <div className="text-[10px] sm:text-xs font-black text-purple-600 flex items-center gap-1 py-0.5 px-2 rounded-lg border border-purple-200 bg-purple-50 shrink-0">
+            <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar w-full px-2 py-1 glass-effect shrink-0 z-20 border-b border-slate-300">
+               <div className="text-[10px] sm:text-xs font-black text-purple-600 flex items-center gap-1 py-0.5 px-2 rounded-lg border border-purple-300 bg-purple-50 shrink-0">
                  <span className="text-xs">⚙️</span> 基本設定モード (来週以降のベース)
                </div>
             </div>
@@ -844,25 +844,25 @@
         if (activeTab !== 'monthly' && activeTab !== 'weekly') return null;
 
         return (
-          <div className="flex items-center gap-1 overflow-x-auto hide-scrollbar w-full px-2 py-1.5 glass-effect shrink-0 z-20 border-b border-slate-200">
+          <div className="flex items-center gap-1 overflow-x-auto hide-scrollbar w-full px-2 py-1.5 glass-effect shrink-0 z-20 border-b border-slate-300">
             {activeTab === 'weekly' && (
               <>
-                <div className="flex items-center bg-white rounded-lg p-0.5 border border-slate-200 shadow-sm shrink-0">
+                <div className="flex items-center bg-white rounded-lg p-0.5 border border-slate-300 shadow-sm shrink-0">
                   <button onClick={() => changeWeek(-1)} className="px-2 py-0.5 text-slate-500 hover:text-sky-600 hover:bg-slate-50 rounded transition-colors font-bold text-[10px]">◀ 週</button>
                   <span className="px-2 text-[10px] font-black text-slate-700 min-w-[70px] text-center">{currentWeekStart.getMonth() + 1}月{currentWeekStart.getDate()}日〜</span>
                   <button onClick={() => changeWeek(1)} className="px-2 py-0.5 text-slate-500 hover:text-sky-600 hover:bg-slate-50 rounded transition-colors font-bold text-[10px]">週 ▶</button>
                 </div>
-                <div className="w-px h-3 bg-slate-200 mx-0.5 shrink-0"></div>
+                <div className="w-px h-3 bg-slate-300 mx-0.5 shrink-0"></div>
               </>
             )}
 
-            <div className="flex items-center gap-0.5 bg-white rounded-lg p-0.5 shrink-0 border border-slate-200 shadow-sm">
+            <div className="flex items-center gap-0.5 bg-white rounded-lg p-0.5 shrink-0 border border-slate-300 shadow-sm">
               <button onClick={() => { const d = new Date(currentMonth); d.setFullYear(d.getFullYear() - 1); setCurrentMonth(d); setCurrentWeekStart(getMonday(d)); }} className="text-slate-500 hover:text-sky-600 px-1.5 py-0.5 font-bold text-[10px] rounded hover:bg-slate-50 transition-colors">◀</button>
               <span className="text-[10px] font-black text-slate-700 px-1">{schoolYear}年度</span>
               <button onClick={() => { const d = new Date(currentMonth); d.setFullYear(d.getFullYear() + 1); setCurrentMonth(d); setCurrentWeekStart(getMonday(d)); }} className="text-slate-500 hover:text-sky-600 px-1.5 py-0.5 font-bold text-[10px] rounded hover:bg-slate-50 transition-colors">▶</button>
             </div>
             
-            <div className="w-px h-3 bg-slate-200 mx-0.5 shrink-0"></div>
+            <div className="w-px h-3 bg-slate-300 mx-0.5 shrink-0"></div>
             
             <div className="flex items-center gap-0.5 pr-2">
               {months.map(m => {
@@ -870,7 +870,7 @@
                 return (
                   <button key={m} onClick={() => { const y = m <= 3 ? schoolYear + 1 : schoolYear; const d = new Date(y, m - 1, 1); setCurrentMonth(d); setCurrentWeekStart(getMonday(d)); }}
                     className={`px-2 py-0.5 rounded-lg font-black text-[10px] whitespace-nowrap transition-all shrink-0 border shadow-sm
-                      ${isCurrent ? 'bg-sky-500 text-white border-sky-600' : 'bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-700 border-slate-200'}`}>
+                      ${isCurrent ? 'bg-sky-500 text-white border-sky-600' : 'bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-700 border-slate-300'}`}>
                     {m}月
                   </button>
                 )
@@ -885,7 +885,7 @@
       if (!cloudUser && cloudStatus !== 'スキップ') {
         return (
           <div className="flex h-[100dvh] w-full items-center justify-center bg-slate-50 p-4 font-sans">
-            <div className="bg-white p-6 rounded-2xl shadow-xl border border-slate-200 w-full max-w-sm animate-in fade-in zoom-in-95 duration-300">
+            <div className="bg-white p-6 rounded-2xl shadow-xl border border-slate-300 w-full max-w-sm animate-in fade-in zoom-in-95 duration-300">
               <div className="text-center mb-6 flex flex-col items-center">
                 <div className="bg-sky-500 p-3 rounded-xl shadow mb-3 text-white">
                   <LogoIcon className="w-6 h-6" />
@@ -894,18 +894,18 @@
                 <p className="text-xs text-slate-500 mt-1 font-bold">{isRegistering ? 'アカウントを作成して同期' : 'ログインして同期'}</p>
               </div>
 
-              {authError && <div className="bg-rose-50 text-rose-600 text-xs font-bold p-3 rounded-lg mb-4 border border-rose-200">{authError}</div>}
+              {authError && <div className="bg-rose-50 text-rose-600 text-xs font-bold p-3 rounded-lg mb-4 border border-rose-300">{authError}</div>}
 
               <form onSubmit={handleAuthSubmit} className="space-y-4">
                 <div>
                   <label className="block text-[10px] font-black text-slate-600 mb-1 ml-1">メールアドレス</label>
                   <input type="email" value={authEmail} onChange={e => setAuthEmail(e.target.value)} autoComplete="username"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-sky-100 focus:border-sky-400 transition-all placeholder-slate-400" required />
+                    className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2.5 text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-sky-100 focus:border-sky-400 transition-all placeholder-slate-400" required />
                 </div>
                 <div>
                   <label className="block text-[10px] font-black text-slate-600 mb-1 ml-1">パスワード (6文字以上)</label>
                   <input type="password" value={authPassword} onChange={e => setAuthPassword(e.target.value)} autoComplete="current-password"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-sky-100 focus:border-sky-400 transition-all placeholder-slate-400" required />
+                    className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2.5 text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-sky-100 focus:border-sky-400 transition-all placeholder-slate-400" required />
                 </div>
                 <button type="submit" className="w-full bg-sky-500 hover:bg-sky-600 text-white font-black text-sm py-3 rounded-lg shadow transition-all active:scale-[0.98] mt-2">
                   {isRegistering ? '登録してはじめる' : 'ログイン'}
@@ -933,22 +933,22 @@
           )}
 
           {/* ヘッダー (グラデーションとすりガラスを活かしたクリーンなデザイン) */}
-          <header className="bg-white/90 backdrop-blur-md text-slate-700 shrink-0 z-30 pt-[env(safe-area-inset-top)] relative border-b border-slate-200 shadow-sm">
+          <header className="bg-white/90 backdrop-blur-md text-slate-700 shrink-0 z-30 pt-[env(safe-area-inset-top)] relative border-b border-slate-300 shadow-sm">
             <div className="max-w-full mx-auto px-2 sm:px-4 h-12 flex items-center justify-between gap-2">
               
               <div className="flex items-center gap-2 shrink-0">
                 {/* タイトルロゴ（グラデーションテキスト） */}
                 <h1 className="text-base sm:text-lg font-black flex items-center gap-1.5 tracking-tight shrink-0 bg-gradient-to-r from-sky-500 to-purple-500 bg-clip-text text-transparent">
-                  <div className="bg-sky-50 p-1.5 rounded-lg border border-sky-100 shadow-sm"><LogoIcon className="w-4 h-4 text-sky-500" /></div>
+                  <div className="bg-sky-50 p-1.5 rounded-lg border border-sky-200 shadow-sm"><LogoIcon className="w-4 h-4 text-sky-500" /></div>
                   <span className="hidden sm:inline">EduPlanner</span><span className="sm:hidden">Edu</span>
                   {!isOnline && <span className="ml-1 text-[8px] bg-amber-500 text-white px-1.5 py-0.5 rounded font-bold shadow-sm">オフライン</span>}
                 </h1>
 
-                <div className="flex items-center gap-1.5 border-l border-slate-200 pl-3">
-                  <button onClick={() => setShowQuickMemoList(true)} className="bg-white hover:bg-slate-50 px-2.5 py-1.5 rounded-lg text-[10px] font-black transition-colors flex items-center gap-1 border border-slate-200 text-slate-600 shadow-sm" title="クイックメモ">
+                <div className="flex items-center gap-1.5 border-l border-slate-300 pl-3">
+                  <button onClick={() => setShowQuickMemoList(true)} className="bg-white hover:bg-slate-50 px-2.5 py-1.5 rounded-lg text-[10px] font-black transition-colors flex items-center gap-1 border border-slate-300 text-slate-600 shadow-sm" title="クイックメモ">
                     <span className="text-xs leading-none opacity-80">✍️</span> <span className="hidden lg:inline">メモ</span>
                   </button>
-                  <button onClick={() => setShowTodo(true)} className="bg-white hover:bg-slate-50 px-2.5 py-1.5 rounded-lg text-[10px] font-black transition-colors flex items-center gap-1 border border-slate-200 text-slate-600 shadow-sm relative" title="TODOリスト">
+                  <button onClick={() => setShowTodo(true)} className="bg-white hover:bg-slate-50 px-2.5 py-1.5 rounded-lg text-[10px] font-black transition-colors flex items-center gap-1 border border-slate-300 text-slate-600 shadow-sm relative" title="TODOリスト">
                     <span className="text-xs leading-none opacity-80">📝</span> <span className="hidden lg:inline">TODO</span>
                     {todos.filter(t => !t.completed).length > 0 && (
                       <span className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white text-[8px] font-black w-[16px] h-[16px] rounded-full flex items-center justify-center shadow">
@@ -961,14 +961,14 @@
 
               {/* タブメニュー（クリーンで立体的） */}
               <div className="flex items-center shrink-0">
-                <div className="flex bg-slate-100/80 rounded-xl p-1 overflow-x-auto hide-scrollbar max-w-[55vw] lg:max-w-[50vw] items-center border border-slate-200/50 shadow-inner">
-                  <button onClick={() => setActiveTab('yearly')} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all whitespace-nowrap ${activeTab === 'yearly' ? 'bg-white text-sky-600 shadow-sm border border-slate-200/60' : 'text-slate-500 hover:text-slate-700 hover:bg-white/50'}`}>年間</button>
-                  <button onClick={() => setActiveTab('monthly')} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all whitespace-nowrap ${activeTab === 'monthly' ? 'bg-white text-sky-600 shadow-sm border border-slate-200/60' : 'text-slate-500 hover:text-slate-700 hover:bg-white/50'}`}>月間</button>
+                <div className="flex bg-slate-100/80 rounded-xl p-1 overflow-x-auto hide-scrollbar max-w-[55vw] lg:max-w-[50vw] items-center border border-slate-300/50 shadow-inner">
+                  <button onClick={() => setActiveTab('yearly')} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all whitespace-nowrap ${activeTab === 'yearly' ? 'bg-white text-sky-600 shadow-sm border border-slate-300/60' : 'text-slate-500 hover:text-slate-700 hover:bg-white/50'}`}>年間</button>
+                  <button onClick={() => setActiveTab('monthly')} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all whitespace-nowrap ${activeTab === 'monthly' ? 'bg-white text-sky-600 shadow-sm border border-slate-300/60' : 'text-slate-500 hover:text-slate-700 hover:bg-white/50'}`}>月間</button>
                   <button onClick={() => setActiveTab('weekly')} className={`px-3 py-1.5 mx-0.5 rounded-lg text-[10px] font-black transition-all whitespace-nowrap ${activeTab === 'weekly' ? 'bg-sky-500 text-white shadow-md' : 'text-slate-600 hover:bg-white/50 border border-transparent'}`}>週案</button>
-                  <button onClick={() => setActiveTab('notes')} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all whitespace-nowrap ${activeTab === 'notes' ? 'bg-white text-sky-600 shadow-sm border border-slate-200/60' : 'text-slate-500 hover:text-slate-700 hover:bg-white/50'}`}>ノート</button>
-                  <button onClick={() => setActiveTab('syllabus')} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all whitespace-nowrap ${activeTab === 'syllabus' ? 'bg-white text-sky-600 shadow-sm border border-slate-200/60' : 'text-slate-500 hover:text-slate-700 hover:bg-white/50'}`}>進度</button>
-                  <button onClick={() => setActiveTab('documents')} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all whitespace-nowrap ${activeTab === 'documents' ? 'bg-white text-sky-600 shadow-sm border border-slate-200/60' : 'text-slate-500 hover:text-slate-700 hover:bg-white/50'}`}>資料</button>
-                  <button onClick={() => setActiveTab('template')} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all whitespace-nowrap ${activeTab === 'template' ? 'bg-white text-sky-600 shadow-sm border border-slate-200/60' : 'text-slate-500 hover:text-slate-700 hover:bg-white/50'}`}>基本</button>
+                  <button onClick={() => setActiveTab('notes')} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all whitespace-nowrap ${activeTab === 'notes' ? 'bg-white text-sky-600 shadow-sm border border-slate-300/60' : 'text-slate-500 hover:text-slate-700 hover:bg-white/50'}`}>ノート</button>
+                  <button onClick={() => setActiveTab('syllabus')} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all whitespace-nowrap ${activeTab === 'syllabus' ? 'bg-white text-sky-600 shadow-sm border border-slate-300/60' : 'text-slate-500 hover:text-slate-700 hover:bg-white/50'}`}>進度</button>
+                  <button onClick={() => setActiveTab('documents')} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all whitespace-nowrap ${activeTab === 'documents' ? 'bg-white text-sky-600 shadow-sm border border-slate-300/60' : 'text-slate-500 hover:text-slate-700 hover:bg-white/50'}`}>資料</button>
+                  <button onClick={() => setActiveTab('template')} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all whitespace-nowrap ${activeTab === 'template' ? 'bg-white text-sky-600 shadow-sm border border-slate-300/60' : 'text-slate-500 hover:text-slate-700 hover:bg-white/50'}`}>基本</button>
                 </div>
               </div>
             </div>
@@ -983,16 +983,16 @@
               <div className="flex-1 flex flex-col overflow-hidden relative">
                 <div className="flex-1 overflow-auto w-full bg-white relative">
                   <table className="w-full border-collapse min-w-[1000px] text-xs table-fixed">
-                    <thead className="sticky top-0 z-20 bg-slate-50 text-slate-600 border-b border-slate-300">
+                    <thead className="sticky top-0 z-20 bg-slate-50 text-slate-600 border-b border-slate-400">
                       <tr>
-                        <th className="sticky left-0 bg-slate-50 z-30 border-r border-slate-300 w-8 sm:w-10 py-1.5 text-center font-black text-[10px]">日</th>
-                        {[4,5,6,7,8,9,10,11,12,1,2,3].map(m => ( <th key={m} className="border-r border-slate-300 py-1.5 w-20 sm:w-28 text-center font-black text-[10px]">{m}月</th> ))}
+                        <th className="sticky left-0 bg-slate-50 z-30 border-r border-slate-400 w-8 sm:w-10 py-1.5 text-center font-black text-[10px]">日</th>
+                        {[4,5,6,7,8,9,10,11,12,1,2,3].map(m => ( <th key={m} className="border-r border-slate-400 py-1.5 w-20 sm:w-28 text-center font-black text-[10px]">{m}月</th> ))}
                       </tr>
                     </thead>
                     <tbody>
                       {Array.from({ length: 31 }, (_, i) => i + 1).map(d => (
-                        <tr key={d} className="hover:bg-slate-50/50 transition-colors border-b border-slate-200">
-                          <td className="sticky left-0 bg-slate-50 z-10 border-r border-slate-300 text-center font-black text-slate-500 py-0.5 text-[9px] sm:text-[10px]">{d}</td>
+                        <tr key={d} className="hover:bg-slate-50/50 transition-colors border-b border-slate-300">
+                          <td className="sticky left-0 bg-slate-50 z-10 border-r border-slate-400 text-center font-black text-slate-500 py-0.5 text-[9px] sm:text-[10px]">{d}</td>
                           {[4,5,6,7,8,9,10,11,12,1,2,3].map(m => {
                             const y = m <= 3 ? schoolYear + 1 : schoolYear;
                             const date = new Date(y, m - 1, d); const isValidDate = date.getDate() === d;
@@ -1010,8 +1010,8 @@
                                 {isValidDate && (
                                   <div className="flex items-stretch h-full w-full min-h-[32px] group">
                                     <div onClick={() => { setCurrentWeekStart(getMonday(date)); if (date.getMonth() !== currentMonth.getMonth()) { setCurrentMonth(new Date(date.getFullYear(), date.getMonth(), 1)); } setActiveTab('weekly'); }}
-                                      className={`w-4 sm:w-5 flex items-center justify-center text-[8px] font-bold border-r border-slate-200 shrink-0 cursor-pointer hover:bg-slate-100 transition-colors
-                                      ${isSun ? 'text-rose-500' : isSat ? 'text-sky-500' : 'text-slate-400'}`}>
+                                      className={`w-4 sm:w-5 flex items-center justify-center text-[8px] font-bold border-r border-slate-300 shrink-0 cursor-pointer hover:bg-slate-100 transition-colors
+                                      ${isSun ? 'text-rose-500' : isSat ? 'text-sky-500' : 'text-slate-500'}`}>
                                       {dayOfWeekStr}
                                     </div>
                                     <textarea className={`flex-1 min-w-0 w-full text-[9px] sm:text-[10px] font-bold p-1 outline-none resize-none overflow-hidden bg-transparent leading-tight break-all whitespace-pre-wrap ${isSun ? 'text-rose-700' : 'text-slate-700'}`}
@@ -1035,35 +1035,35 @@
             {activeTab === 'syllabus' && (
               <div className="flex-1 overflow-y-auto p-2 sm:p-4 pb-8 bg-slate-50">
                 <div className="max-w-3xl mx-auto space-y-4">
-                  <div className="bg-white rounded-xl p-4 sm:p-5 shadow-sm border border-slate-300">
+                  <div className="bg-white rounded-xl p-4 sm:p-5 shadow-sm border border-slate-400">
                     <h2 className="text-lg font-black text-slate-800 flex items-center gap-2 mb-1"><span className="text-xl opacity-80">📚</span> 教科・進度管理</h2>
                     <p className="text-[10px] text-slate-500 font-bold mb-4">単元登録で自動カウント、または履歴から選択。</p>
                     
                     <div className="space-y-3">
                       {syllabusData.map((subj, idx) => (
-                        <div key={subj.id} className="border border-slate-300 rounded-lg overflow-hidden bg-white">
-                          <div className="bg-slate-50 p-2 sm:p-3 border-b border-slate-300 flex justify-between items-center">
+                        <div key={subj.id} className="border border-slate-400 rounded-lg overflow-hidden bg-white">
+                          <div className="bg-slate-50 p-2 sm:p-3 border-b border-slate-400 flex justify-between items-center">
                             <div className="flex items-center gap-2">
                               <span className="font-black text-slate-800 text-sm">{subj.name}</span>
-                              <span className={`text-[9px] font-black px-2 py-0.5 rounded border ${subj.type === 'auto' ? 'bg-sky-50 text-sky-700 border-sky-300' : 'bg-teal-50 text-teal-700 border-teal-300'}`}>
+                              <span className={`text-[9px] font-black px-2 py-0.5 rounded border ${subj.type === 'auto' ? 'bg-sky-50 text-sky-700 border-sky-400' : 'bg-teal-50 text-teal-700 border-teal-400'}`}>
                                 {subj.type === 'auto' ? '自動カウント' : '履歴選択'}
                               </span>
                             </div>
-                            <button onClick={() => saveSyllabus(syllabusData.filter(s => s.id !== subj.id))} className="text-rose-600 bg-rose-50 border border-rose-300 hover:bg-rose-100 rounded px-2 py-1 text-[10px] font-bold transition-colors">削除</button>
+                            <button onClick={() => saveSyllabus(syllabusData.filter(s => s.id !== subj.id))} className="text-rose-600 bg-rose-50 border border-rose-400 hover:bg-rose-100 rounded px-2 py-1 text-[10px] font-bold transition-colors">削除</button>
                           </div>
                           <div className="p-3">
                             {subj.type === 'auto' ? (
                               <div>
                                 <div className="text-[9px] text-slate-500 font-bold mb-1">単元名,時数 (改行で複数)</div>
-                                <textarea className="w-full text-xs font-bold border border-slate-300 rounded px-2 py-1.5 focus:border-sky-400 outline-none bg-slate-50 resize-y text-slate-700 placeholder-slate-400" rows={3}
+                                <textarea className="w-full text-xs font-bold border border-slate-400 rounded px-2 py-1.5 focus:border-sky-500 outline-none bg-slate-50 resize-y text-slate-700 placeholder-slate-400" rows={3}
                                   value={subj.rawText !== undefined ? subj.rawText : formatUnits(subj.units)}
                                   onChange={(e) => { const updated = [...syllabusData]; updated[idx] = { ...updated[idx], rawText: e.target.value }; setSyllabusData(updated); }}
                                   onBlur={(e) => { const text = e.target.value; const newUnits = parseUnits(text); const updated = [...syllabusData]; updated[idx] = { ...updated[idx], rawText: text, units: newUnits }; if (updated[idx].currentUnitIdx >= newUnits.length) { updated[idx].currentUnitIdx = Math.max(0, newUnits.length - 1); updated[idx].currentHour = 1; } saveSyllabus(updated); }}
                                   placeholder="単元A,3&#10;単元B,2" />
-                                <div className="mt-2 flex items-center gap-2 text-[10px] font-black text-sky-800 bg-sky-50 p-2 rounded border border-sky-300">
+                                <div className="mt-2 flex items-center gap-2 text-[10px] font-black text-sky-800 bg-sky-50 p-2 rounded border border-sky-400">
                                   <span className="text-sky-600">現在:</span>
                                   {subj.units && subj.units[subj.currentUnitIdx] ? ( <span>{subj.units[subj.currentUnitIdx].name} ({subj.currentHour}/{subj.units[subj.currentUnitIdx].hours})</span> ) : ( <span className="text-slate-500">終了/未登録</span> )}
-                                  {subj.units && subj.units[subj.currentUnitIdx] && ( <button onClick={() => { const updated = [...syllabusData]; updated[idx].currentUnitIdx = 0; updated[idx].currentHour = 1; saveSyllabus(updated); }} className="ml-auto bg-white border border-slate-300 px-2 py-0.5 rounded hover:bg-slate-50 text-slate-600 transition-colors">リセット</button> )}
+                                  {subj.units && subj.units[subj.currentUnitIdx] && ( <button onClick={() => { const updated = [...syllabusData]; updated[idx].currentUnitIdx = 0; updated[idx].currentHour = 1; saveSyllabus(updated); }} className="ml-auto bg-white border border-slate-400 px-2 py-0.5 rounded hover:bg-slate-50 text-slate-600 transition-colors">リセット</button> )}
                                 </div>
                               </div>
                             ) : (
@@ -1072,13 +1072,13 @@
                                 {subj.history && subj.history.length > 0 ? (
                                   <div className="flex flex-wrap gap-1.5">
                                     {subj.history.map((h, hIdx) => (
-                                      <span key={hIdx} className="bg-teal-50 text-teal-800 border border-teal-300 text-[10px] font-bold px-2 py-1 rounded flex items-center gap-1.5 shadow-sm">
+                                      <span key={hIdx} className="bg-teal-50 text-teal-800 border border-teal-400 text-[10px] font-bold px-2 py-1 rounded flex items-center gap-1.5 shadow-sm">
                                         {h}
                                         <button onClick={() => { const updated = [...syllabusData]; updated[idx].history = subj.history.filter((_, i) => i !== hIdx); saveSyllabus(updated); }} className="text-teal-600 hover:text-rose-500 font-black">✕</button>
                                       </span>
                                     ))}
                                   </div>
-                                ) : ( <div className="text-[10px] text-slate-500 font-bold bg-slate-50 p-2 rounded border border-slate-300">履歴なし</div> )}
+                                ) : ( <div className="text-[10px] text-slate-500 font-bold bg-slate-50 p-2 rounded border border-slate-400">履歴なし</div> )}
                               </div>
                             )}
                           </div>
@@ -1086,11 +1086,11 @@
                       ))}
                     </div>
 
-                    <div className="mt-4 bg-slate-50 p-3 sm:p-4 rounded-lg border border-slate-300">
+                    <div className="mt-4 bg-slate-50 p-3 sm:p-4 rounded-lg border border-slate-400">
                       <h3 className="text-[10px] font-black text-sky-700 mb-2">＋ 新規追加</h3>
                       <div className="flex flex-col sm:flex-row gap-2">
-                        <input id="newSubjName" type="text" placeholder="例: 1A 国語" className="flex-1 bg-white border border-slate-300 rounded px-2 py-1.5 text-xs font-bold outline-none focus:border-sky-400 text-slate-800 placeholder-slate-400 shadow-sm" />
-                        <select id="newSubjType" className="bg-white border border-slate-300 rounded px-2 py-1.5 text-xs font-bold outline-none focus:border-sky-400 text-slate-700 shadow-sm">
+                        <input id="newSubjName" type="text" placeholder="例: 1A 国語" className="flex-1 bg-white border border-slate-400 rounded px-2 py-1.5 text-xs font-bold outline-none focus:border-sky-500 text-slate-800 placeholder-slate-400 shadow-sm" />
+                        <select id="newSubjType" className="bg-white border border-slate-400 rounded px-2 py-1.5 text-xs font-bold outline-none focus:border-sky-500 text-slate-700 shadow-sm">
                           <option value="auto">単元カウント</option>
                           <option value="history">履歴選択</option>
                         </select>
@@ -1105,29 +1105,29 @@
             {/* 資料室 */}
             {activeTab === 'documents' && (
               <div className="flex-1 overflow-y-auto p-2 sm:p-4 pb-8 bg-slate-50">
-                <div className="max-w-3xl mx-auto bg-white rounded-xl p-4 sm:p-5 border border-slate-300 shadow-sm">
+                <div className="max-w-3xl mx-auto bg-white rounded-xl p-4 sm:p-5 border border-slate-400 shadow-sm">
                   <h2 className="text-lg font-black text-slate-800 flex items-center gap-2 mb-1"><span className="text-xl opacity-80">📁</span> 資料リンク</h2>
                   <p className="text-[10px] text-slate-500 font-bold mb-4">ドライブのPDFやよく使うサイト。</p>
                   
                   <div className="space-y-2 mb-6">
                     {documents.map((doc, idx) => (
-                      <div key={idx} className="flex items-center gap-2 bg-slate-50 p-2 rounded-lg border border-slate-300 group shadow-sm">
-                        <div className="text-lg bg-white border border-slate-300 w-8 h-8 rounded flex items-center justify-center shrink-0 text-slate-600">📎</div>
+                      <div key={idx} className="flex items-center gap-2 bg-slate-50 p-2 rounded-lg border border-slate-400 group shadow-sm">
+                        <div className="text-lg bg-white border border-slate-400 w-8 h-8 rounded flex items-center justify-center shrink-0 text-slate-600">📎</div>
                         <div className="flex-1 min-w-0">
                           <div className="font-black text-xs text-slate-800 truncate">{doc.title}</div>
                           <a href={doc.url} target="_blank" className="text-[9px] text-sky-600 hover:text-sky-700 hover:underline truncate block font-mono">{doc.url}</a>
                         </div>
-                        <button onClick={() => saveExtraData(yearlyData, documents.filter((_, i) => i !== idx), vacations)} className="text-rose-600 bg-white border border-rose-300 hover:bg-rose-50 font-bold text-[9px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-all shadow-sm">削除</button>
+                        <button onClick={() => saveExtraData(yearlyData, documents.filter((_, i) => i !== idx), vacations)} className="text-rose-600 bg-white border border-rose-400 hover:bg-rose-50 font-bold text-[9px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-all shadow-sm">削除</button>
                       </div>
                     ))}
-                    {documents.length === 0 && <div className="text-center text-slate-500 text-xs font-bold py-6 border border-slate-300 rounded-lg bg-slate-50">登録なし</div>}
+                    {documents.length === 0 && <div className="text-center text-slate-500 text-xs font-bold py-6 border border-slate-400 rounded-lg bg-slate-50">登録なし</div>}
                   </div>
 
-                  <div className="bg-slate-50 p-3 rounded-lg border border-slate-300">
+                  <div className="bg-slate-50 p-3 rounded-lg border border-slate-400">
                     <h3 className="text-[10px] font-black text-slate-600 mb-2">＋ 新規登録</h3>
                     <div className="space-y-2">
-                      <input id="docTitle" type="text" placeholder="名前 (例: R6予定表)" className="w-full bg-white border border-slate-300 rounded px-2 py-1.5 text-xs font-bold outline-none focus:border-sky-400 text-slate-800 placeholder-slate-400 shadow-sm" />
-                      <input id="docUrl" type="url" placeholder="URL (https://...)" className="w-full bg-white border border-slate-300 rounded px-2 py-1.5 text-xs font-bold outline-none focus:border-sky-400 text-slate-800 placeholder-slate-400 shadow-sm" />
+                      <input id="docTitle" type="text" placeholder="名前 (例: R6予定表)" className="w-full bg-white border border-slate-400 rounded px-2 py-1.5 text-xs font-bold outline-none focus:border-sky-500 text-slate-800 placeholder-slate-400 shadow-sm" />
+                      <input id="docUrl" type="url" placeholder="URL (https://...)" className="w-full bg-white border border-slate-400 rounded px-2 py-1.5 text-xs font-bold outline-none focus:border-sky-500 text-slate-800 placeholder-slate-400 shadow-sm" />
                       <button onClick={() => { const title = document.getElementById('docTitle').value; const url = document.getElementById('docUrl').value; if(title && url) { saveExtraData(yearlyData, documents, [...documents, {title, url}], vacations); document.getElementById('docTitle').value = ''; document.getElementById('docUrl').value = ''; } }} className="bg-slate-700 text-white font-black text-[10px] px-3 py-1.5 rounded hover:bg-slate-800 transition-colors w-full shadow-sm">追加</button>
                     </div>
                   </div>
@@ -1153,13 +1153,13 @@
                         
                         let bgClass = '';
                         if (!isCurrentMonth) {
-                          bgClass = 'bg-slate-50/50 border-slate-200 opacity-60';
+                          bgClass = 'bg-slate-50/50 border-slate-300 opacity-60';
                         } else if (isToday) {
                           bgClass = 'bg-white border-sky-400 ring-1 ring-sky-400 ring-inset shadow-sm z-10';
                         } else if (isVac) {
                           bgClass = 'bg-amber-50/50 border-amber-300/50';
                         } else {
-                          bgClass = 'bg-white border-slate-300 hover:border-slate-400 hover:shadow-sm';
+                          bgClass = 'bg-white border-slate-400 hover:border-slate-500 hover:shadow-sm';
                         }
 
                         let btnClass = isToday 
@@ -1184,7 +1184,8 @@
                               
                               <div className="flex-1 overflow-y-auto space-y-0.5 pr-0.5 hide-scrollbar min-h-0">
                                 {dailyEvents.map((ev, idx) => {
-                                  let styleClass = 'bg-slate-50 text-slate-700 border-l-2 border-slate-300';
+                                  // カレンダーのラベル：左端のボーダーで色を示すモダンなスタイル
+                                  let styleClass = 'bg-slate-50 text-slate-700 border-l-2 border-slate-400';
                                   
                                   if (ev.type === 'event') { styleClass = 'bg-pink-50 text-pink-700 border-l-2 border-pink-400'; }
                                   else if (ev.type === 'todo') { styleClass = 'bg-teal-50 text-teal-700 border-l-2 border-teal-400'; }
@@ -1209,26 +1210,26 @@
             {activeTab === 'notes' && (
               <div className="flex-1 overflow-y-auto p-2 sm:p-4 pb-8 bg-slate-50">
                 <div className="max-w-3xl mx-auto flex flex-col h-full space-y-4">
-                  <div className="bg-white rounded-xl p-4 sm:p-5 shadow-sm border border-slate-300 flex flex-col min-h-full">
+                  <div className="bg-white rounded-xl p-4 sm:p-5 shadow-sm border border-slate-400 flex flex-col min-h-full">
                     <h2 className="text-lg font-black text-slate-800 flex items-center gap-2 mb-4"><span className="text-xl opacity-80">📓</span> 振り返りノート</h2>
                     
-                    <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-lg border border-slate-300 mb-4 shrink-0 focus-within:border-sky-400 transition-colors shadow-inner">
-                      <span className="text-sm pl-1 text-slate-400">🔍</span>
+                    <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-lg border border-slate-400 mb-4 shrink-0 focus-within:border-sky-500 transition-colors shadow-inner">
+                      <span className="text-sm pl-1 text-slate-500">🔍</span>
                       <input 
                         type="text" 
                         value={searchQuery}
                         onChange={e => setSearchQuery(e.target.value)}
                         placeholder="記録から検索..." 
-                        className="flex-1 bg-transparent border-none text-xs font-bold outline-none text-slate-800 placeholder-slate-400"
+                        className="flex-1 bg-transparent border-none text-xs font-bold outline-none text-slate-800 placeholder-slate-500"
                       />
                       {searchQuery && (
-                        <button onClick={() => setSearchQuery('')} className="text-slate-500 hover:text-slate-700 bg-white border border-slate-300 rounded w-5 h-5 font-black text-[10px] flex items-center justify-center shadow-sm">✕</button>
+                        <button onClick={() => setSearchQuery('')} className="text-slate-500 hover:text-slate-700 bg-white border border-slate-400 rounded w-5 h-5 font-black text-[10px] flex items-center justify-center shadow-sm">✕</button>
                       )}
                     </div>
 
                     <div className="space-y-3 flex-1">
                       {getNotesList().length === 0 ? (
-                         <div className="text-center text-slate-400 font-bold py-8 border border-slate-300 rounded-lg bg-slate-50 text-xs">
+                         <div className="text-center text-slate-500 font-bold py-8 border border-slate-400 rounded-lg bg-slate-50 text-xs">
                            メモが見つかりません。
                          </div>
                       ) : (
@@ -1236,14 +1237,14 @@
                            const d = new Date(note.dateStr);
                            const dayStr = DAYS[d.getDay() === 0 ? 6 : d.getDay() - 1];
                            return (
-                             <div key={idx} className="bg-white p-3 rounded-lg border border-slate-300 shadow-sm flex flex-col sm:flex-row gap-3 hover:border-slate-400 hover:shadow-md transition-all">
+                             <div key={idx} className="bg-white p-3 rounded-lg border border-slate-400 shadow-sm flex flex-col sm:flex-row gap-3 hover:border-slate-500 hover:shadow-md transition-all">
                                <div className="shrink-0 flex sm:flex-col items-center sm:items-start gap-2 sm:gap-0.5 sm:w-14">
                                  <div className="text-sm font-black text-slate-800">{d.getMonth() + 1}/{d.getDate()}</div>
-                                 <div className="text-[9px] font-bold text-slate-500 bg-slate-100 border border-slate-300 px-1.5 py-0.5 rounded">{dayStr}</div>
+                                 <div className="text-[9px] font-bold text-slate-500 bg-slate-100 border border-slate-400 px-1.5 py-0.5 rounded">{dayStr}</div>
                                </div>
                                <div className="flex-1 space-y-2 min-w-0">
                                  {note.memo && <div className="text-xs font-bold text-slate-700 whitespace-pre-wrap leading-relaxed">{note.memo}</div>}
-                                 {note.handwriting && <img src={note.handwriting} alt="手書き" className="max-w-full sm:max-w-[200px] h-auto rounded border border-slate-300 bg-slate-50 cursor-pointer shadow-sm" onClick={() => shareMemo(note.handwriting)} title="クリックで共有" />}
+                                 {note.handwriting && <img src={note.handwriting} alt="手書き" className="max-w-full sm:max-w-[200px] h-auto rounded border border-slate-400 bg-slate-50 cursor-pointer shadow-sm" onClick={() => shareMemo(note.handwriting)} title="クリックで共有" />}
                                </div>
                              </div>
                            );
@@ -1263,20 +1264,20 @@
                     
                     {/* 🔷 左ペイン：時間割 🔷 */}
                     <div className="w-full shrink-0 lg:w-[58%] flex flex-col relative overflow-auto hide-scrollbar pb-8 lg:pb-0 snap-center">
-                      <div className="bg-white shadow-sm border border-slate-300 flex flex-col min-w-max md:min-w-full h-fit rounded-xl overflow-hidden">
+                      <div className="bg-white shadow-sm border border-slate-400 flex flex-col min-w-max md:min-w-full h-fit rounded-xl overflow-hidden">
                         
                         {/* 時間割ヘッダー（曜日） */}
-                        <div className="sticky top-0 z-10 bg-white/90 backdrop-blur-md flex shrink-0 border-b border-slate-300">
-                          <div className="w-8 sm:w-10 shrink-0 border-r border-slate-300 flex items-center justify-center font-black text-[9px] text-slate-500 bg-slate-50">枠</div>
+                        <div className="sticky top-0 z-10 bg-white/90 backdrop-blur-md flex shrink-0 border-b border-slate-400">
+                          <div className="w-8 sm:w-10 shrink-0 border-r border-slate-400 flex items-center justify-center font-black text-[9px] text-slate-500 bg-slate-50">枠</div>
                           {DAYS.map((day, i) => {
                             const d = new Date(currentWeekStart); d.setDate(d.getDate() + i); const dateStr = formatDate(d);
                             const setting = getDaySetting(dateStr, i); const style = SCHEDULE_TYPES[setting.type];
                             const isToday = dateStr === todayStr;
                             return (
-                              <div key={day} className={`min-w-[100px] md:min-w-0 md:w-[14.28%] border-r border-slate-300 p-0.5 text-center flex flex-col justify-center last:border-r-0 ${isToday ? 'bg-sky-50/50' : 'bg-transparent'}`}>
+                              <div key={day} className={`min-w-[100px] md:min-w-0 md:w-[14.28%] border-r border-slate-400 p-0.5 text-center flex flex-col justify-center last:border-r-0 ${isToday ? 'bg-sky-50/50' : 'bg-transparent'}`}>
                                 <div className="flex justify-center items-center gap-1 mb-0.5">
                                   <span className={`font-black text-[9px] sm:text-[10px] ${isToday ? 'text-sky-600' : i===5?'text-sky-600':i===6?'text-rose-600':'text-slate-600'}`}>{day}</span>
-                                  {activeTab === 'weekly' && ( <span className={`text-[8px] sm:text-[9px] font-bold px-1 py-0.5 rounded shadow-sm border ${isToday ? 'bg-sky-500 text-white border-sky-600' : 'text-slate-600 bg-white border-slate-300'}`}>{d.getDate()}</span> )}
+                                  {activeTab === 'weekly' && ( <span className={`text-[8px] sm:text-[9px] font-bold px-1 py-0.5 rounded shadow-sm border ${isToday ? 'bg-sky-500 text-white border-sky-600' : 'text-slate-600 bg-white border-slate-400'}`}>{d.getDate()}</span> )}
                                 </div>
                                 <div className={`text-[8px] sm:text-[9px] rounded px-0.5 py-0.5 border shadow-sm ${style.color}`}>
                                   <select value={setting.type} onChange={(e) => handleSettingChange(dateStr, i, { ...setting, type: e.target.value })} className="bg-transparent font-bold w-full text-center outline-none appearance-none cursor-pointer">
@@ -1286,7 +1287,7 @@
                                 {activeTab === 'weekly' && (
                                   <div className="mt-0.5 relative w-full">
                                     <select value="" onChange={(e) => { const val = e.target.value; if (val === 'revert') handleRevertDay(dateStr); else if (val !== '') handleCopyDay(dateStr, val); }} 
-                                      className="w-full text-[7.5px] sm:text-[8px] bg-white hover:bg-slate-50 border border-slate-300 text-slate-500 font-bold rounded px-1 py-0.5 outline-none cursor-pointer text-center appearance-none shadow-sm transition-colors">
+                                      className="w-full text-[7.5px] sm:text-[8px] bg-white hover:bg-slate-50 border border-slate-400 text-slate-500 font-bold rounded px-1 py-0.5 outline-none cursor-pointer text-center appearance-none shadow-sm transition-colors">
                                       <option value="" disabled>🔄 振替</option><option value="revert">🧹 リセット</option>
                                       {DAYS.map((dName, dIdx) => <option key={dIdx} value={dIdx}>➡️ {dName}曜適用</option>)}
                                     </select>
@@ -1308,15 +1309,14 @@
                             else if (row.id === 'event') { rowHeight = 'h-8 sm:h-10'; }
                             else if (row.id === 'afterschool') { rowHeight = 'min-h-[45px] lg:min-h-[50px]'; isFlex1 = true; } 
 
-                            // ヘッダーはクリーンな白基調に
                             let headerBg = 'bg-slate-50'; let headerTextColor = 'text-slate-500';
                             if (row.id === 'event') { headerBg = 'bg-pink-50/50'; headerTextColor = 'text-pink-600'; }
                             else if (row.id === 'lunch') { headerBg = 'bg-amber-50/50'; headerTextColor = 'text-amber-600'; }
                             else if (row.id === 'morning') { headerBg = 'bg-yellow-50/50'; headerTextColor = 'text-yellow-600'; }
 
                             return (
-                              <div key={row.id} className={`flex ${isFlex1 ? 'flex-1' : 'shrink-0'} ${rowHeight} border-b border-slate-300 last:border-b-0`}>
-                                <div className={`w-8 sm:w-10 shrink-0 border-r border-slate-300 sticky left-0 z-10 flex flex-col items-center justify-center p-0.5 text-center ${headerBg}`}>
+                              <div key={row.id} className={`flex ${isFlex1 ? 'flex-1' : 'shrink-0'} ${rowHeight} border-b border-slate-400 last:border-b-0`}>
+                                <div className={`w-8 sm:w-10 shrink-0 border-r border-slate-400 sticky left-0 z-10 flex flex-col items-center justify-center p-0.5 text-center ${headerBg}`}>
                                   {row.id.startsWith('p') ? (
                                     <span className="text-base sm:text-xl text-sky-600 font-black drop-shadow-sm">{row.id.replace('p', '')}</span>
                                   ) : (
@@ -1375,10 +1375,10 @@
                                       cellContent = (
                                         <div className="h-full flex flex-col justify-center relative px-1">
                                           {displayTime && row.id !== 'event' && (
-                                            <div className={`font-mono font-bold mb-0.5 px-0.5 rounded flex items-center gap-0.5 self-start leading-none ${hasCustomTime ? 'bg-sky-100 text-sky-700' : 'text-slate-400'} text-[7px] sm:text-[8px]`}><span>🕒</span> <span>{displayTime}</span></div>
+                                            <div className={`font-mono font-bold mb-0.5 px-0.5 rounded flex items-center gap-0.5 self-start leading-none ${hasCustomTime ? 'bg-sky-100 text-sky-700' : 'text-slate-500'} text-[7px] sm:text-[8px]`}><span>🕒</span> <span>{displayTime}</span></div>
                                           )}
                                           <div className={`font-black leading-tight whitespace-pre-wrap break-words ${row.id === 'event' ? 'text-pink-600' : isOverridden ? 'text-amber-600' : 'text-slate-800'} text-[9px] sm:text-[10px] lg:text-[11px]`}>{cellData.subject || <span className="text-slate-200 font-normal">-</span>}</div>
-                                          <div className="text-[7px] sm:text-[8px] text-slate-500 font-bold whitespace-pre-wrap break-words leading-tight mt-0.5">{cellData.memo}</div>
+                                          <div className="text-[7px] sm:text-[8px] text-slate-600 font-bold whitespace-pre-wrap break-words leading-tight mt-0.5">{cellData.memo}</div>
                                           {cellData.handwriting && <div className="absolute top-0 right-0 text-[8px] opacity-60">✏️</div>}
                                         </div>
                                       );
@@ -1389,10 +1389,9 @@
                                   const isClassPeriod = row.id.startsWith('p'); 
                                   const isToday = dateStr === todayStr;
                                   
-                                  // 背景色はクリアなまま、左側のボーダー(インセットシャドウ)で色を表現するモダンな手法
                                   let cellBgClass = 'bg-transparent hover:bg-slate-50';
                                   if (isHoliday) { 
-                                    cellBgClass = 'bg-slate-100/50 hover:bg-slate-100'; 
+                                    cellBgClass = 'bg-slate-100/80 hover:bg-slate-100'; 
                                   } else if (hasSubject && row.id !== 'afterschool') {
                                     if (isClassPeriod) {
                                       cellBgClass = 'bg-sky-50/50 hover:bg-sky-50 shadow-[inset_3px_0_0_#0ea5e9]'; 
@@ -1411,7 +1410,7 @@
 
                                   return (
                                     <div key={i} onClick={() => openEditModal(cellData, dateStr, row, i, day, isHoliday, defaultTime, false)}
-                                      className={`min-w-[100px] md:min-w-0 md:w-[14.28%] border-r border-slate-300 last:border-r-0 cursor-pointer relative group flex flex-col p-0.5 transition-colors duration-200 ${cellBgClass}`}>
+                                      className={`min-w-[100px] md:min-w-0 md:w-[14.28%] border-r border-slate-400 last:border-r-0 cursor-pointer relative group flex flex-col p-0.5 transition-colors duration-200 ${cellBgClass}`}>
                                       {cellContent}
                                     </div>
                                   );
@@ -1471,7 +1470,7 @@
                                            }}>
                                         <div className="font-mono font-bold mb-0.5 px-1 py-0.5 rounded-lg inline-flex items-center gap-1 self-start leading-none bg-sky-50 text-sky-700 text-[7px] sm:text-[8px] shrink-0"><span>🕒</span> <span>{ev.startTime}-{ev.endTime}</span></div>
                                         <div className="font-black leading-tight text-slate-800 whitespace-pre-wrap break-words text-[9px] sm:text-[10px] mt-0.5 shrink-0">{ev.subject}</div>
-                                        {ev.memo && <div className="text-[8px] sm:text-[9px] text-slate-500 font-bold whitespace-pre-wrap break-words leading-tight mt-0.5 line-clamp-2">{ev.memo}</div>}
+                                        {ev.memo && <div className="text-[8px] sm:text-[9px] text-slate-600 font-bold whitespace-pre-wrap break-words leading-tight mt-0.5 line-clamp-2">{ev.memo}</div>}
                                       </div>
                                     );
                                   })}
@@ -1484,28 +1483,28 @@
                       
                       {/* 基本設定モード時の休暇設定エリア */}
                       {activeTab === 'template' && (
-                        <div className="mt-4 bg-white p-4 rounded-xl shadow-sm border border-slate-300 shrink-0">
+                        <div className="mt-4 bg-white p-4 rounded-xl shadow-sm border border-slate-400 shrink-0">
                           <h2 className="text-sm font-black text-slate-700 flex items-center gap-2 mb-2"><span className="text-lg opacity-80">🌴</span> 長期休業の設定</h2>
                           <div className="space-y-2 mb-4">
                             {vacations.map((vac, idx) => (
-                               <div key={vac.id} className="flex flex-col sm:flex-row sm:items-center gap-2 bg-slate-50 p-2 rounded-lg border border-slate-300">
+                               <div key={vac.id} className="flex flex-col sm:flex-row sm:items-center gap-2 bg-slate-50 p-2 rounded-lg border border-slate-400">
                                  <span className="font-black text-xs text-slate-700 sm:w-32 truncate">{vac.name}</span>
                                  <div className="flex items-center gap-1">
-                                   <input type="date" value={vac.start} onChange={(e) => { const n = [...vacations]; n[idx].start = e.target.value; saveExtraData(yearlyData, documents, n); }} className="text-[10px] font-mono border border-slate-300 rounded px-2 py-1 bg-white text-slate-700 outline-none focus:border-sky-500" />
-                                   <span className="text-[10px] font-black text-slate-400">〜</span>
-                                   <input type="date" value={vac.end} onChange={(e) => { const n = [...vacations]; n[idx].end = e.target.value; saveExtraData(yearlyData, documents, n); }} className="text-[10px] font-mono border border-slate-300 rounded px-2 py-1 bg-white text-slate-700 outline-none focus:border-sky-500" />
+                                   <input type="date" value={vac.start} onChange={(e) => { const n = [...vacations]; n[idx].start = e.target.value; saveExtraData(yearlyData, documents, n); }} className="text-[10px] font-mono border border-slate-400 rounded px-2 py-1 bg-white text-slate-700 outline-none focus:border-sky-500" />
+                                   <span className="text-[10px] font-black text-slate-500">〜</span>
+                                   <input type="date" value={vac.end} onChange={(e) => { const n = [...vacations]; n[idx].end = e.target.value; saveExtraData(yearlyData, documents, n); }} className="text-[10px] font-mono border border-slate-400 rounded px-2 py-1 bg-white text-slate-700 outline-none focus:border-sky-500" />
                                  </div>
-                                 <button onClick={() => saveExtraData(yearlyData, documents, vacations.filter(v => v.id !== vac.id))} className="text-rose-600 bg-white border border-rose-300 hover:bg-rose-50 rounded px-2 py-1 text-[10px] font-bold sm:ml-auto shadow-sm">削除</button>
+                                 <button onClick={() => saveExtraData(yearlyData, documents, vacations.filter(v => v.id !== vac.id))} className="text-rose-600 bg-white border border-rose-400 hover:bg-rose-50 rounded px-2 py-1 text-[10px] font-bold sm:ml-auto shadow-sm">削除</button>
                                </div>
                             ))}
-                            {vacations.length === 0 && <div className="text-[10px] text-slate-400 font-bold bg-slate-50 p-2 rounded border border-slate-300">登録なし</div>}
+                            {vacations.length === 0 && <div className="text-[10px] text-slate-500 font-bold bg-slate-50 p-2 rounded border border-slate-400">登録なし</div>}
                           </div>
-                          <div className="flex flex-col sm:flex-row items-center gap-2 bg-sky-50 p-3 rounded-lg border border-sky-200">
-                             <input id="newVacName" type="text" placeholder="例: 夏季休業" className="text-xs font-bold px-2 py-1.5 rounded border border-slate-300 bg-white text-slate-800 placeholder-slate-400 w-full sm:w-40 outline-none focus:border-sky-500 shadow-sm" />
+                          <div className="flex flex-col sm:flex-row items-center gap-2 bg-sky-50 p-3 rounded-lg border border-sky-300">
+                             <input id="newVacName" type="text" placeholder="例: 夏季休業" className="text-xs font-bold px-2 py-1.5 rounded border border-slate-400 bg-white text-slate-800 placeholder-slate-400 w-full sm:w-40 outline-none focus:border-sky-500 shadow-sm" />
                              <div className="flex items-center gap-1 w-full sm:w-auto">
-                               <input id="newVacStart" type="date" className="text-[10px] font-mono px-2 py-1.5 rounded border border-slate-300 bg-white text-slate-800 outline-none focus:border-sky-500 flex-1 sm:flex-none shadow-sm" />
-                               <span className="text-[10px] font-black text-sky-500">〜</span>
-                               <input id="newVacEnd" type="date" className="text-[10px] font-mono px-2 py-1.5 rounded border border-slate-300 bg-white text-slate-800 outline-none focus:border-sky-500 flex-1 sm:flex-none shadow-sm" />
+                               <input id="newVacStart" type="date" className="text-[10px] font-mono px-2 py-1.5 rounded border border-slate-400 bg-white text-slate-800 outline-none focus:border-sky-500 flex-1 sm:flex-none shadow-sm" />
+                               <span className="text-[10px] font-black text-sky-600">〜</span>
+                               <input id="newVacEnd" type="date" className="text-[10px] font-mono px-2 py-1.5 rounded border border-slate-400 bg-white text-slate-800 outline-none focus:border-sky-500 flex-1 sm:flex-none shadow-sm" />
                              </div>
                              <button onClick={() => { const name = document.getElementById('newVacName').value; const start = document.getElementById('newVacStart').value; const end = document.getElementById('newVacEnd').value; if(name && start && end) { saveExtraData(yearlyData, documents, [...vacations, { id: Date.now().toString(), name, start, end }]); document.getElementById('newVacName').value = ''; document.getElementById('newVacStart').value = ''; document.getElementById('newVacEnd').value = ''; } }} 
                                className="bg-sky-500 text-white text-[10px] font-black px-4 py-1.5 rounded hover:bg-sky-600 transition-colors w-full sm:w-auto sm:ml-auto shadow-sm">追加</button>
@@ -1514,24 +1513,24 @@
                       )}
                     </div>
 
-                    {/* 🔷 右ペイン：写真風プランナー（クリーンなライトモード） 🔷 */}
+                    {/* 🔷 右ペイン：写真風プランナー 🔷 */}
                     {activeTab === 'weekly' && (
                       <div className="w-[85vw] sm:w-[350px] lg:w-[42%] lg:flex-1 shrink-0 flex flex-col gap-2 min-h-0 pb-2 snap-center overflow-y-auto hide-scrollbar">
                         
                         {/* 右上：曜日ごとのフリースペース */}
-                        <div className="flex-[3] bg-white rounded-xl border border-slate-300 shadow-sm flex flex-col shrink-0 overflow-hidden">
+                        <div className="flex-[3] bg-white rounded-xl border border-slate-400 shadow-sm flex flex-col shrink-0 overflow-hidden">
                           {DAYS.slice(0, 5).map((day, i) => {
                             const d = new Date(currentWeekStart); d.setDate(d.getDate() + i);
                             const dateStr = formatDate(d);
                             const cellData = getCellData(dateStr, 'diary', i);
                             return (
                               <div key={day} className="flex-1 border-b border-slate-300 flex p-1.5 hover:bg-slate-50 transition-colors cursor-text min-h-0">
-                                <div onClick={() => openEditModal(cellData, dateStr, {id:'diary', name:'日記'}, i, day, false, null, false)} className="w-12 text-center text-[10px] font-black text-slate-500 border-r border-slate-300 pr-1.5 mr-1.5 flex flex-col justify-center items-center shrink-0 cursor-pointer hover:bg-slate-100 rounded-lg">
+                                <div onClick={() => openEditModal(cellData, dateStr, {id:'diary', name:'日記'}, i, day, false, null, false)} className="w-12 text-center text-[10px] font-black text-slate-600 border-r border-slate-300 pr-1.5 mr-1.5 flex flex-col justify-center items-center shrink-0 cursor-pointer hover:bg-slate-100 rounded-lg">
                                   <div className="bg-slate-50 border border-slate-300 px-1 py-0.5 rounded mb-0.5">{d.getMonth() + 1}/{d.getDate()}</div>
                                   <div>({day})</div>
                                   {cellData.handwriting && <div className="mt-0.5 text-xs opacity-80">✏️</div>}
                                 </div>
-                                <div className="flex-1 text-[11px] text-slate-700 font-bold p-0.5 flex flex-col min-h-0">
+                                <div className="flex-1 text-[11px] text-slate-800 font-bold p-0.5 flex flex-col min-h-0">
                                   <textarea 
                                     key={`${dateStr}-diary-memo`} 
                                     defaultValue={cellData.memo || ''}
@@ -1551,12 +1550,12 @@
                               const cellData = getCellData(dateStr, 'diary', dayIndex);
                               return (
                                 <div key={day} className={`flex-1 flex p-1.5 hover:bg-slate-50 transition-colors cursor-text ${i === 0 ? 'border-r border-slate-300' : ''}`}>
-                                  <div onClick={() => openEditModal(cellData, dateStr, {id:'diary', name:'日記'}, dayIndex, day, false, null, true)} className={`w-10 text-center text-[10px] font-black border-r border-slate-300 pr-1 mr-1 flex flex-col justify-center items-center shrink-0 cursor-pointer hover:bg-slate-100 rounded-lg ${i === 0 ? 'text-sky-600' : 'text-rose-600'}`}>
+                                  <div onClick={() => openEditModal(cellData, dateStr, {id:'diary', name:'日記'}, dayIndex, day, false, null, true)} className={`w-10 text-center text-[10px] font-black border-r border-slate-300 pr-1 mr-1 flex flex-col justify-center items-center shrink-0 cursor-pointer hover:bg-slate-100 rounded-lg ${i === 0 ? 'text-sky-700' : 'text-rose-700'}`}>
                                     <div className={`${i === 0 ? 'bg-sky-50 border-sky-300' : 'bg-rose-50 border-rose-300'} border px-1 py-0.5 rounded mb-0.5`}>{d.getMonth() + 1}/{d.getDate()}</div>
                                     <div>({day})</div>
                                     {cellData.handwriting && <div className="mt-0.5 text-xs opacity-80">✏️</div>}
                                   </div>
-                                  <div className="flex-1 text-[11px] text-slate-700 font-bold p-0.5 flex flex-col min-h-0">
+                                  <div className="flex-1 text-[11px] text-slate-800 font-bold p-0.5 flex flex-col min-h-0">
                                     <textarea 
                                       key={`${dateStr}-diary-memo`}
                                       defaultValue={cellData.memo || ''}
@@ -1572,19 +1571,19 @@
                         </div>
 
                         {/* 右下：ToDo */}
-                        <div className="bg-white rounded-xl border border-slate-300 shadow-sm p-3 flex flex-col shrink-0 min-h-[150px]">
-                          <h3 className="font-black text-slate-700 mb-2 border-b border-slate-300 pb-1.5 flex items-center justify-between text-xs shrink-0">
+                        <div className="bg-white rounded-xl border border-slate-400 shadow-sm p-3 flex flex-col shrink-0 min-h-[150px]">
+                          <h3 className="font-black text-slate-800 mb-2 border-b border-slate-300 pb-1.5 flex items-center justify-between text-xs shrink-0">
                             <span>☑️ ToDo</span>
-                            <button onClick={() => setShowTodo(true)} className="text-[9px] text-sky-600 bg-sky-50 border border-sky-100 px-2 py-0.5 rounded-md hover:bg-sky-100 transition-colors">詳細・追加</button>
+                            <button onClick={() => setShowTodo(true)} className="text-[9px] text-sky-700 bg-sky-50 border border-sky-200 px-2 py-0.5 rounded-md hover:bg-sky-100 transition-colors">詳細・追加</button>
                           </h3>
                           <div className="flex-1 overflow-y-auto space-y-1.5 pr-1 hide-scrollbar">
                             {sortedIncompleteTodos.map(t => (
-                              <div key={t.id} className="flex gap-1.5 items-start text-[10px] font-bold text-slate-600">
-                                <input type="checkbox" checked={t.completed} onChange={() => saveTodos(todos.map(todo => todo.id === t.id ? { ...todo, completed: !todo.completed } : todo))} className="mt-0.5 w-3.5 h-3.5 accent-sky-500 bg-slate-50 border-slate-300 shrink-0 cursor-pointer" />
-                                <span className={`break-words leading-tight mt-0.5 ${t.important ? 'text-amber-500' : ''}`}>{t.important && '⭐ '}{t.text}</span>
+                              <div key={t.id} className="flex gap-1.5 items-start text-[10px] font-bold text-slate-700">
+                                <input type="checkbox" checked={t.completed} onChange={() => saveTodos(todos.map(todo => todo.id === t.id ? { ...todo, completed: !todo.completed } : todo))} className="mt-0.5 w-3.5 h-3.5 accent-sky-600 bg-slate-50 border-slate-400 shrink-0 cursor-pointer" />
+                                <span className={`break-words leading-tight mt-0.5 ${t.important ? 'text-amber-600' : ''}`}>{t.important && '⭐ '}{t.text}</span>
                               </div>
                             ))}
-                            {sortedIncompleteTodos.length === 0 && <div className="text-[9px] text-slate-400 mt-1 font-bold">未完了のタスクはありません</div>}
+                            {sortedIncompleteTodos.length === 0 && <div className="text-[9px] text-slate-500 mt-1 font-bold">未完了のタスクはありません</div>}
                           </div>
                         </div>
 
@@ -1600,32 +1599,32 @@
 
           {/* クイックメモ サイドバー */}
           {showQuickMemoList && <div className="fixed inset-0 bg-slate-900/20 backdrop-blur-sm z-[40]" onClick={() => setShowQuickMemoList(false)}></div>}
-          <aside className={`fixed inset-y-0 left-0 w-72 max-w-[85vw] bg-white border-r border-slate-300 z-[50] transition-transform duration-300 flex flex-col shadow-2xl pt-[env(safe-area-inset-top)] ${showQuickMemoList ? 'translate-x-0' : '-translate-x-full'}`}>
+          <aside className={`fixed inset-y-0 left-0 w-72 max-w-[85vw] bg-white border-r border-slate-400 z-[50] transition-transform duration-300 flex flex-col shadow-2xl pt-[env(safe-area-inset-top)] ${showQuickMemoList ? 'translate-x-0' : '-translate-x-full'}`}>
             <div className="p-3 bg-slate-50 border-b border-slate-300 flex justify-between items-center">
-              <span className="font-black text-slate-700 flex items-center gap-1 text-sm"><span className="text-base opacity-80">✍️</span> クイックメモ</span>
+              <span className="font-black text-slate-800 flex items-center gap-1 text-sm"><span className="text-base opacity-80">✍️</span> クイックメモ</span>
               <div className="flex items-center gap-2">
                 <button onClick={() => { setTempHandwriting(null); setHandwritingMode('quick'); setShowHandwritingPad(true); setShowQuickMemoList(false); }} 
                   className="bg-sky-500 text-white px-2 py-1 rounded-lg text-[10px] font-black hover:bg-sky-600 transition-all shadow-sm flex items-center gap-1">
                   <span>＋</span> 新規
                 </button>
-                <button onClick={() => setShowQuickMemoList(false)} className="text-slate-400 hover:text-slate-600 text-xl font-black">&times;</button>
+                <button onClick={() => setShowQuickMemoList(false)} className="text-slate-500 hover:text-slate-700 text-xl font-black">&times;</button>
               </div>
             </div>
             <div className="flex-1 overflow-y-auto p-3 space-y-3 bg-slate-50/50">
                {quickMemos.map(memo => (
                   <div key={memo.id} className="bg-white rounded-xl shadow-sm border border-slate-300 overflow-hidden group">
                      <div className="p-2 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
-                       <span className="text-[9px] text-slate-500 font-bold font-mono">{new Date(memo.timestamp).toLocaleString('ja-JP', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                       <span className="text-[9px] text-slate-600 font-bold font-mono">{new Date(memo.timestamp).toLocaleString('ja-JP', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
                        <div className="flex gap-1">
-                          <button onClick={() => shareMemo(memo.dataUrl)} className="text-teal-600 bg-teal-50 border border-teal-200 hover:bg-teal-100 text-[9px] font-bold px-2 py-0.5 rounded-md">共有</button>
-                          <button onClick={() => saveQuickMemos(quickMemos.filter(m => m.id !== memo.id))} className="text-rose-600 bg-white border border-rose-300 hover:bg-rose-50 text-[9px] font-bold px-2 rounded-md opacity-0 group-hover:opacity-100 transition-all">削除</button>
+                          <button onClick={() => shareMemo(memo.dataUrl)} className="text-teal-700 bg-teal-50 border border-teal-200 hover:bg-teal-100 text-[9px] font-bold px-2 py-0.5 rounded-md">共有</button>
+                          <button onClick={() => saveQuickMemos(quickMemos.filter(m => m.id !== memo.id))} className="text-rose-700 bg-white border border-rose-300 hover:bg-rose-50 text-[9px] font-bold px-2 rounded-md opacity-0 group-hover:opacity-100 transition-all">削除</button>
                        </div>
                      </div>
                      <img src={memo.dataUrl} className="w-full h-auto cursor-pointer" onClick={() => shareMemo(memo.dataUrl)} alt="メモ" />
                   </div>
                ))}
                {quickMemos.length === 0 && (
-                  <div className="flex flex-col items-center justify-center h-20 text-slate-400">
+                  <div className="flex flex-col items-center justify-center h-20 text-slate-500">
                     <span className="text-xs font-black">メモなし</span>
                   </div>
                )}
@@ -1634,20 +1633,20 @@
 
           {/* TODO サイドバー */}
           {showTodo && <div className="fixed inset-0 bg-slate-900/20 backdrop-blur-sm z-[40]" onClick={() => setShowTodo(false)}></div>}
-          <aside className={`fixed inset-y-0 right-0 w-[20rem] max-w-[90vw] bg-white border-l border-slate-300 z-[50] transition-transform duration-300 flex flex-col shadow-2xl pt-[env(safe-area-inset-top)] ${showTodo ? 'translate-x-0' : 'translate-x-full'}`}>
+          <aside className={`fixed inset-y-0 right-0 w-[20rem] max-w-[90vw] bg-white border-l border-slate-400 z-[50] transition-transform duration-300 flex flex-col shadow-2xl pt-[env(safe-area-inset-top)] ${showTodo ? 'translate-x-0' : 'translate-x-full'}`}>
             <div className="p-3 bg-slate-50 border-b border-slate-300 flex justify-between items-center">
-              <span className="font-black text-slate-700 flex items-center gap-1 text-sm"><span className="text-base opacity-80">📝</span> TODOリスト</span>
+              <span className="font-black text-slate-800 flex items-center gap-1 text-sm"><span className="text-base opacity-80">📝</span> TODOリスト</span>
               <div className="flex items-center gap-1.5">
-                <button onClick={copyTodosToClipboard} className="text-[9px] font-bold bg-white text-slate-600 border border-slate-300 px-2 py-1 rounded-lg hover:bg-slate-50 shadow-sm">📋 コピー</button>
-                <button onClick={() => exportICS('todos')} className="text-[9px] font-bold bg-sky-50 text-sky-600 border border-sky-200 px-2 py-1 rounded-lg hover:bg-sky-100 shadow-sm">📤 出力</button>
-                <button onClick={() => setShowTodo(false)} className="text-slate-400 hover:text-slate-600 text-xl font-black ml-1">&times;</button>
+                <button onClick={copyTodosToClipboard} className="text-[9px] font-bold bg-white text-slate-700 border border-slate-300 px-2 py-1 rounded-lg hover:bg-slate-50 shadow-sm">📋 コピー</button>
+                <button onClick={() => exportICS('todos')} className="text-[9px] font-bold bg-sky-50 text-sky-700 border border-sky-300 px-2 py-1 rounded-lg hover:bg-sky-100 shadow-sm">📤 出力</button>
+                <button onClick={() => setShowTodo(false)} className="text-slate-500 hover:text-slate-700 text-xl font-black ml-1">&times;</button>
               </div>
             </div>
             <div className="flex-1 overflow-y-auto p-2 space-y-2 bg-slate-50/50">
               {sortedIncompleteTodos.map(t => {
                 const isOverdue = !t.completed && t.dueDate && t.dueDate < todayStr;
                 return (
-                <div key={t.id} className={`flex gap-2 items-start bg-white p-2.5 rounded-lg border shadow-sm group ${t.important ? 'border-amber-300 bg-amber-50' : isOverdue ? 'border-rose-300 bg-rose-50' : 'border-slate-300'}`}>
+                <div key={t.id} className={`flex gap-2 items-start bg-white p-2.5 rounded-lg border shadow-sm group ${t.important ? 'border-amber-400 bg-amber-50' : isOverdue ? 'border-rose-400 bg-rose-50' : 'border-slate-300'}`}>
                   <div className="relative flex items-center justify-center mt-0.5">
                     <input type="checkbox" checked={t.completed} onChange={() => saveTodos(todos.map(todo => todo.id === t.id ? { ...todo, completed: !todo.completed } : todo))} 
                       className="peer appearance-none w-4 h-4 border-2 border-slate-400 bg-white rounded-sm checked:bg-sky-500 checked:border-sky-500 cursor-pointer" />
@@ -1655,42 +1654,42 @@
                   </div>
                   <div className="flex-1 flex flex-col min-w-0">
                     <div className="flex items-start justify-between gap-1">
-                      <span className={`text-[13px] leading-snug break-words flex-1 ${t.completed ? 'text-slate-400 line-through' : isOverdue ? 'text-rose-600 font-black' : 'text-slate-700 font-black'}`}>
+                      <span className={`text-[13px] leading-snug break-words flex-1 ${t.completed ? 'text-slate-500 line-through' : isOverdue ? 'text-rose-700 font-black' : 'text-slate-800 font-black'}`}>
                         {t.important && <span className="text-amber-500 mr-1 text-sm relative top-[1px]">★</span>}{t.text}
                       </span>
                     </div>
                     <div className="flex items-center flex-wrap gap-1.5 mt-1.5">
-                      {t.tag && <span className="text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-md font-bold border border-slate-200">{t.tag}</span>}
+                      {t.tag && <span className="text-[9px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-md font-bold border border-slate-200">{t.tag}</span>}
                       <div className="flex items-center gap-1 bg-white border border-slate-300 px-1.5 py-0.5 rounded-md">
-                        <span className="text-[9px] text-slate-400 font-bold">期限:</span>
+                        <span className="text-[9px] text-slate-500 font-bold">期限:</span>
                         <input type="date" value={t.dueDate || ''} onChange={(e) => saveTodos(todos.map(todo => todo.id === t.id ? { ...todo, dueDate: e.target.value } : todo))}
-                          className={`text-[9px] outline-none bg-transparent cursor-pointer font-mono font-bold ${t.completed ? 'text-slate-400' : isOverdue ? 'text-rose-500' : 'text-slate-600'}`} />
+                          className={`text-[9px] outline-none bg-transparent cursor-pointer font-mono font-bold ${t.completed ? 'text-slate-500' : isOverdue ? 'text-rose-600' : 'text-slate-700'}`} />
                       </div>
                     </div>
                   </div>
-                  <button onClick={() => saveTodos(todos.filter(todo => todo.id !== t.id))} className="text-rose-500 bg-white border border-rose-300 hover:bg-rose-50 px-1.5 py-0.5 rounded-md text-[10px] shrink-0 opacity-0 group-hover:opacity-100 transition-colors">削除</button>
+                  <button onClick={() => saveTodos(todos.filter(todo => todo.id !== t.id))} className="text-rose-600 bg-white border border-rose-300 hover:bg-rose-50 px-1.5 py-0.5 rounded-md text-[10px] shrink-0 opacity-0 group-hover:opacity-100 transition-colors">削除</button>
                 </div>
                 )
               })}
             </div>
             
-            <form onSubmit={addTodo} className="p-3 bg-white border-t border-slate-300 pb-[calc(0.5rem+env(safe-area-inset-bottom))]">
-              <div className="flex flex-col gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-300 focus-within:border-sky-400 shadow-sm transition-colors">
+            <form onSubmit={addTodo} className="p-3 bg-white border-t border-slate-400 pb-[calc(0.5rem+env(safe-area-inset-bottom))]">
+              <div className="flex flex-col gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-300 focus-within:border-sky-500 shadow-sm transition-colors">
                 <div className="flex gap-2 items-center">
-                   <button type="button" onClick={() => setNewTodoImportant(!newTodoImportant)} className={`text-lg active:scale-90 ${newTodoImportant ? 'text-amber-400' : 'text-slate-300 hover:text-slate-400'}`} title="重要">
+                   <button type="button" onClick={() => setNewTodoImportant(!newTodoImportant)} className={`text-lg active:scale-90 ${newTodoImportant ? 'text-amber-500' : 'text-slate-400 hover:text-slate-500'}`} title="重要">
                      {newTodoImportant ? '⭐' : '☆'}
                    </button>
-                   <input className="bg-transparent border-0 py-0.5 text-xs font-black outline-none flex-1 text-slate-700 placeholder-slate-400" placeholder="タスク入力..." value={newTodoText} onChange={e => setNewTodoText(e.target.value)} />
+                   <input className="bg-transparent border-0 py-0.5 text-xs font-black outline-none flex-1 text-slate-800 placeholder-slate-400" placeholder="タスク入力..." value={newTodoText} onChange={e => setNewTodoText(e.target.value)} />
                 </div>
                 <div className="flex justify-between items-center gap-1">
-                  <select value={newTodoTag} onChange={e => setNewTodoTag(e.target.value)} className="bg-white border border-slate-300 text-slate-600 text-[10px] font-bold rounded-lg px-1.5 py-1 outline-none">
+                  <select value={newTodoTag} onChange={e => setNewTodoTag(e.target.value)} className="bg-white border border-slate-300 text-slate-700 text-[10px] font-bold rounded-lg px-1.5 py-1 outline-none">
                      <option value="">タグなし</option>{TODO_TAGS.map(tag => <option key={tag} value={tag}>{tag}</option>)}
                   </select>
                   <div className="flex items-center gap-1 bg-white px-1.5 py-1 rounded-lg border border-slate-300 flex-1">
-                    <span className="text-[9px] text-slate-400 font-bold">期限:</span>
-                    <input type="date" className="bg-transparent border-0 text-[10px] text-slate-600 font-mono font-bold outline-none w-full" value={newTodoDate} onChange={e => setNewTodoDate(e.target.value)} />
+                    <span className="text-[9px] text-slate-500 font-bold">期限:</span>
+                    <input type="date" className="bg-transparent border-0 text-[10px] text-slate-700 font-mono font-bold outline-none w-full" value={newTodoDate} onChange={e => setNewTodoDate(e.target.value)} />
                   </div>
-                  <button type="submit" disabled={!newTodoText.trim()} className="bg-sky-500 text-white px-3 py-1 rounded-lg font-black text-[10px] shadow-sm disabled:opacity-50 active:scale-95">追加</button>
+                  <button type="submit" disabled={!newTodoText.trim()} className="bg-sky-600 text-white px-3 py-1 rounded-lg font-black text-[10px] shadow-sm disabled:opacity-50 active:scale-95">追加</button>
                 </div>
               </div>
             </form>
@@ -1699,12 +1698,12 @@
           {/* 📅 月間カレンダー詳細ポップアップ */}
           {selectedDateDetails && (
             <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4" onClick={() => setSelectedDateDetails(null)}>
-               <div className="bg-white w-full max-w-xs rounded-2xl shadow-2xl flex flex-col max-h-[80vh] border border-slate-300 overflow-hidden animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
-                 <div className="bg-slate-50 border-b border-slate-300 p-3 text-slate-700 flex justify-between items-center shrink-0">
+               <div className="bg-white w-full max-w-xs rounded-2xl shadow-2xl flex flex-col max-h-[80vh] border border-slate-400 overflow-hidden animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+                 <div className="bg-slate-50 border-b border-slate-300 p-3 text-slate-800 flex justify-between items-center shrink-0">
                    <div className="font-black text-sm">{selectedDateDetails.dateStr}</div>
                    <div className="flex gap-2">
-                     <button onClick={() => { setActiveTab('weekly'); setSelectedDateDetails(null); }} className="text-[10px] font-black bg-sky-50 text-sky-600 border border-sky-300 px-2 py-1 rounded-lg hover:bg-sky-100 shadow-sm transition-colors">週案へ</button>
-                     <button onClick={() => setSelectedDateDetails(null)} className="text-slate-400 hover:text-slate-600 font-black px-1 text-lg">&times;</button>
+                     <button onClick={() => { setActiveTab('weekly'); setSelectedDateDetails(null); }} className="text-[10px] font-black bg-sky-50 text-sky-700 border border-sky-300 px-2 py-1 rounded-lg hover:bg-sky-100 shadow-sm transition-colors">週案へ</button>
+                     <button onClick={() => setSelectedDateDetails(null)} className="text-slate-500 hover:text-slate-700 font-black px-1 text-lg">&times;</button>
                    </div>
                  </div>
                  <div className="p-3 overflow-y-auto bg-slate-50/50 space-y-2">
@@ -1713,11 +1712,11 @@
                       const dayTodos = todos.filter(t => !t.completed && t.dueDate === selectedDateDetails.dateStr);
                       if (dayTodos.length === 0) return null;
                       return (
-                        <div className="bg-white p-2.5 rounded-lg border border-teal-300 shadow-sm flex gap-2 items-start">
+                        <div className="bg-white p-2.5 rounded-lg border border-teal-400 shadow-sm flex gap-2 items-start">
                           <div className="text-sm opacity-80">✅</div>
                           <div className="flex-1 space-y-0.5">
                             {dayTodos.map(t => (
-                              <div key={t.id} className="text-xs font-black text-teal-700">{t.important ? '⭐ ' : ''}{t.text}</div>
+                              <div key={t.id} className="text-xs font-black text-teal-800">{t.important ? '⭐ ' : ''}{t.text}</div>
                             ))}
                           </div>
                         </div>
@@ -1736,27 +1735,27 @@
                              <div className="text-sm opacity-80">🏫</div>
                              <div className="flex-1 space-y-1">
                                {data.events?.length > 0 ? data.events.map((ev, idx) => ev.subject && (
-                                 <div key={idx} className="border-l-2 border-sky-400 pl-2">
-                                   {ev.startTime && <div className="text-[10px] font-mono text-sky-600 font-bold">{ev.startTime}</div>}
-                                   <div className="text-xs font-black text-slate-700">{ev.subject}</div>
-                                   {ev.memo && <div className="text-[10px] text-slate-500 font-bold">{ev.memo}</div>}
+                                 <div key={idx} className="border-l-2 border-sky-500 pl-2">
+                                   {ev.startTime && <div className="text-[10px] font-mono text-sky-700 font-bold">{ev.startTime}</div>}
+                                   <div className="text-xs font-black text-slate-800">{ev.subject}</div>
+                                   {ev.memo && <div className="text-[10px] text-slate-600 font-bold">{ev.memo}</div>}
                                  </div>
-                               )) : <div className="text-xs font-black text-slate-700">{data.subject}</div>}
+                               )) : <div className="text-xs font-black text-slate-800">{data.subject}</div>}
                              </div>
                            </div>
                          );
                       }
                       if (!data.subject) return null;
                       
-                      let icon = row.id === 'event' ? '🚩' : row.id === 'diary' ? '📝' : row.id === 'morning' ? '☀️' : row.id === 'lunch' ? '🍽️' : <span className="text-xs font-black text-sky-500">{row.id.replace('p', '')}</span>;
+                      let icon = row.id === 'event' ? '🚩' : row.id === 'diary' ? '📝' : row.id === 'morning' ? '☀️' : row.id === 'lunch' ? '🍽️' : <span className="text-xs font-black text-sky-600">{row.id.replace('p', '')}</span>;
                       
                       return (
                         <div key={i} className="bg-white p-2.5 rounded-lg border border-slate-300 shadow-sm flex gap-2 items-start">
                           <div className="w-5 shrink-0 flex justify-center text-sm opacity-80">{icon}</div>
                           <div className="flex-1">
-                            {data.startTime && <div className="text-[10px] font-mono text-sky-600 font-bold mb-0.5">{data.startTime}{data.endTime && `-${data.endTime}`}</div>}
-                            <div className="text-xs font-black text-slate-700">{data.subject}</div>
-                            {data.memo && <div className="text-[10px] text-slate-500 font-bold whitespace-pre-wrap mt-0.5">{data.memo}</div>}
+                            {data.startTime && <div className="text-[10px] font-mono text-sky-700 font-bold mb-0.5">{data.startTime}{data.endTime && `-${data.endTime}`}</div>}
+                            <div className="text-xs font-black text-slate-800">{data.subject}</div>
+                            {data.memo && <div className="text-[10px] text-slate-600 font-bold whitespace-pre-wrap mt-0.5">{data.memo}</div>}
                           </div>
                         </div>
                       );
@@ -1769,13 +1768,13 @@
           {/* セル編集モーダル */}
           {editingCell && !showHandwritingPad && (
             <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[70] flex items-center justify-center p-2 sm:p-4" onClick={() => setEditingCell(null)}>
-              <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-300 overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+              <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-400 overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
                 <div className="bg-slate-50 p-3 sm:p-4 border-b border-slate-300 flex justify-between items-center shrink-0">
                   <div>
-                    <div className="text-[10px] font-bold text-slate-500">{editingCell.isTemplate ? '基本設定モード' : `${editingCell.dateStr} (${editingCell.dayName}曜)`}</div>
-                    <div className="text-lg font-black text-slate-700">{editingCell.periodName}</div>
+                    <div className="text-[10px] font-bold text-slate-600">{editingCell.isTemplate ? '基本設定モード' : `${editingCell.dateStr} (${editingCell.dayName}曜)`}</div>
+                    <div className="text-lg font-black text-slate-800">{editingCell.periodName}</div>
                   </div>
-                  <button type="button" onClick={() => { setHandwritingMode('cell'); setShowHandwritingPad(true); }} className="bg-white border border-slate-300 text-slate-600 px-2.5 py-1.5 rounded-lg text-[10px] font-black hover:bg-slate-50 shadow-sm flex items-center gap-1 transition-colors">
+                  <button type="button" onClick={() => { setHandwritingMode('cell'); setShowHandwritingPad(true); }} className="bg-white border border-slate-400 text-slate-700 px-2.5 py-1.5 rounded-lg text-[10px] font-black hover:bg-slate-50 shadow-sm flex items-center gap-1 transition-colors">
                     <span className="text-sm opacity-80">✏️</span> 手書き
                   </button>
                 </div>
@@ -1783,9 +1782,9 @@
                 <div className="overflow-y-auto p-3 sm:p-5 bg-slate-50/50 flex-1 flex flex-col gap-4">
                   {tempHandwriting && (
                     <div className="bg-white p-2 rounded-lg border border-slate-300 shadow-sm relative group shrink-0">
-                      <div className="text-[10px] font-black text-sky-600 mb-1 flex items-center gap-1"><span>✏️</span> 手書きメモ</div>
-                      <img src={tempHandwriting} alt="手書きメモ" className="w-full max-h-24 object-contain border border-slate-200 rounded bg-slate-50" />
-                      <button type="button" onClick={() => setTempHandwriting(null)} className="absolute top-2 right-2 bg-rose-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs shadow hover:bg-rose-600">✕</button>
+                      <div className="text-[10px] font-black text-sky-700 mb-1 flex items-center gap-1"><span>✏️</span> 手書きメモ</div>
+                      <img src={tempHandwriting} alt="手書きメモ" className="w-full max-h-24 object-contain border border-slate-300 rounded bg-slate-50" />
+                      <button type="button" onClick={() => setTempHandwriting(null)} className="absolute top-2 right-2 bg-rose-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs shadow hover:bg-rose-700">✕</button>
                     </div>
                   )}
 
@@ -1801,30 +1800,30 @@
                         {tempEvents.map((ev, idx) => (
                           <div key={idx} className="bg-white p-3 rounded-lg border border-slate-300 shadow-sm flex flex-col gap-2">
                             <div className="flex gap-2 items-center">
-                              <input type="time" value={ev.startTime} onChange={e => updateTempEvent(idx, 'startTime', e.target.value)} className="w-20 bg-slate-50 border border-slate-300 rounded px-2 py-1.5 text-[11px] font-mono font-bold outline-none focus:border-sky-400 text-slate-700" />
-                              <span className="text-slate-400 font-black text-[11px]">〜</span>
-                              <input type="time" value={ev.endTime} onChange={e => updateTempEvent(idx, 'endTime', e.target.value)} className="w-20 bg-slate-50 border border-slate-300 rounded px-2 py-1.5 text-[11px] font-mono font-bold outline-none focus:border-sky-400 text-slate-700" />
+                              <input type="time" value={ev.startTime} onChange={e => updateTempEvent(idx, 'startTime', e.target.value)} className="w-20 bg-slate-50 border border-slate-300 rounded px-2 py-1.5 text-[11px] font-mono font-bold outline-none focus:border-sky-500 text-slate-800" />
+                              <span className="text-slate-500 font-black text-[11px]">〜</span>
+                              <input type="time" value={ev.endTime} onChange={e => updateTempEvent(idx, 'endTime', e.target.value)} className="w-20 bg-slate-50 border border-slate-300 rounded px-2 py-1.5 text-[11px] font-mono font-bold outline-none focus:border-sky-500 text-slate-800" />
                             </div>
-                            <input type="text" placeholder="活動内容" value={ev.subject} onChange={e => updateTempEvent(idx, 'subject', e.target.value)} className="w-full font-black text-sm border-b border-slate-300 focus:border-sky-400 outline-none py-1 bg-transparent text-slate-700 placeholder-slate-400 transition-colors" />
+                            <input type="text" placeholder="活動内容" value={ev.subject} onChange={e => updateTempEvent(idx, 'subject', e.target.value)} className="w-full font-black text-sm border-b border-slate-400 focus:border-sky-500 outline-none py-1 bg-transparent text-slate-800 placeholder-slate-500 transition-colors" />
                           </div>
                         ))}
                       </div>
                     ) : (
-                      <div className="space-y-4 bg-white p-4 rounded-xl border border-slate-300 shadow-sm">
+                      <div className="space-y-4 bg-white p-4 rounded-xl border border-slate-400 shadow-sm">
                         {editingCell.periodId !== 'event' && editingCell.periodId !== 'diary' && (
                           <div className="flex gap-1 items-center bg-slate-50 p-1.5 rounded-lg w-fit border border-slate-300">
-                            <input type="time" value={tempStartTime} onChange={e => setTempStartTime(e.target.value)} className="w-20 bg-white border border-slate-300 rounded px-1.5 py-1 text-[11px] font-mono font-bold outline-none focus:border-sky-400 shadow-sm text-slate-700" />
-                            <span className="text-slate-400 font-black text-[11px]">〜</span>
-                            <input type="time" value={tempEndTime} onChange={e => setTempEndTime(e.target.value)} className="w-20 bg-white border border-slate-300 rounded px-1.5 py-1 text-[11px] font-mono font-bold outline-none focus:border-sky-400 shadow-sm text-slate-700" />
+                            <input type="time" value={tempStartTime} onChange={e => setTempStartTime(e.target.value)} className="w-20 bg-white border border-slate-300 rounded px-1.5 py-1 text-[11px] font-mono font-bold outline-none focus:border-sky-500 shadow-sm text-slate-800" />
+                            <span className="text-slate-500 font-black text-[11px]">〜</span>
+                            <input type="time" value={tempEndTime} onChange={e => setTempEndTime(e.target.value)} className="w-20 bg-white border border-slate-300 rounded px-1.5 py-1 text-[11px] font-mono font-bold outline-none focus:border-sky-500 shadow-sm text-slate-800" />
                           </div>
                         )}
                         
                         <div>
-                          <input name="subject" value={tempSubject} onChange={e => setTempSubject(e.target.value)} className="w-full text-base font-black border-b-2 border-slate-300 focus:border-sky-400 outline-none py-1.5 text-slate-800 placeholder-slate-400 bg-transparent transition-colors" placeholder="活動内容・教科名" autoFocus />
+                          <input name="subject" value={tempSubject} onChange={e => setTempSubject(e.target.value)} className="w-full text-base font-black border-b-2 border-slate-400 focus:border-sky-500 outline-none py-1.5 text-slate-900 placeholder-slate-500 bg-transparent transition-colors" placeholder="活動内容・教科名" autoFocus />
                           
                           {!editingCell.isTemplate && editingCell.periodId.startsWith('p') && syllabusData.length > 0 && (
-                            <div className="mt-3 bg-sky-50 p-3 rounded-lg border border-sky-200">
-                               <div className="text-[10px] font-black text-sky-600 mb-2 flex items-center gap-1"><span>💡</span> 履歴から選択</div>
+                            <div className="mt-3 bg-sky-50 p-3 rounded-lg border border-sky-300">
+                               <div className="text-[10px] font-black text-sky-700 mb-2 flex items-center gap-1"><span>💡</span> 履歴から選択</div>
                                <div className="flex flex-col gap-1.5 max-h-32 overflow-y-auto pr-1">
                                  {syllabusData.map(subj => {
                                     if (subj.type === 'auto') {
@@ -1833,13 +1832,13 @@
                                        const text = isFinished ? `${subj.name}（終了）` : (unit ? `${subj.name}（${unit.name} ${subj.currentHour}/${unit.hours}）` : subj.name);
                                        return (
                                          <div key={subj.id} className="flex items-center gap-1">
-                                           <button type="button" onClick={() => setTempSubject(text)} className="flex-1 bg-white border border-sky-300 text-sky-700 text-xs font-black py-2 px-3 rounded-lg hover:bg-sky-50 text-left truncate shadow-sm transition-colors">
+                                           <button type="button" onClick={() => setTempSubject(text)} className="flex-1 bg-white border border-sky-400 text-sky-800 text-xs font-black py-2 px-3 rounded-lg hover:bg-sky-50 text-left truncate shadow-sm transition-colors">
                                              {text}
                                            </button>
                                            {!isFinished && unit && (
-                                             <div className="flex bg-white border border-sky-300 rounded-lg shadow-sm overflow-hidden shrink-0">
-                                                <button type="button" onClick={() => adjustSyllabusManual(subj.id, -1)} className="px-3 py-1.5 text-sky-600 hover:bg-sky-50 font-black text-xs border-r border-sky-300 transition-colors">-</button>
-                                                <button type="button" onClick={() => adjustSyllabusManual(subj.id, 1)} className="px-3 py-1.5 text-sky-600 hover:bg-sky-50 font-black text-xs transition-colors">+</button>
+                                             <div className="flex bg-white border border-sky-400 rounded-lg shadow-sm overflow-hidden shrink-0">
+                                                <button type="button" onClick={() => adjustSyllabusManual(subj.id, -1)} className="px-3 py-1.5 text-sky-700 hover:bg-sky-50 font-black text-xs border-r border-sky-400 transition-colors">-</button>
+                                                <button type="button" onClick={() => adjustSyllabusManual(subj.id, 1)} className="px-3 py-1.5 text-sky-700 hover:bg-sky-50 font-black text-xs transition-colors">+</button>
                                              </div>
                                            )}
                                          </div>
@@ -1847,13 +1846,13 @@
                                     } else {
                                        return (
                                          <div key={subj.id} className="flex flex-col gap-1">
-                                           <button type="button" onClick={() => setTempSubject(subj.name)} className="bg-white border border-teal-300 text-teal-700 text-xs font-black py-2 px-3 rounded-lg hover:bg-teal-50 text-left shadow-sm transition-colors">
+                                           <button type="button" onClick={() => setTempSubject(subj.name)} className="bg-white border border-teal-400 text-teal-800 text-xs font-black py-2 px-3 rounded-lg hover:bg-teal-50 text-left shadow-sm transition-colors">
                                              {subj.name}
                                            </button>
                                            {tempSubject.includes(subj.name) && subj.history && subj.history.length > 0 && (
                                               <div className="flex flex-wrap gap-1.5 pl-2 mt-1">
                                                 {subj.history.map((h, i) => (
-                                                  <button type="button" key={i} onClick={() => setTempSubject(`${subj.name}（${h}）`)} className="text-[10px] font-bold bg-teal-50 hover:bg-teal-100 text-teal-700 px-2 py-1 rounded border border-teal-300 shadow-sm transition-colors">
+                                                  <button type="button" key={i} onClick={() => setTempSubject(`${subj.name}（${h}）`)} className="text-[10px] font-bold bg-teal-50 hover:bg-teal-100 text-teal-800 px-2 py-1 rounded border border-teal-300 shadow-sm transition-colors">
                                                     {h}
                                                   </button>
                                                 ))}
@@ -1870,7 +1869,7 @@
                           {editingCell.periodId.startsWith('p') && templateClasses.length > 0 && (
                             <div className="mt-3 relative">
                               <select defaultValue="" onChange={(e) => { const sIdx = e.target.value; if (sIdx !== "") { const t = templateClasses[sIdx]; setTempSubject(t.subject); if (t.memo) setTempMemo(t.memo); } e.target.value = ""; }}
-                                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-[11px] font-bold text-slate-600 outline-none focus:border-sky-400 cursor-pointer appearance-none shadow-sm transition-colors">
+                                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-[11px] font-bold text-slate-700 outline-none focus:border-sky-500 cursor-pointer appearance-none shadow-sm transition-colors">
                                 <option value="" disabled>💡 基本から選ぶ...</option>
                                 {templateClasses.map((tClass, idx) => <option key={idx} value={idx}>{tClass.label} : {tClass.subject}</option>)}
                               </select>
@@ -1878,15 +1877,15 @@
                           )}
                         </div>
 
-                        <textarea name="memo" value={tempMemo} onChange={e => setTempMemo(e.target.value)} rows="2" className="w-full text-xs font-bold border border-slate-300 rounded-lg p-3 focus:border-sky-400 outline-none bg-slate-50 resize-y text-slate-700 placeholder-slate-400 transition-colors" placeholder="詳細メモ..." />
+                        <textarea name="memo" value={tempMemo} onChange={e => setTempMemo(e.target.value)} rows="2" className="w-full text-xs font-bold border border-slate-300 rounded-lg p-3 focus:border-sky-500 outline-none bg-slate-50 resize-y text-slate-800 placeholder-slate-500 transition-colors" placeholder="詳細メモ..." />
                       </div>
                     )}
                   </form>
                 </div>
 
                 <div className="bg-slate-50 p-3 sm:p-4 border-t border-slate-300 shrink-0 flex gap-2 justify-end">
-                  <button type="button" onClick={() => setEditingCell(null)} className="px-4 py-2 rounded-lg bg-white border border-slate-300 hover:bg-slate-100 text-slate-600 font-black text-xs shadow-sm transition-colors">キャンセル</button>
-                  <button type="submit" form="edit-form" className="px-6 py-2 rounded-lg bg-sky-500 hover:bg-sky-600 text-white font-black text-xs shadow transition-colors">保存</button>
+                  <button type="button" onClick={() => setEditingCell(null)} className="px-4 py-2 rounded-lg bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 font-black text-xs shadow-sm transition-colors">キャンセル</button>
+                  <button type="submit" form="edit-form" className="px-6 py-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-black text-xs shadow transition-colors">保存</button>
                 </div>
               </div>
             </div>
@@ -1895,13 +1894,13 @@
           {/* 手書き入力モーダル */}
           {showHandwritingPad && (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[90] flex flex-col p-2 sm:p-4 animate-in fade-in duration-200">
-              <div className="bg-white rounded-2xl shadow-2xl flex-1 flex flex-col overflow-hidden border border-slate-300">
+              <div className="bg-white rounded-2xl shadow-2xl flex-1 flex flex-col overflow-hidden border border-slate-400">
                 <div className="flex justify-between items-center p-3 bg-slate-50 border-b border-slate-300 shrink-0">
-                  <div className="font-black text-slate-700 text-sm flex items-center gap-1"><span className="opacity-80">✏️</span> {handwritingMode === 'quick' ? 'クイックメモ' : '手書きメモ'}</div>
+                  <div className="font-black text-slate-800 text-sm flex items-center gap-1"><span className="opacity-80">✏️</span> {handwritingMode === 'quick' ? 'クイックメモ' : '手書きメモ'}</div>
                   <div className="flex gap-2">
-                    <button onClick={clearHandwriting} className="px-3 py-1.5 bg-white border border-slate-300 text-slate-600 hover:bg-slate-100 rounded-lg text-[10px] font-black shadow-sm transition-colors">クリア</button>
-                    <button onClick={() => { setShowHandwritingPad(false); setHandwritingMode('cell'); }} className="px-3 py-1.5 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-lg text-[10px] font-black border border-slate-300 transition-colors">戻る</button>
-                    <button onClick={saveHandwriting} className="px-5 py-1.5 bg-teal-500 hover:bg-teal-600 text-white rounded-lg text-[10px] font-black shadow transition-colors">決定</button>
+                    <button onClick={clearHandwriting} className="px-3 py-1.5 bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 rounded-lg text-[10px] font-black shadow-sm transition-colors">クリア</button>
+                    <button onClick={() => { setShowHandwritingPad(false); setHandwritingMode('cell'); }} className="px-3 py-1.5 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-lg text-[10px] font-black border border-slate-300 transition-colors">戻る</button>
+                    <button onClick={saveHandwriting} className="px-5 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-[10px] font-black shadow transition-colors">決定</button>
                   </div>
                 </div>
                 <div className="flex-1 bg-slate-100 p-2 sm:p-4 overflow-hidden flex items-center justify-center relative touch-none">
