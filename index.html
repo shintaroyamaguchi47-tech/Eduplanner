@@ -1263,11 +1263,11 @@
                             let flexClass = 'flex-1'; 
                             
                             // 🌟 朝、行事、昼休は「固定の高さ」にして無駄なスペースを取らない（shrink-0）
-                            // 🌟 放課後は授業枠の1.5倍の高さ・伸び率に設定
+                            // 🌟 放課後は固定の高さに制限（授業枠の最小サイズの約1.5倍）
                             if (row.id === 'lunch') { rowBg = 'bg-amber-50/30 hover:bg-amber-50/60'; rowHeight = 'h-5 sm:h-6 lg:h-7'; flexClass = 'shrink-0'; } 
                             else if (row.id === 'morning') { rowBg = 'bg-yellow-50/30 hover:bg-yellow-50/60'; rowHeight = 'h-6 sm:h-7 lg:h-8'; flexClass = 'shrink-0'; } 
                             else if (row.id === 'event') { rowHeight = 'h-6 sm:h-7 lg:h-8'; flexClass = 'shrink-0'; }
-                            else if (row.id === 'afterschool') { rowHeight = 'min-h-[3.75rem] lg:min-h-[5.25rem]'; flexClass = 'flex-[1.5]'; } 
+                            else if (row.id === 'afterschool') { rowHeight = 'h-[3.75rem] lg:h-[5.25rem]'; flexClass = 'shrink-0'; } 
 
                             let headerBg = 'bg-slate-50/80'; let headerTextColor = 'text-slate-600';
                             if (row.id === 'event') { headerBg = 'bg-pink-50/80'; headerTextColor = 'text-pink-600'; }
