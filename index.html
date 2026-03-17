@@ -1263,11 +1263,11 @@
                             let flexClass = 'flex-1'; 
                             
                             // 🌟 朝、行事、昼休は「固定の高さ」にして無駄なスペースを取らない（shrink-0）
-                            // 🌟 放課後は固定の高さに制限（授業枠の最小サイズの約1.5倍）
+                            // 🌟 放課後は固定の高さに制限（前よりも少しだけ高く調整）
                             if (row.id === 'lunch') { rowBg = 'bg-amber-50/30 hover:bg-amber-50/60'; rowHeight = 'h-5 sm:h-6 lg:h-7'; flexClass = 'shrink-0'; } 
                             else if (row.id === 'morning') { rowBg = 'bg-yellow-50/30 hover:bg-yellow-50/60'; rowHeight = 'h-6 sm:h-7 lg:h-8'; flexClass = 'shrink-0'; } 
                             else if (row.id === 'event') { rowHeight = 'h-6 sm:h-7 lg:h-8'; flexClass = 'shrink-0'; }
-                            else if (row.id === 'afterschool') { rowHeight = 'h-[3.75rem] lg:h-[5.25rem]'; flexClass = 'shrink-0'; } 
+                            else if (row.id === 'afterschool') { rowHeight = 'h-[4.2rem] lg:h-[6.5rem]'; flexClass = 'shrink-0'; } 
 
                             let headerBg = 'bg-slate-50/80'; let headerTextColor = 'text-slate-600';
                             if (row.id === 'event') { headerBg = 'bg-pink-50/80'; headerTextColor = 'text-pink-600'; }
@@ -1286,6 +1286,7 @@
                                   const d = new Date(currentWeekStart); d.setDate(d.getDate() + i); const dateStr = formatDate(d);
                                   const setting = getDaySetting(dateStr, i); const isHoliday = setting.type === 'holiday';
                                   const defaultTime = getPeriodTime(setting, row.id); const cellData = getCellData(dateStr, row.id, i);
+                                  const colFlex = i >= 5 ? 'flex-[2]' : 'flex-[3]'; // 🌟 土日は少し狭く、平日は少し広く
                                   
                                   let cellContent;
                                   if (row.id === 'afterschool') {
@@ -1365,7 +1366,7 @@
 
                                   return (
                                     <div key={i} onClick={() => openEditModal(cellData, dateStr, row, i, day, isHoliday, defaultTime, false)}
-                                      className={`min-w-0 flex-1 border-r border-slate-300 last:border-r-0 cursor-pointer relative group flex flex-col p-0.5 transition-all duration-200 ${cellBgClass}`}>
+                                      className={`min-w-0 ${colFlex} border-r border-slate-300 last:border-r-0 cursor-pointer relative group flex flex-col p-0.5 transition-all duration-200 ${cellBgClass}`}>
                                       {cellContent}
                                     </div>
                                   );
