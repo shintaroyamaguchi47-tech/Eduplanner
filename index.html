@@ -841,19 +841,19 @@
       const MonthTabs = () => {
         const months = [4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3];
         return (
-          <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar w-full px-4 py-1 sm:py-1.5 glass-effect border-b border-sky-100 shrink-0 shadow-[0_2px_10px_rgb(0,0,0,0.02)] z-20">
-            <div className="flex items-center gap-1 bg-white/60 rounded-xl p-1 shrink-0 border border-slate-200 shadow-sm">
-              <button onClick={() => { const d = new Date(currentMonth); d.setFullYear(d.getFullYear() - 1); setCurrentMonth(d); setCurrentWeekStart(getMonday(d)); }} className="text-slate-400 hover:text-sky-500 px-2 py-0.5 font-bold text-[10px] sm:text-xs rounded-lg hover:bg-white transition-colors">◀</button>
-              <span className="text-[10px] sm:text-xs font-black text-slate-600 px-1">{schoolYear}年度</span>
-              <button onClick={() => { const d = new Date(currentMonth); d.setFullYear(d.getFullYear() + 1); setCurrentMonth(d); setCurrentWeekStart(getMonday(d)); }} className="text-slate-400 hover:text-sky-500 px-2 py-0.5 font-bold text-[10px] sm:text-xs rounded-lg hover:bg-white transition-colors">▶</button>
+          <div className="flex items-center gap-1.5 overflow-x-auto hide-scrollbar w-full px-2 py-0.5 sm:py-1 glass-effect border-b border-sky-100 shrink-0 shadow-[0_1px_5px_rgb(0,0,0,0.02)] z-20">
+            <div className="flex items-center gap-0.5 bg-white/60 rounded-lg p-0.5 shrink-0 border border-slate-200 shadow-sm">
+              <button onClick={() => { const d = new Date(currentMonth); d.setFullYear(d.getFullYear() - 1); setCurrentMonth(d); setCurrentWeekStart(getMonday(d)); }} className="text-slate-400 hover:text-sky-500 px-1.5 py-0.5 font-bold text-[9px] sm:text-[10px] rounded hover:bg-white transition-colors">◀</button>
+              <span className="text-[9px] sm:text-[10px] font-black text-slate-600 px-1">{schoolYear}年度</span>
+              <button onClick={() => { const d = new Date(currentMonth); d.setFullYear(d.getFullYear() + 1); setCurrentMonth(d); setCurrentWeekStart(getMonday(d)); }} className="text-slate-400 hover:text-sky-500 px-1.5 py-0.5 font-bold text-[9px] sm:text-[10px] rounded hover:bg-white transition-colors">▶</button>
             </div>
-            <div className="w-px h-4 bg-slate-200 mx-1 shrink-0"></div>
-            <div className="flex items-center gap-1">
+            <div className="w-px h-3 bg-slate-200 mx-1 shrink-0"></div>
+            <div className="flex items-center gap-0.5">
               {months.map(m => {
                 const isCurrent = (currentMonth.getMonth() + 1) === m;
                 return (
                   <button key={m} onClick={() => { const y = m <= 3 ? schoolYear + 1 : schoolYear; const d = new Date(y, m - 1, 1); setCurrentMonth(d); setCurrentWeekStart(getMonday(d)); }}
-                    className={`px-3 sm:px-4 py-1 sm:py-1 rounded-xl font-black text-[10px] sm:text-xs whitespace-nowrap transition-all duration-300 shrink-0 border
+                    className={`px-2 sm:px-3 py-0.5 sm:py-1 rounded-lg font-black text-[9px] sm:text-[10px] whitespace-nowrap transition-all duration-300 shrink-0 border
                       ${isCurrent ? 'bg-sky-400 text-white shadow-md border-sky-400 scale-105' : 'bg-white/60 text-slate-500 hover:bg-sky-50 hover:text-sky-600 border-transparent hover:border-sky-200'}`}>
                     {m}月
                   </button>
@@ -917,28 +917,28 @@
           )}
 
           <header className="bg-gradient-to-r from-sky-300 via-purple-300 to-pink-300 text-white shrink-0 shadow-sm z-30 pt-[env(safe-area-inset-top)] relative">
-            <div className="max-w-full mx-auto px-3 sm:px-5 h-10 sm:h-12 flex items-center justify-between">
+            <div className="max-w-full mx-auto px-2 sm:px-3 h-8 sm:h-10 flex items-center justify-between">
               
-              <div className="flex items-center gap-3 sm:gap-5 shrink-0">
+              <div className="flex items-center gap-2 sm:gap-3 shrink-0">
                 {/* タイトルロゴ */}
-                <h1 className="text-base sm:text-lg font-black flex items-center gap-1.5 sm:gap-2 drop-shadow-md tracking-tight shrink-0">
-                  <LogoIcon className="w-4 h-4 sm:w-5 sm:h-5 opacity-90" />
+                <h1 className="text-sm sm:text-base font-black flex items-center gap-1 sm:gap-1.5 drop-shadow-md tracking-tight shrink-0">
+                  <LogoIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4 opacity-90" />
                   <span className="hidden sm:inline">EduPlanner</span><span className="sm:hidden">Edu</span>
-                  {!isOnline && <span className="ml-2 text-[10px] bg-amber-400 text-amber-900 px-2 py-0.5 rounded-full font-bold shadow-sm animate-pulse">オフライン</span>}
+                  {!isOnline && <span className="ml-1.5 text-[8px] bg-amber-400 text-amber-900 px-1.5 py-0.5 rounded-full font-bold shadow-sm animate-pulse">オフライン</span>}
                   {/* 📱 スマホ時の閲覧専用バッジ */}
-                  {isMobile && <span className="ml-1 text-[9px] bg-slate-100/30 text-white px-2 py-0.5 rounded-md font-bold shadow-inner">閲覧モード</span>}
+                  {isMobile && <span className="ml-1 text-[7px] bg-slate-100/30 text-white px-1.5 py-0.5 rounded-md font-bold shadow-inner">閲覧モード</span>}
                 </h1>
 
                 {/* 🌟 移動したTODO・メモボタン（スマホ時は非表示にして閲覧に集中） */}
                 {!isMobile && (
-                  <div className="flex items-center gap-1.5 sm:gap-2 border-l border-white/20 pl-3 sm:pl-4">
-                    <button onClick={() => setShowQuickMemoList(true)} className="bg-white/20 hover:bg-white/30 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black transition-all flex items-center gap-1 sm:gap-1.5 shadow-sm active:scale-95" title="クイックメモ">
-                      <span className="text-xs sm:text-sm leading-none">✍️</span> <span className="hidden lg:inline">メモ</span>
+                  <div className="flex items-center gap-1 sm:gap-1.5 border-l border-white/20 pl-2 sm:pl-3">
+                    <button onClick={() => setShowQuickMemoList(true)} className="bg-white/20 hover:bg-white/30 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] font-black transition-all flex items-center gap-1 sm:gap-1.5 shadow-sm active:scale-95" title="クイックメモ">
+                      <span className="text-[10px] sm:text-xs leading-none">✍️</span> <span className="hidden lg:inline">メモ</span>
                     </button>
-                    <button onClick={() => setShowTodo(true)} className="bg-white/20 hover:bg-white/30 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black transition-all flex items-center gap-1 sm:gap-1.5 shadow-sm active:scale-95 relative" title="TODOリスト">
-                      <span className="text-xs sm:text-sm leading-none">📝</span> <span className="hidden lg:inline">TODO</span>
+                    <button onClick={() => setShowTodo(true)} className="bg-white/20 hover:bg-white/30 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] font-black transition-all flex items-center gap-1 sm:gap-1.5 shadow-sm active:scale-95 relative" title="TODOリスト">
+                      <span className="text-[10px] sm:text-xs leading-none">📝</span> <span className="hidden lg:inline">TODO</span>
                       {todos.filter(t => !t.completed).length > 0 && (
-                        <span className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white text-[8px] font-black w-[16px] h-[16px] rounded-full flex items-center justify-center shadow-md border border-white/20">
+                        <span className="absolute -top-1 -right-1 bg-rose-500 text-white text-[7px] font-black w-[14px] h-[14px] rounded-full flex items-center justify-center shadow-md border border-white/20">
                           {todos.filter(t => !t.completed).length}
                         </span>
                       )}
@@ -947,15 +947,46 @@
                 )}
               </div>
 
+              {/* 今週のサマリー（iPadなどの広い画面向け） */}
+              <div className="hidden lg:flex flex-1 mx-2 xl:mx-3 items-center gap-0.5 overflow-hidden">
+                {Array.from({ length: 5 }).map((_, i) => {
+                  const d = new Date(currentWeekStart); d.setDate(d.getDate() + i);
+                  const dateStr = formatDate(d);
+                  const isToday = dateStr === todayStr;
+                  const eventData = getCellData(dateStr, 'event', i);
+                  const dayTodos = todos.filter(t => !t.completed && t.dueDate === dateStr);
+                  
+                  let summary = '';
+                  let icon = '';
+                  if (eventData && eventData.subject) {
+                    summary = eventData.subject;
+                    icon = '🚩';
+                  } else if (dayTodos.length > 0) {
+                    summary = dayTodos[0].text;
+                    icon = '✅';
+                  }
+
+                  return (
+                    <div key={i} className={`flex-1 flex items-center px-1 py-0.5 rounded-md text-[8px] font-bold overflow-hidden transition-all border ${isToday ? 'bg-white/30 border-white/50 shadow-sm ring-1 ring-white/20' : 'bg-black/5 border-transparent hover:bg-white/10'}`} title={summary || '予定なし'}>
+                      <div className={`shrink-0 mr-1 ${isToday ? 'text-white' : 'text-white/70'}`}>{DAYS[i]}</div>
+                      <div className="w-px h-2 bg-white/20 mr-1 shrink-0"></div>
+                      <div className="truncate flex-1 text-white/90">
+                        {summary ? <span className="flex items-center gap-0.5"><span className="text-[6px] shrink-0">{icon}</span><span className="truncate">{summary}</span></span> : <span className="text-white/40 font-normal">-</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
               {/* タブメニュー */}
-              <div className="flex items-center gap-1.5 shrink-0 ml-auto">
-                <div className="flex bg-black/10 rounded-xl sm:rounded-2xl p-0.5 sm:p-1 backdrop-blur-md overflow-x-auto hide-scrollbar max-w-[55vw] lg:max-w-[40vw] items-center shadow-inner border border-white/10">
-                  <button onClick={() => setActiveTab('yearly')} className={`px-2.5 py-1 sm:py-1.5 rounded-lg sm:rounded-xl text-[9px] sm:text-xs font-bold transition-all whitespace-nowrap ${activeTab === 'yearly' ? 'bg-white text-purple-500 shadow-sm' : 'text-white/80 hover:text-white hover:bg-white/10'}`}>年間</button>
-                  <button onClick={() => setActiveTab('monthly')} className={`px-2.5 py-1 sm:py-1.5 rounded-lg sm:rounded-xl text-[9px] sm:text-xs font-bold transition-all whitespace-nowrap ${activeTab === 'monthly' ? 'bg-white text-purple-500 shadow-sm' : 'text-white/80 hover:text-white hover:bg-white/10'}`}>月間</button>
-                  <button onClick={() => setActiveTab('weekly')} className={`px-3 py-1 sm:py-1.5 mx-0.5 rounded-lg sm:rounded-xl text-[10px] sm:text-sm font-black transition-all whitespace-nowrap shadow-md ${activeTab === 'weekly' ? 'bg-yellow-100 text-yellow-700 scale-105 shadow-[0_2px_10px_rgba(253,230,138,0.4)]' : 'bg-white/10 text-white hover:bg-white/20 border border-white/10'}`}>📝 週案</button>
-                  <button onClick={() => setActiveTab('syllabus')} className={`px-2.5 py-1 sm:py-1.5 rounded-lg sm:rounded-xl text-[9px] sm:text-xs font-bold transition-all whitespace-nowrap ${activeTab === 'syllabus' ? 'bg-white text-purple-500 shadow-sm' : 'text-white/80 hover:text-white hover:bg-white/10'}`}>進度</button>
-                  <button onClick={() => setActiveTab('documents')} className={`px-2.5 py-1 sm:py-1.5 rounded-lg sm:rounded-xl text-[9px] sm:text-xs font-bold transition-all whitespace-nowrap ${activeTab === 'documents' ? 'bg-white text-purple-500 shadow-sm' : 'text-white/80 hover:text-white hover:bg-white/10'}`}>資料</button>
-                  <button onClick={() => setActiveTab('template')} className={`px-2.5 py-1 sm:py-1.5 rounded-lg sm:rounded-xl text-[9px] sm:text-xs font-bold transition-all whitespace-nowrap ${activeTab === 'template' ? 'bg-white text-purple-500 shadow-sm' : 'text-white/80 hover:text-white hover:bg-white/10'}`}>基本</button>
+              <div className="flex items-center gap-1 shrink-0 ml-auto">
+                <div className="flex bg-black/10 rounded-lg sm:rounded-xl p-0.5 backdrop-blur-md overflow-x-auto hide-scrollbar max-w-[55vw] lg:max-w-[40vw] items-center shadow-inner border border-white/10">
+                  <button onClick={() => setActiveTab('yearly')} className={`px-2 py-0.5 sm:py-1 rounded-md sm:rounded-lg text-[8px] sm:text-[10px] font-bold transition-all whitespace-nowrap ${activeTab === 'yearly' ? 'bg-white text-purple-500 shadow-sm' : 'text-white/80 hover:text-white hover:bg-white/10'}`}>年間</button>
+                  <button onClick={() => setActiveTab('monthly')} className={`px-2 py-0.5 sm:py-1 rounded-md sm:rounded-lg text-[8px] sm:text-[10px] font-bold transition-all whitespace-nowrap ${activeTab === 'monthly' ? 'bg-white text-purple-500 shadow-sm' : 'text-white/80 hover:text-white hover:bg-white/10'}`}>月間</button>
+                  <button onClick={() => setActiveTab('weekly')} className={`px-2.5 py-0.5 sm:py-1 mx-0.5 rounded-md sm:rounded-lg text-[9px] sm:text-[11px] font-black transition-all whitespace-nowrap shadow-md ${activeTab === 'weekly' ? 'bg-yellow-100 text-yellow-700 scale-105 shadow-[0_2px_10px_rgba(253,230,138,0.4)]' : 'bg-white/10 text-white hover:bg-white/20 border border-white/10'}`}>📝 週案</button>
+                  <button onClick={() => setActiveTab('syllabus')} className={`px-2 py-0.5 sm:py-1 rounded-md sm:rounded-lg text-[8px] sm:text-[10px] font-bold transition-all whitespace-nowrap ${activeTab === 'syllabus' ? 'bg-white text-purple-500 shadow-sm' : 'text-white/80 hover:text-white hover:bg-white/10'}`}>進度</button>
+                  <button onClick={() => setActiveTab('documents')} className={`px-2 py-0.5 sm:py-1 rounded-md sm:rounded-lg text-[8px] sm:text-[10px] font-bold transition-all whitespace-nowrap ${activeTab === 'documents' ? 'bg-white text-purple-500 shadow-sm' : 'text-white/80 hover:text-white hover:bg-white/10'}`}>資料</button>
+                  <button onClick={() => setActiveTab('template')} className={`px-2 py-0.5 sm:py-1 rounded-md sm:rounded-lg text-[8px] sm:text-[10px] font-bold transition-all whitespace-nowrap ${activeTab === 'template' ? 'bg-white text-purple-500 shadow-sm' : 'text-white/80 hover:text-white hover:bg-white/10'}`}>基本</button>
                 </div>
               </div>
             </div>
@@ -1197,40 +1228,40 @@
             {(activeTab === 'weekly' || activeTab === 'template') && (
               <main className="flex-1 flex flex-col min-h-0 bg-slate-50/50 relative overflow-hidden">
                 {/* 週案のツールバー */}
-                <div className="px-2 sm:px-4 py-1.5 sm:py-2 bg-white/80 backdrop-blur-md border-b border-sky-100 flex justify-between items-center shrink-0 shadow-sm z-20">
+                <div className="px-1 sm:px-2 py-1 sm:py-1.5 bg-white/80 backdrop-blur-md border-b border-sky-100 flex justify-between items-center shrink-0 shadow-sm z-20">
                   {activeTab === 'weekly' ? (
-                    <div className="flex items-center gap-2 sm:gap-3 w-full overflow-hidden">
-                      <div className="flex items-center bg-white rounded-lg sm:rounded-xl p-0.5 sm:p-1 border border-slate-200 shadow-sm shrink-0">
-                        <button onClick={() => changeWeek(-1)} className="px-2 sm:px-3 py-0.5 sm:py-1 text-slate-400 hover:text-sky-500 hover:bg-sky-50 rounded-md sm:rounded-lg transition-colors font-bold text-[10px] sm:text-xs">◀ 週</button>
-                        <span className="px-2 sm:px-3 text-[10px] sm:text-xs font-black text-sky-700 min-w-[70px] sm:min-w-[90px] text-center">{currentWeekStart.getMonth() + 1}月{currentWeekStart.getDate()}日〜</span>
-                        <button onClick={() => changeWeek(1)} className="px-2 sm:px-3 py-0.5 sm:py-1 text-slate-400 hover:text-sky-500 hover:bg-sky-50 rounded-md sm:rounded-lg transition-colors font-bold text-[10px] sm:text-xs">週 ▶</button>
+                    <div className="flex items-center gap-1 sm:gap-2 w-full overflow-hidden">
+                      <div className="flex items-center bg-white rounded-md sm:rounded-lg p-0.5 border border-slate-200 shadow-sm shrink-0">
+                        <button onClick={() => changeWeek(-1)} className="px-1.5 sm:px-2 py-0.5 text-slate-400 hover:text-sky-500 hover:bg-sky-50 rounded-sm transition-colors font-bold text-[9px] sm:text-[10px]">◀ 週</button>
+                        <span className="px-1.5 sm:px-2 text-[9px] sm:text-[10px] font-black text-sky-700 min-w-[60px] sm:min-w-[70px] text-center">{currentWeekStart.getMonth() + 1}月{currentWeekStart.getDate()}日〜</span>
+                        <button onClick={() => changeWeek(1)} className="px-1.5 sm:px-2 py-0.5 text-slate-400 hover:text-sky-500 hover:bg-sky-50 rounded-sm transition-colors font-bold text-[9px] sm:text-[10px]">週 ▶</button>
                       </div>
                     </div>
-                  ) : (<div className="text-[10px] sm:text-xs font-black text-purple-600 flex items-center gap-1 sm:gap-2 py-0.5 sm:py-1 bg-purple-50 px-3 sm:px-4 rounded-xl border border-purple-100 shadow-sm"><span className="text-xs sm:text-sm">⚙️</span> 基本設定モード (来週以降のベース)</div>)}
+                  ) : (<div className="text-[9px] sm:text-[10px] font-black text-purple-600 flex items-center gap-1 py-0.5 bg-purple-50 px-2 sm:px-3 rounded-lg border border-purple-100 shadow-sm"><span className="text-[10px] sm:text-xs">⚙️</span> 基本設定モード (来週以降のベース)</div>)}
                 </div>
 
                 <div className="flex-1 flex flex-col min-h-0 relative overflow-y-auto">
                   {/* 🌟 2カラムレイアウトへの変更ポイント 🌟 */}
-                  <div className={`flex flex-col md:flex-row flex-1 min-w-max md:min-w-full p-1 sm:p-2 ${isMobile ? 'pb-8' : ''}`}>
+                  <div className={`flex flex-col md:flex-row flex-1 min-w-0 w-full p-0.5 sm:p-1 gap-1 ${isMobile ? 'pb-2' : ''}`}>
                     
                     {/* 左側：カレンダー部分（iPad等の横画面では左 2/3 の幅） */}
-                    <div className={`flex flex-col flex-1 min-w-0 ${!isMobile ? 'md:w-2/3 md:pr-2' : ''}`}>
-                      <div className="bg-white rounded-2xl sm:rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.03)] border-2 border-slate-300 overflow-hidden flex flex-col h-full">
+                    <div className={`flex flex-col flex-1 min-w-0 ${!isMobile ? 'md:w-2/3 md:pr-1' : ''}`}>
+                      <div className="bg-white rounded-xl shadow-sm border border-slate-300 overflow-hidden flex flex-col h-full">
                         
                         {/* 時間割ヘッダー（曜日） */}
-                        <div className="sticky top-0 z-10 glass-effect flex shrink-0 border-b-2 border-slate-300">
-                          <div className="w-10 sm:w-14 shrink-0 border-r-2 border-slate-300 flex items-center justify-center font-black text-[9px] sm:text-[10px] text-slate-500">枠</div>
+                        <div className="sticky top-0 z-10 glass-effect flex shrink-0 border-b border-slate-300">
+                          <div className="w-8 sm:w-10 lg:w-12 shrink-0 border-r border-slate-300 flex items-center justify-center font-black text-[8px] sm:text-[9px] text-slate-500">枠</div>
                           {DAYS.map((day, i) => {
                             const d = new Date(currentWeekStart); d.setDate(d.getDate() + i); const dateStr = formatDate(d);
                             const setting = getDaySetting(dateStr, i); const style = SCHEDULE_TYPES[setting.type];
                             const isToday = dateStr === todayStr;
                             return (
-                              <div key={day} className={`min-w-[130px] md:min-w-0 md:w-[14.28%] border-r-2 border-slate-300 p-1 lg:p-1.5 text-center flex flex-col justify-center last:border-r-0 ${isToday ? 'bg-pink-50/50' : 'bg-transparent'}`}>
-                                <div className="flex justify-center items-center gap-1 mb-1">
-                                  <span className={`font-black text-[10px] lg:text-[11px] ${isToday ? 'text-pink-600' : i===5?'text-sky-500':i===6?'text-rose-400':'text-slate-600'}`}>{day}</span>
-                                  {activeTab === 'weekly' && ( <span className={`text-[9px] lg:text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow-sm ${isToday ? 'bg-pink-400 text-white shadow-pink-200' : 'text-slate-600 bg-white border border-slate-200'}`}>{d.getDate()}{isToday && ' (今日)'}</span> )}
+                              <div key={day} className={`min-w-0 w-[14.28%] border-r border-slate-300 p-0.5 lg:p-1 text-center flex flex-col justify-center last:border-r-0 ${isToday ? 'bg-pink-50/50' : 'bg-transparent'}`}>
+                                <div className="flex justify-center items-center gap-0.5 mb-0.5">
+                                  <span className={`font-black text-[8px] lg:text-[10px] ${isToday ? 'text-pink-600' : i===5?'text-sky-500':i===6?'text-rose-400':'text-slate-600'}`}>{day}</span>
+                                  {activeTab === 'weekly' && ( <span className={`text-[7px] lg:text-[8px] font-bold px-1 py-0.5 rounded-full shadow-sm ${isToday ? 'bg-pink-400 text-white shadow-pink-200' : 'text-slate-600 bg-white border border-slate-200'}`}>{d.getDate()}{isToday && ' (今日)'}</span> )}
                                 </div>
-                                <div className={`text-[8.5px] lg:text-[9.5px] rounded-md px-1 py-0.5 border shadow-sm ${style.color}`}>
+                                <div className={`text-[6px] lg:text-[8px] rounded px-0.5 py-0.5 border shadow-sm ${style.color}`}>
                                   {/* スマホ閲覧モード時はセレクトボックスを非表示に */}
                                   {isMobile ? (
                                     <div className="text-center">{style.label}</div>
@@ -1241,13 +1272,13 @@
                                   )}
                                 </div>
                                 {!isMobile && activeTab === 'weekly' && (
-                                  <div className="mt-1 relative w-full">
+                                  <div className="mt-0.5 relative w-full">
                                     <select value="" onChange={(e) => { const val = e.target.value; if (val === 'revert') handleRevertDay(dateStr); else if (val !== '') handleCopyDay(dateStr, val); }} 
-                                      className="w-full text-[8px] lg:text-[9px] bg-white hover:bg-slate-50 border border-slate-300 text-slate-500 font-bold rounded-md px-1.5 py-0.5 outline-none cursor-pointer text-center appearance-none shadow-sm transition-colors">
+                                      className="w-full text-[6px] lg:text-[7px] bg-white hover:bg-slate-50 border border-slate-300 text-slate-500 font-bold rounded-sm px-1 py-0.5 outline-none cursor-pointer text-center appearance-none shadow-sm transition-colors">
                                       <option value="" disabled>🔄 曜日振替</option><option value="revert">🧹 リセット(元に戻す)</option>
-                                      {DAYS.map((dName, dIdx) => <option key={dIdx} value={dIdx}>➡️ {dName}曜を適用</option>)}
+                                      {DAYS.map((dName, dIdx) => <option key={dIdx} value={dIdx}>➡️ {dName}曜</option>)}
                                     </select>
-                                    <div className="absolute inset-y-0 right-0 flex items-center pr-1 pointer-events-none text-slate-400 text-[7px]">▼</div>
+                                    <div className="absolute inset-y-0 right-0 flex items-center pr-0.5 pointer-events-none text-slate-400 text-[5px]">▼</div>
                                   </div>
                                 )}
                               </div>
@@ -1259,13 +1290,13 @@
                         <div className="flex-1 flex flex-col bg-white overflow-y-auto">
                           {ROWS.filter(r => r.id !== 'diary').map((row, rowIndex) => {
                             let rowBg = 'hover:bg-slate-50/50'; 
-                            let rowHeight = 'h-14 sm:h-16 lg:h-[4.2rem]'; 
+                            let rowHeight = 'h-10 sm:h-12 lg:h-[3.6rem]'; 
                             let isFlex1 = false;
                             
-                            if (row.id === 'lunch') { rowBg = 'bg-amber-50/30 hover:bg-amber-50/60'; rowHeight = 'h-7 sm:h-8 lg:h-8'; } 
-                            else if (row.id === 'morning') { rowBg = 'bg-yellow-50/30 hover:bg-yellow-50/60'; rowHeight = 'h-9 sm:h-10 lg:h-10'; } 
-                            else if (row.id === 'event') { rowHeight = 'h-9 sm:h-10 lg:h-11'; }
-                            else if (row.id === 'afterschool') { rowHeight = 'min-h-[50px] lg:min-h-[60px]'; isFlex1 = true; } 
+                            if (row.id === 'lunch') { rowBg = 'bg-amber-50/30 hover:bg-amber-50/60'; rowHeight = 'h-5 sm:h-6 lg:h-6'; } 
+                            else if (row.id === 'morning') { rowBg = 'bg-yellow-50/30 hover:bg-yellow-50/60'; rowHeight = 'h-6 sm:h-7 lg:h-7'; } 
+                            else if (row.id === 'event') { rowHeight = 'h-6 sm:h-7 lg:h-8'; }
+                            else if (row.id === 'afterschool') { rowHeight = 'min-h-[30px] lg:min-h-[40px]'; isFlex1 = true; } 
 
                             let headerBg = 'bg-slate-50/80'; let headerTextColor = 'text-slate-600';
                             if (row.id === 'event') { headerBg = 'bg-pink-50/80'; headerTextColor = 'text-pink-600'; }
@@ -1274,10 +1305,10 @@
                             else { headerBg = 'bg-sky-50/40'; headerTextColor = 'text-sky-800'; }
 
                             return (
-                              <div key={row.id} className={`flex ${isFlex1 ? 'flex-1' : 'shrink-0'} ${rowHeight} transition-colors border-b-2 border-slate-300 last:border-b-0 ${rowBg}`}>
-                                <div className={`w-10 sm:w-14 shrink-0 border-r-2 border-slate-300 sticky left-0 z-10 flex flex-col items-center justify-center px-0.5 sm:px-1 text-center backdrop-blur-md ${headerBg}`}>
-                                  <span className="text-sm lg:text-base leading-none mb-0.5 drop-shadow-sm">{row.id === 'event' ? '🚩' : row.id === 'afterschool' ? '🏫' : row.id === 'lunch' ? '🍽️' : row.id === 'morning' ? '☀️' : <span className="text-[11px] lg:text-[13px] text-sky-600/50 font-black">{row.id.replace('p', '')}</span>}</span>
-                                  <span className={`text-[8px] lg:text-[9px] font-black leading-none ${headerTextColor}`}>{row.name}</span>
+                              <div key={row.id} className={`flex ${isFlex1 ? 'flex-1' : 'shrink-0'} ${rowHeight} transition-colors border-b border-slate-300 last:border-b-0 ${rowBg}`}>
+                                <div className={`w-8 sm:w-10 lg:w-12 shrink-0 border-r border-slate-300 sticky left-0 z-10 flex flex-col items-center justify-center px-0 text-center backdrop-blur-md ${headerBg}`}>
+                                  <span className="text-xs lg:text-sm leading-none mb-0.5 drop-shadow-sm">{row.id === 'event' ? '🚩' : row.id === 'afterschool' ? '🏫' : row.id === 'lunch' ? '🍽️' : row.id === 'morning' ? '☀️' : <span className="text-[10px] lg:text-[12px] text-sky-600/50 font-black">{row.id.replace('p', '')}</span>}</span>
+                                  <span className={`text-[6px] lg:text-[7px] font-black leading-none ${headerTextColor}`}>{row.name}</span>
                                 </div>
 
                                 {DAYS.map((day, i) => {
@@ -1291,18 +1322,18 @@
                                     if (!events.some(ev => ev.subject) && cellData.subject) {
                                       const hasTime = cellData.startTime || cellData.endTime;
                                       cellContent = (
-                                        <div className="bg-white rounded-lg lg:rounded-xl p-1 lg:p-1.5 border border-slate-200/60 shadow-[0_2px_4px_rgb(0,0,0,0.02)] w-full h-full flex flex-col justify-center">
-                                          {hasTime && ( <div className="text-[8px] lg:text-[9px] text-sky-500 font-mono font-bold leading-none mb-0.5 lg:mb-1">{cellData.startTime || ''}{cellData.startTime && cellData.endTime ? '-' : ''}{cellData.endTime || ''}</div> )}
-                                          <div className="text-[10px] lg:text-[11.5px] font-black text-slate-700 whitespace-pre-wrap break-words leading-tight">{cellData.subject}</div>
+                                        <div className="bg-white rounded p-0.5 lg:p-1 border border-slate-200/60 shadow-sm w-full h-full flex flex-col justify-center overflow-hidden">
+                                          {hasTime && ( <div className="text-[6px] lg:text-[7px] text-sky-500 font-mono font-bold leading-none mb-0.5">{cellData.startTime || ''}{cellData.startTime && cellData.endTime ? '-' : ''}{cellData.endTime || ''}</div> )}
+                                          <div className="text-[7px] lg:text-[9px] font-black text-slate-700 line-clamp-2 leading-tight">{cellData.subject}</div>
                                         </div>
                                       );
                                     } else {
                                       cellContent = (
-                                        <div className="space-y-0.5 w-full h-full flex flex-col justify-center">
+                                        <div className="space-y-0.5 w-full h-full flex flex-col justify-center overflow-hidden">
                                           {events.map((ev, idx) => ev.subject ? (
-                                            <div key={idx} className="bg-white rounded-md lg:rounded-lg p-1 lg:p-1.5 border border-slate-200 shadow-[0_1px_2px_rgb(0,0,0,0.02)] border-l-2 lg:border-l-4 border-l-sky-400 flex flex-col">
-                                              {ev.startTime && ( <div className="text-[8px] lg:text-[9px] text-sky-500 font-mono font-bold leading-none mb-0.5">{ev.startTime}{ev.endTime ? `-${ev.endTime}` : ''}</div> )}
-                                              <span className="text-[10px] lg:text-[11.5px] font-black text-slate-700 whitespace-pre-wrap break-words leading-tight">{ev.subject}</span>
+                                            <div key={idx} className="bg-white rounded-sm p-0.5 border border-slate-200 shadow-sm border-l-2 border-l-sky-400 flex flex-col overflow-hidden">
+                                              {ev.startTime && ( <div className="text-[5px] lg:text-[6px] text-sky-500 font-mono font-bold leading-none mb-0.5">{ev.startTime}{ev.endTime ? `-${ev.endTime}` : ''}</div> )}
+                                              <span className="text-[6px] lg:text-[8px] font-black text-slate-700 line-clamp-1 leading-tight">{ev.subject}</span>
                                             </div>
                                           ) : null)}
                                         </div>
@@ -1314,24 +1345,25 @@
                                     const isOverridden = activeTab === 'weekly' && weeklyData[`${dateStr}-${row.id}`] && !weeklyData[`${dateStr}-${row.id}`].useTemplate;
                                     
                                     if (isHoliday && hasCustomTime && cellData.startTime && cellData.endTime && row.id !== 'event') {
-                                      const duration = getDurationMinutes(cellData.startTime, cellData.endTime); const h = Math.max((duration * 0.8), 40); 
+                                      const duration = getDurationMinutes(cellData.startTime, cellData.endTime); const h = Math.max((duration * 0.8), 30); 
                                       cellContent = (
-                                        <div className="absolute left-1 right-1 p-1 lg:p-1.5 z-20 shadow-lg shadow-sky-900/10 border-2 border-sky-300 border-l-4 border-l-sky-400 bg-white/95 backdrop-blur-xl rounded-lg lg:rounded-xl flex flex-col transition-all hover:z-30 cursor-pointer top-1 overflow-y-auto hide-scrollbar" style={{ height: `calc(${h}px - 8px)`, minHeight: `calc(100% - 8px)` }}>
-                                          <div className="font-mono font-bold mb-0.5 px-1 py-0.5 rounded-md inline-flex items-center gap-1 self-start leading-none bg-sky-50 text-sky-600 text-[8px] lg:text-[9px]"><span>🕒</span> <span>{displayTime}</span></div>
-                                          <div className="font-black leading-tight text-slate-800 whitespace-pre-wrap break-words text-[10px] lg:text-[11.5px] mt-0.5">{cellData.subject}</div>
-                                          <div className="text-[8px] lg:text-[9px] text-slate-500 font-medium whitespace-pre-wrap break-words leading-tight mt-0.5">{cellData.memo}</div>
-                                          {cellData.handwriting && <div className="absolute top-1 right-1 text-[10px] opacity-60">✏️</div>}
+                                        <div className="absolute left-0.5 right-0.5 p-0.5 lg:p-1 z-20 shadow-lg shadow-sky-900/10 border border-sky-300 border-l-2 border-l-sky-400 bg-white/95 backdrop-blur-xl rounded flex flex-col transition-all hover:z-30 cursor-pointer top-0.5 overflow-hidden" style={{ height: `calc(${h}px - 4px)`, minHeight: `calc(100% - 4px)` }}>
+                                          <div className="font-mono font-bold mb-0.5 px-0.5 py-0.5 rounded inline-flex items-center gap-0.5 self-start leading-none bg-sky-50 text-sky-600 text-[6px] lg:text-[7px]"><span>🕒</span> <span>{displayTime}</span></div>
+                                          <div className="font-black leading-tight text-slate-800 line-clamp-2 text-[7px] lg:text-[9px] mt-0.5">{cellData.subject}</div>
+                                          <div className="text-[5px] lg:text-[6px] text-slate-500 font-medium line-clamp-1 leading-tight mt-0.5">{cellData.memo}</div>
                                         </div>
                                       );
                                     } else {
                                       cellContent = (
-                                        <div className="h-full flex flex-col justify-center relative py-0.5 px-1 lg:px-1.5">
+                                        <div className="h-full flex flex-col justify-center relative py-0 px-0.5 lg:px-1 overflow-hidden">
                                           {displayTime && row.id !== 'event' && (
-                                            <div className={`font-mono font-bold mb-0.5 lg:mb-1 px-1 lg:px-1.5 py-0.5 rounded flex items-center gap-0.5 lg:gap-1 self-start leading-none ${hasCustomTime ? 'bg-sky-100 text-sky-700' : 'bg-slate-100 text-slate-500'} text-[7px] sm:text-[8px] lg:text-[9px]`}><span>🕒</span> <span>{displayTime}</span></div>
+                                            <div className={`font-mono font-bold mb-0.5 px-0.5 rounded flex items-center gap-0.5 self-start leading-none ${hasCustomTime ? 'bg-sky-100 text-sky-700' : 'bg-slate-100 text-slate-500'} text-[5px] sm:text-[6px] lg:text-[7px]`}>
+                                              <span className="hidden sm:inline">🕒</span> <span>{displayTime}</span>
+                                            </div>
                                           )}
-                                          <div className={`font-black leading-tight whitespace-pre-wrap break-words ${row.id === 'event' ? 'text-pink-600' : isOverridden ? 'text-amber-600' : 'text-slate-800'} text-[10px] sm:text-[11px] lg:text-[12.5px]`}>{cellData.subject || <span className="text-slate-200/50 font-normal">-</span>}</div>
-                                          <div className="text-[7.5px] lg:text-[9px] text-slate-500 font-bold whitespace-pre-wrap break-words leading-tight mt-0.5">{cellData.memo}</div>
-                                          {cellData.handwriting && <div className="absolute top-1 right-1 text-[8px] opacity-60">✏️</div>}
+                                          <div className={`font-black leading-tight line-clamp-2 text-ellipsis overflow-hidden ${row.id === 'event' ? 'text-pink-600' : isOverridden ? 'text-amber-600' : 'text-slate-800'} text-[7px] sm:text-[9px] lg:text-[10.5px]`}>{cellData.subject || <span className="text-slate-200/50 font-normal">-</span>}</div>
+                                          <div className="text-[5px] lg:text-[7px] text-slate-500 font-bold line-clamp-1 text-ellipsis overflow-hidden leading-tight mt-0.5">{cellData.memo}</div>
+                                          {cellData.handwriting && <div className="absolute top-0.5 right-0.5 text-[6px] opacity-60">✏️</div>}
                                         </div>
                                       );
                                     }
@@ -1346,15 +1378,15 @@
                                     cellBgClass = 'bg-stone-100/50 opacity-90 hover:bg-stone-200/50'; 
                                   } else if (hasSubject && row.id !== 'afterschool') {
                                     if (isClassPeriod) {
-                                      cellBgClass = 'bg-sky-100/60 hover:bg-sky-200/60 shadow-[inset_4px_0_0_#38bdf8]'; 
+                                      cellBgClass = 'bg-sky-100/60 hover:bg-sky-200/60 shadow-[inset_2px_0_0_#38bdf8]'; 
                                     } else if (row.id === 'morning') {
-                                      cellBgClass = 'bg-yellow-100/70 hover:bg-yellow-200/70 shadow-[inset_4px_0_0_#facc15]';
+                                      cellBgClass = 'bg-yellow-100/70 hover:bg-yellow-200/70 shadow-[inset_2px_0_0_#facc15]';
                                     } else if (row.id === 'lunch') {
-                                      cellBgClass = 'bg-amber-100/70 hover:bg-amber-200/70 shadow-[inset_4px_0_0_#fbbf24]';
+                                      cellBgClass = 'bg-amber-100/70 hover:bg-amber-200/70 shadow-[inset_2px_0_0_#fbbf24]';
                                     } else if (row.id === 'event') {
-                                      cellBgClass = 'bg-pink-100/60 hover:bg-pink-200/60 shadow-[inset_4px_0_0_#f472b6]';
+                                      cellBgClass = 'bg-pink-100/60 hover:bg-pink-200/60 shadow-[inset_2px_0_0_#f472b6]';
                                     } else {
-                                      cellBgClass = 'bg-indigo-50/80 hover:bg-indigo-100/80 shadow-[inset_4px_0_0_#818cf8]';
+                                      cellBgClass = 'bg-indigo-50/80 hover:bg-indigo-100/80 shadow-[inset_2px_0_0_#818cf8]';
                                     }
                                   } else if (isToday && !isHoliday) { 
                                     cellBgClass = 'bg-pink-50/30 hover:bg-pink-100/40'; 
@@ -1362,7 +1394,7 @@
 
                                   return (
                                     <div key={i} onClick={() => openEditModal(cellData, dateStr, row, i, day, isHoliday, defaultTime, false)}
-                                      className={`min-w-[130px] md:min-w-0 md:w-[14.28%] border-r-2 border-slate-300 last:border-r-0 cursor-pointer relative group flex flex-col p-1 transition-all duration-200 ${cellBgClass}`}>
+                                      className={`min-w-0 w-[14.28%] border-r border-slate-300 last:border-r-0 cursor-pointer relative group flex flex-col p-0.5 transition-all duration-200 ${cellBgClass}`}>
                                       {cellContent}
                                     </div>
                                   );
@@ -1376,26 +1408,26 @@
 
                     {/* 🌟 右側：メモとTODOリスト（iPad/PC向けの2カラムレイアウト） 🌟 */}
                     {!isMobile && activeTab === 'weekly' && (
-                      <div className="hidden md:flex md:w-1/3 flex-col gap-3 min-h-0 pl-1 pb-2">
+                      <div className="hidden md:flex md:w-1/3 flex-col gap-1.5 min-h-0 pl-1 pb-1">
                         {/* メモ欄エリア */}
-                        <div className="flex-1 bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.03)] border-2 border-slate-300 flex flex-col overflow-hidden min-h-0">
-                           <div className="bg-slate-50/80 px-4 py-2.5 border-b-2 border-slate-300 font-black text-sm text-slate-600 flex items-center gap-2 shrink-0">
-                             <span className="text-lg">✍️</span> 今週のメモ
+                        <div className="flex-1 bg-white rounded-xl shadow-sm border border-slate-300 flex flex-col overflow-hidden min-h-0">
+                           <div className="bg-slate-50/80 px-2 py-1.5 border-b border-slate-300 font-black text-[10px] lg:text-xs text-slate-600 flex items-center gap-1.5 shrink-0">
+                             <span className="text-sm">✍️</span> 今週のメモ
                            </div>
-                           <div className="flex-1 overflow-y-auto p-2 space-y-2 bg-slate-50/30">
+                           <div className="flex-1 overflow-y-auto p-1 space-y-1 bg-slate-50/30 flex flex-col min-h-0">
                               {/* 月〜金のメモ */}
                               {[0,1,2,3,4].map(i => {
                                  const d = new Date(currentWeekStart); d.setDate(d.getDate() + i); const dateStr = formatDate(d);
                                  const wKey = `${dateStr}-diary`;
                                  const memoData = weeklyData[wKey] || { memo: '' };
                                  return (
-                                    <div key={i} className="flex bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm h-16 lg:h-20 focus-within:ring-2 focus-within:ring-sky-200 transition-all">
-                                      <div className="w-12 lg:w-14 bg-slate-50 border-r border-slate-100 flex flex-col items-center justify-center shrink-0">
-                                        <span className="text-[10px] lg:text-xs font-bold text-slate-400">{d.getMonth()+1}/{d.getDate()}</span>
-                                        <span className={`text-xs lg:text-sm font-black ${i===5?'text-sky-500':i===6?'text-rose-400':'text-slate-600'}`}>({DAYS[i]})</span>
+                                    <div key={i} className="flex-1 flex bg-white border border-slate-200 rounded-lg overflow-hidden shadow-sm focus-within:ring-1 focus-within:ring-sky-200 transition-all min-h-0">
+                                      <div className="w-8 lg:w-10 bg-slate-50 border-r border-slate-100 flex flex-col items-center justify-center shrink-0">
+                                        <span className="text-[7px] lg:text-[8px] font-bold text-slate-400">{d.getMonth()+1}/{d.getDate()}</span>
+                                        <span className={`text-[8px] lg:text-[10px] font-black ${i===5?'text-sky-500':i===6?'text-rose-400':'text-slate-600'}`}>({DAYS[i]})</span>
                                       </div>
                                       <textarea 
-                                        className="flex-1 p-2 text-xs lg:text-sm font-bold text-slate-600 outline-none resize-none placeholder-slate-300 leading-snug"
+                                        className="flex-1 p-1 lg:p-1.5 text-[9px] lg:text-[11px] font-bold text-slate-600 outline-none resize-none placeholder-slate-300 leading-tight"
                                         placeholder="メモを入力..."
                                         value={memoData.memo || ''}
                                         onChange={e => {
@@ -1408,18 +1440,18 @@
                                  )
                               })}
                               {/* 土日のメモ (横並び) */}
-                              <div className="flex gap-2 h-16 lg:h-20">
+                              <div className="flex-1 flex gap-1 min-h-0">
                                 {[5,6].map(i => {
                                    const d = new Date(currentWeekStart); d.setDate(d.getDate() + i); const dateStr = formatDate(d);
                                    const wKey = `${dateStr}-diary`;
                                    const memoData = weeklyData[wKey] || { memo: '' };
                                    return (
-                                      <div key={i} className="flex-1 flex flex-col bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm focus-within:ring-2 focus-within:ring-sky-200 transition-all">
-                                        <div className="bg-slate-50 border-b border-slate-100 px-2 py-1 text-center shrink-0">
-                                           <span className={`text-[10px] lg:text-xs font-black ${i===5?'text-sky-500':'text-rose-500'}`}>{d.getMonth()+1}/{d.getDate()} ({DAYS[i]})</span>
+                                      <div key={i} className="flex-1 flex flex-col bg-white border border-slate-200 rounded-lg overflow-hidden shadow-sm focus-within:ring-1 focus-within:ring-sky-200 transition-all min-h-0">
+                                        <div className="bg-slate-50 border-b border-slate-100 px-1 py-0.5 text-center shrink-0">
+                                           <span className={`text-[7px] lg:text-[9px] font-black ${i===5?'text-sky-500':'text-rose-500'}`}>{d.getMonth()+1}/{d.getDate()} ({DAYS[i]})</span>
                                         </div>
                                         <textarea 
-                                          className="flex-1 p-2 text-[10px] lg:text-xs font-bold text-slate-600 outline-none resize-none placeholder-slate-300 leading-snug"
+                                          className="flex-1 p-1 lg:p-1.5 text-[8px] lg:text-[10px] font-bold text-slate-600 outline-none resize-none placeholder-slate-300 leading-tight"
                                           placeholder="土日のメモ..."
                                           value={memoData.memo || ''}
                                           onChange={e => {
@@ -1436,29 +1468,29 @@
                         </div>
 
                         {/* TODOリストエリア */}
-                        <div className="h-[40%] bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.03)] border-2 border-slate-300 flex flex-col overflow-hidden shrink-0">
-                           <div className="bg-slate-50/80 px-4 py-2 border-b-2 border-slate-300 font-black text-sm text-slate-600 flex justify-between items-center shrink-0">
-                             <div className="flex items-center gap-2"><span className="text-lg">☑️</span> ToDo</div>
-                             <button onClick={() => setShowTodo(true)} className="text-[10px] font-black bg-white border border-slate-200 text-slate-500 hover:text-sky-600 hover:border-sky-200 px-3 py-1.5 rounded-lg transition-colors shadow-sm active:scale-95">詳細・追加</button>
+                        <div className="h-[35%] bg-white rounded-xl shadow-sm border border-slate-300 flex flex-col overflow-hidden shrink-0">
+                           <div className="bg-slate-50/80 px-2 py-1.5 border-b border-slate-300 font-black text-[10px] lg:text-xs text-slate-600 flex justify-between items-center shrink-0">
+                             <div className="flex items-center gap-1.5"><span className="text-sm">☑️</span> ToDo</div>
+                             <button onClick={() => setShowTodo(true)} className="text-[8px] lg:text-[10px] font-black bg-white border border-slate-200 text-slate-500 hover:text-sky-600 hover:border-sky-200 px-2 py-1 rounded-md transition-colors shadow-sm active:scale-95">詳細・追加</button>
                            </div>
-                           <div className="flex-1 overflow-y-auto p-3 space-y-2">
+                           <div className="flex-1 overflow-y-auto p-1.5 space-y-1">
                              {todos.filter(t => !t.completed).map(t => {
                                const isOverdue = t.dueDate && t.dueDate < todayStr;
                                return (
-                                <div key={t.id} className={`flex items-start gap-2.5 p-2.5 rounded-xl border shadow-sm transition-all hover:shadow-md ${t.important ? 'bg-amber-50/30 border-amber-200' : isOverdue ? 'bg-rose-50/30 border-rose-200' : 'bg-slate-50/50 border-slate-200'}`}>
+                                <div key={t.id} className={`flex items-start gap-1.5 p-1.5 rounded-lg border shadow-sm transition-all hover:shadow-md ${t.important ? 'bg-amber-50/30 border-amber-200' : isOverdue ? 'bg-rose-50/30 border-rose-200' : 'bg-slate-50/50 border-slate-200'}`}>
                                   <input type="checkbox" onChange={() => saveTodos(todos.map(todo => todo.id === t.id ? { ...todo, completed: !todo.completed } : todo))} 
-                                    className="mt-0.5 w-5 h-5 border-2 border-slate-300 rounded-md checked:bg-sky-400 checked:border-sky-400 cursor-pointer shadow-sm transition-colors" />
-                                  <div className="flex-1 flex flex-col pt-0.5">
-                                    <span className={`text-xs lg:text-sm font-black leading-tight ${isOverdue ? 'text-rose-600' : 'text-slate-700'}`}>
-                                      {t.important && <span className="text-amber-500 mr-1 text-base relative top-[1px]">★</span>}{t.text}
+                                    className="mt-0.5 w-3.5 h-3.5 border border-slate-300 rounded-sm checked:bg-sky-400 checked:border-sky-400 cursor-pointer shadow-sm transition-colors" />
+                                  <div className="flex-1 flex flex-col pt-0.5 overflow-hidden">
+                                    <span className={`text-[9px] lg:text-[11px] font-black leading-tight truncate ${isOverdue ? 'text-rose-600' : 'text-slate-700'}`}>
+                                      {t.important && <span className="text-amber-500 mr-0.5 text-[10px] relative top-[0.5px]">★</span>}{t.text}
                                     </span>
-                                    {t.dueDate && <span className={`text-[9px] lg:text-[10px] font-black mt-1 ${isOverdue ? 'text-rose-500' : 'text-slate-400'}`}>期限: {t.dueDate}</span>}
+                                    {t.dueDate && <span className={`text-[7px] lg:text-[8px] font-black mt-0.5 ${isOverdue ? 'text-rose-500' : 'text-slate-400'}`}>期限: {t.dueDate}</span>}
                                   </div>
                                 </div>
                                )
                              })}
                              {todos.filter(t => !t.completed).length === 0 && (
-                                <div className="text-center text-xs text-slate-400 font-bold py-6">未完了タスクなし ✨</div>
+                                <div className="text-center text-[10px] text-slate-400 font-bold py-4">未完了タスクなし ✨</div>
                              )}
                            </div>
                         </div>
@@ -1468,28 +1500,28 @@
                   
                   {/* 📱 スマホ閲覧モード時のTODOリスト表示 (週案の下に縦積み) */}
                   {isMobile && activeTab === 'weekly' && (
-                    <div className="px-2 pb-8">
-                      <div className="bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.03)] border-2 border-slate-300 flex flex-col overflow-hidden">
-                         <div className="bg-slate-50/80 px-4 py-2 border-b-2 border-slate-300 font-black text-sm text-slate-600 flex items-center gap-2 shrink-0">
-                           <span className="text-lg">☑️</span> 今週のToDo (閲覧用)
+                    <div className="px-1 pb-2">
+                      <div className="bg-white rounded-xl shadow-sm border border-slate-300 flex flex-col overflow-hidden">
+                         <div className="bg-slate-50/80 px-2 py-1.5 border-b border-slate-300 font-black text-[10px] text-slate-600 flex items-center gap-1.5 shrink-0">
+                           <span className="text-sm">☑️</span> 今週のToDo (閲覧用)
                          </div>
-                         <div className="p-3 space-y-2">
+                         <div className="p-1.5 space-y-1">
                            {todos.filter(t => !t.completed).map(t => {
                               const isOverdue = t.dueDate && t.dueDate < todayStr;
                               return (
-                              <div key={t.id} className={`flex items-start gap-2.5 p-2.5 rounded-xl border shadow-sm ${t.important ? 'bg-amber-50/30 border-amber-200' : isOverdue ? 'bg-rose-50/30 border-rose-200' : 'bg-slate-50/50 border-slate-200'}`}>
-                                <input type="checkbox" disabled className="mt-0.5 w-5 h-5 border-2 border-slate-300 rounded-md opacity-40" />
-                                <div className="flex-1 flex flex-col pt-0.5">
-                                  <span className={`text-xs font-black leading-tight ${isOverdue ? 'text-rose-600' : 'text-slate-700'}`}>
-                                    {t.important && <span className="text-amber-500 mr-1 text-base relative top-[1px]">★</span>}{t.text}
+                              <div key={t.id} className={`flex items-start gap-1.5 p-1.5 rounded-lg border shadow-sm ${t.important ? 'bg-amber-50/30 border-amber-200' : isOverdue ? 'bg-rose-50/30 border-rose-200' : 'bg-slate-50/50 border-slate-200'}`}>
+                                <input type="checkbox" disabled className="mt-0.5 w-3.5 h-3.5 border border-slate-300 rounded-sm opacity-40" />
+                                <div className="flex-1 flex flex-col pt-0.5 overflow-hidden">
+                                  <span className={`text-[9px] font-black leading-tight truncate ${isOverdue ? 'text-rose-600' : 'text-slate-700'}`}>
+                                    {t.important && <span className="text-amber-500 mr-0.5 text-[10px] relative top-[0.5px]">★</span>}{t.text}
                                   </span>
-                                  {t.dueDate && <span className={`text-[9px] font-black mt-1 ${isOverdue ? 'text-rose-500' : 'text-slate-400'}`}>期限: {t.dueDate}</span>}
+                                  {t.dueDate && <span className={`text-[7px] font-black mt-0.5 ${isOverdue ? 'text-rose-500' : 'text-slate-400'}`}>期限: {t.dueDate}</span>}
                                 </div>
                               </div>
                               )
                            })}
                            {todos.filter(t => !t.completed).length === 0 && (
-                              <div className="text-center text-xs text-slate-400 font-bold py-6">未完了タスクなし ✨</div>
+                              <div className="text-center text-[10px] text-slate-400 font-bold py-4">未完了タスクなし ✨</div>
                            )}
                          </div>
                       </div>
