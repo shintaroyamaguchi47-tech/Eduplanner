@@ -517,7 +517,6 @@
         return baseData;
       };
 
-      // 🔴🔴 月間カレンダーのマス目に表示する予定（行事とTODOのみ） 🔴🔴
       const getDailyEvents = (dateStr, dayIdx) => {
         const evs = [];
         
@@ -947,37 +946,6 @@
                 )}
               </div>
 
-              {/* 今週のサマリー（iPadなどの広い画面向け） */}
-              <div className="hidden lg:flex flex-1 mx-2 xl:mx-3 items-center gap-0.5 overflow-hidden">
-                {Array.from({ length: 5 }).map((_, i) => {
-                  const d = new Date(currentWeekStart); d.setDate(d.getDate() + i);
-                  const dateStr = formatDate(d);
-                  const isToday = dateStr === todayStr;
-                  const eventData = getCellData(dateStr, 'event', i);
-                  const dayTodos = todos.filter(t => !t.completed && t.dueDate === dateStr);
-                  
-                  let summary = '';
-                  let icon = '';
-                  if (eventData && eventData.subject) {
-                    summary = eventData.subject;
-                    icon = '🚩';
-                  } else if (dayTodos.length > 0) {
-                    summary = dayTodos[0].text;
-                    icon = '✅';
-                  }
-
-                  return (
-                    <div key={i} className={`flex-1 flex items-center px-1 py-0.5 rounded-md text-[8px] font-bold overflow-hidden transition-all border ${isToday ? 'bg-white/30 border-white/50 shadow-sm ring-1 ring-white/20' : 'bg-black/5 border-transparent hover:bg-white/10'}`} title={summary || '予定なし'}>
-                      <div className={`shrink-0 mr-1 ${isToday ? 'text-white' : 'text-white/70'}`}>{DAYS[i]}</div>
-                      <div className="w-px h-2 bg-white/20 mr-1 shrink-0"></div>
-                      <div className="truncate flex-1 text-white/90">
-                        {summary ? <span className="flex items-center gap-0.5"><span className="text-[6px] shrink-0">{icon}</span><span className="truncate">{summary}</span></span> : <span className="text-white/40 font-normal">-</span>}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
               {/* タブメニュー */}
               <div className="flex items-center gap-1 shrink-0 ml-auto">
                 <div className="flex bg-black/10 rounded-lg sm:rounded-xl p-0.5 backdrop-blur-md overflow-x-auto hide-scrollbar max-w-[55vw] lg:max-w-[40vw] items-center shadow-inner border border-white/10">
@@ -1241,7 +1209,7 @@
                 </div>
 
                 <div className="flex-1 flex flex-col min-h-0 relative overflow-y-auto">
-                  {/* 🌟 2カラムレイアウトへの変更ポイント 🌟 */}
+                  {/* 🌟 2カラムレイアウト */}
                   <div className={`flex flex-col md:flex-row flex-1 min-w-0 w-full p-0.5 sm:p-1 gap-1 ${isMobile ? 'pb-2' : ''}`}>
                     
                     {/* 左側：カレンダー部分（iPad等の横画面では左 2/3 の幅） */}
@@ -1256,7 +1224,7 @@
                             const setting = getDaySetting(dateStr, i); const style = SCHEDULE_TYPES[setting.type];
                             const isToday = dateStr === todayStr;
                             return (
-                              <div key={day} className={`min-w-0 w-[14.28%] border-r border-slate-300 p-0.5 lg:p-1 text-center flex flex-col justify-center last:border-r-0 ${isToday ? 'bg-pink-50/50' : 'bg-transparent'}`}>
+                              <div key={day} className={`min-w-0 flex-1 border-r border-slate-300 p-0.5 lg:p-1 text-center flex flex-col justify-center last:border-r-0 ${isToday ? 'bg-pink-50/50' : 'bg-transparent'}`}>
                                 <div className="flex justify-center items-center gap-0.5 mb-0.5">
                                   <span className={`font-black text-[8px] lg:text-[10px] ${isToday ? 'text-pink-600' : i===5?'text-sky-500':i===6?'text-rose-400':'text-slate-600'}`}>{day}</span>
                                   {activeTab === 'weekly' && ( <span className={`text-[7px] lg:text-[8px] font-bold px-1 py-0.5 rounded-full shadow-sm ${isToday ? 'bg-pink-400 text-white shadow-pink-200' : 'text-slate-600 bg-white border border-slate-200'}`}>{d.getDate()}{isToday && ' (今日)'}</span> )}
@@ -1290,13 +1258,16 @@
                         <div className="flex-1 flex flex-col bg-white overflow-y-auto">
                           {ROWS.filter(r => r.id !== 'diary').map((row, rowIndex) => {
                             let rowBg = 'hover:bg-slate-50/50'; 
-                            let rowHeight = 'h-10 sm:h-12 lg:h-[3.6rem]'; 
-                            let isFlex1 = false;
+                            // 🌟 1限〜6限は、余った画面スペースを吸収して自動的に拡大する（flex-1）
+                            let rowHeight = 'min-h-[2.5rem] lg:min-h-[3.5rem]'; 
+                            let flexClass = 'flex-1'; 
                             
-                            if (row.id === 'lunch') { rowBg = 'bg-amber-50/30 hover:bg-amber-50/60'; rowHeight = 'h-5 sm:h-6 lg:h-6'; } 
-                            else if (row.id === 'morning') { rowBg = 'bg-yellow-50/30 hover:bg-yellow-50/60'; rowHeight = 'h-6 sm:h-7 lg:h-7'; } 
-                            else if (row.id === 'event') { rowHeight = 'h-6 sm:h-7 lg:h-8'; }
-                            else if (row.id === 'afterschool') { rowHeight = 'min-h-[30px] lg:min-h-[40px]'; isFlex1 = true; } 
+                            // 🌟 朝、行事、昼休は「固定の高さ」にして無駄なスペースを取らない（shrink-0）
+                            // 🌟 放課後は授業枠の1.5倍の高さ・伸び率に設定
+                            if (row.id === 'lunch') { rowBg = 'bg-amber-50/30 hover:bg-amber-50/60'; rowHeight = 'h-5 sm:h-6 lg:h-7'; flexClass = 'shrink-0'; } 
+                            else if (row.id === 'morning') { rowBg = 'bg-yellow-50/30 hover:bg-yellow-50/60'; rowHeight = 'h-6 sm:h-7 lg:h-8'; flexClass = 'shrink-0'; } 
+                            else if (row.id === 'event') { rowHeight = 'h-6 sm:h-7 lg:h-8'; flexClass = 'shrink-0'; }
+                            else if (row.id === 'afterschool') { rowHeight = 'min-h-[3.75rem] lg:min-h-[5.25rem]'; flexClass = 'flex-[1.5]'; } 
 
                             let headerBg = 'bg-slate-50/80'; let headerTextColor = 'text-slate-600';
                             if (row.id === 'event') { headerBg = 'bg-pink-50/80'; headerTextColor = 'text-pink-600'; }
@@ -1305,7 +1276,7 @@
                             else { headerBg = 'bg-sky-50/40'; headerTextColor = 'text-sky-800'; }
 
                             return (
-                              <div key={row.id} className={`flex ${isFlex1 ? 'flex-1' : 'shrink-0'} ${rowHeight} transition-colors border-b border-slate-300 last:border-b-0 ${rowBg}`}>
+                              <div key={row.id} className={`flex ${flexClass} ${rowHeight} transition-colors border-b border-slate-300 last:border-b-0 ${rowBg}`}>
                                 <div className={`w-8 sm:w-10 lg:w-12 shrink-0 border-r border-slate-300 sticky left-0 z-10 flex flex-col items-center justify-center px-0 text-center backdrop-blur-md ${headerBg}`}>
                                   <span className="text-xs lg:text-sm leading-none mb-0.5 drop-shadow-sm">{row.id === 'event' ? '🚩' : row.id === 'afterschool' ? '🏫' : row.id === 'lunch' ? '🍽️' : row.id === 'morning' ? '☀️' : <span className="text-[10px] lg:text-[12px] text-sky-600/50 font-black">{row.id.replace('p', '')}</span>}</span>
                                   <span className={`text-[6px] lg:text-[7px] font-black leading-none ${headerTextColor}`}>{row.name}</span>
