@@ -222,6 +222,11 @@
       const [documents, setDocuments] = useState([]); 
       const [vacations, setVacations] = useState([]);
       
+      // 🌟 追加：ノート機能のステート
+      const [notesData, setNotesData] = useState([]);
+      const [noteSearchQuery, setNoteSearchQuery] = useState('');
+      const [editingNote, setEditingNote] = useState(null);
+      
       const [quickMemos, setQuickMemos] = useState([]);
       const [showQuickMemoList, setShowQuickMemoList] = useState(false);
       const [handwritingMode, setHandwritingMode] = useState('cell');
@@ -341,6 +346,9 @@
           unsubs.push(onSnapshot(doc(db, 'users', uid, 'teacherPlanner', 'syllabus'), (docSnap) => {
             if (docSnap.exists() && docSnap.data().syllabus) setSyllabusData(docSnap.data().syllabus);
           }));
+          unsubs.push(onSnapshot(doc(db, 'users', uid, 'teacherPlanner', 'notes'), (docSnap) => {
+            if (docSnap.exists() && docSnap.data().notes) setNotesData(docSnap.data().notes);
+          }));
           unsubs.push(onSnapshot(doc(db, 'users', uid, 'teacherPlanner', 'extra'), (docSnap) => {
             if (docSnap.exists()) {
               const d = docSnap.data();
@@ -390,6 +398,7 @@
       const saveTodos = async (newTodos) => { setTodos(newTodos); saveToFirestore('todos', { todos: newTodos }); };
       const saveQuickMemos = async (newMemos) => { setQuickMemos(newMemos); saveToFirestore('quickMemos', { memos: newMemos }); };
       const saveSyllabus = async (newSyllabus) => { setSyllabusData(newSyllabus); saveToFirestore('syllabus', { syllabus: newSyllabus }); };
+      const saveNotes = async (newNotes) => { setNotesData(newNotes); saveToFirestore('notes', { notes: newNotes }); };
 
       const showToast = (msg) => {
         setToastMessage(msg);
@@ -619,7 +628,6 @@
       };
 
       const openEditModal = (cellData, dateStr, row, dayIndex, dayName, isHoliday, defaultTime, isWeekend = false) => {
-        // 📱 スマホ時は編集画面を開かない（閲覧モード）
         if (isMobile) return;
 
         if (row.id === 'afterschool') {
@@ -657,6 +665,20 @@
          const changedSubj = updated.find(s => s.id === id);
          const unit = changedSubj.units[changedSubj.currentUnitIdx];
          setTempSubject(`${changedSubj.name}（${unit.name} ${changedSubj.currentHour}/${unit.hours}）`);
+      };
+      
+      const handleSaveNote = () => {
+         if (!editingNote.title.trim() && !editingNote.content.trim()) { setEditingNote(null); return; }
+         const isNew = !notesData.some(n => n.id === editingNote.id);
+         const timestamp = Date.now();
+         let newNotes;
+         if (isNew) {
+           newNotes = [{ ...editingNote, updatedAt: timestamp }, ...notesData];
+         } else {
+           newNotes = notesData.map(n => n.id === editingNote.id ? { ...editingNote, updatedAt: timestamp } : n);
+         }
+         saveNotes(newNotes);
+         setEditingNote(null);
       };
 
       const exportICS = async (type) => {
@@ -946,12 +968,16 @@
                 )}
               </div>
 
-              {/* タブメニュー */}
+              {/* 🌟 タブメニュー (「ノート」を復活) */}
               <div className="flex items-center gap-1 shrink-0 ml-auto">
-                <div className="flex bg-black/10 rounded-lg sm:rounded-xl p-0.5 backdrop-blur-md overflow-x-auto hide-scrollbar max-w-[55vw] lg:max-w-[40vw] items-center shadow-inner border border-white/10">
+                <div className="flex bg-black/10 rounded-lg sm:rounded-xl p-0.5 backdrop-blur-md overflow-x-auto hide-scrollbar max-w-[65vw] lg:max-w-[50vw] items-center shadow-inner border border-white/10">
                   <button onClick={() => setActiveTab('yearly')} className={`px-2 py-0.5 sm:py-1 rounded-md sm:rounded-lg text-[8px] sm:text-[10px] font-bold transition-all whitespace-nowrap ${activeTab === 'yearly' ? 'bg-white text-purple-500 shadow-sm' : 'text-white/80 hover:text-white hover:bg-white/10'}`}>年間</button>
                   <button onClick={() => setActiveTab('monthly')} className={`px-2 py-0.5 sm:py-1 rounded-md sm:rounded-lg text-[8px] sm:text-[10px] font-bold transition-all whitespace-nowrap ${activeTab === 'monthly' ? 'bg-white text-purple-500 shadow-sm' : 'text-white/80 hover:text-white hover:bg-white/10'}`}>月間</button>
                   <button onClick={() => setActiveTab('weekly')} className={`px-2.5 py-0.5 sm:py-1 mx-0.5 rounded-md sm:rounded-lg text-[9px] sm:text-[11px] font-black transition-all whitespace-nowrap shadow-md ${activeTab === 'weekly' ? 'bg-yellow-100 text-yellow-700 scale-105 shadow-[0_2px_10px_rgba(253,230,138,0.4)]' : 'bg-white/10 text-white hover:bg-white/20 border border-white/10'}`}>📝 週案</button>
+                  
+                  {/* ノート機能復活 */}
+                  <button onClick={() => setActiveTab('notes')} className={`px-2 py-0.5 sm:py-1 rounded-md sm:rounded-lg text-[8px] sm:text-[10px] font-bold transition-all whitespace-nowrap ${activeTab === 'notes' ? 'bg-white text-purple-500 shadow-sm' : 'text-white/80 hover:text-white hover:bg-white/10'}`}>ノート</button>
+                  
                   <button onClick={() => setActiveTab('syllabus')} className={`px-2 py-0.5 sm:py-1 rounded-md sm:rounded-lg text-[8px] sm:text-[10px] font-bold transition-all whitespace-nowrap ${activeTab === 'syllabus' ? 'bg-white text-purple-500 shadow-sm' : 'text-white/80 hover:text-white hover:bg-white/10'}`}>進度</button>
                   <button onClick={() => setActiveTab('documents')} className={`px-2 py-0.5 sm:py-1 rounded-md sm:rounded-lg text-[8px] sm:text-[10px] font-bold transition-all whitespace-nowrap ${activeTab === 'documents' ? 'bg-white text-purple-500 shadow-sm' : 'text-white/80 hover:text-white hover:bg-white/10'}`}>資料</button>
                   <button onClick={() => setActiveTab('template')} className={`px-2 py-0.5 sm:py-1 rounded-md sm:rounded-lg text-[8px] sm:text-[10px] font-bold transition-all whitespace-nowrap ${activeTab === 'template' ? 'bg-white text-purple-500 shadow-sm' : 'text-white/80 hover:text-white hover:bg-white/10'}`}>基本</button>
@@ -1022,6 +1048,66 @@
                       ))}
                     </tbody>
                   </table>
+                </div>
+              </div>
+            )}
+
+            {/* 🌟 検索できるノート機能 */}
+            {activeTab === 'notes' && (
+              <div className="flex-1 overflow-y-auto p-4 sm:p-6 pb-8 sm:pb-8 bg-slate-50/50">
+                <div className="max-w-4xl mx-auto space-y-6 h-full flex flex-col">
+                  <div className="bg-white rounded-[2rem] p-6 sm:p-8 shadow-[0_8px_30px_rgb(0,0,0,0.03)] border border-sky-100 flex flex-col flex-1 min-h-[70vh]">
+                    <h2 className="text-xl sm:text-2xl font-black text-slate-700 flex items-center gap-3 mb-2 shrink-0"><span className="text-3xl drop-shadow-sm">📓</span> ノート・長文メモ</h2>
+                    <p className="text-xs text-slate-400 font-bold mb-6 ml-1 shrink-0">会議の記録や生徒の様子など、後から検索したい長文メモを残せます。</p>
+                    
+                    {editingNote !== null ? (
+                      <div className="flex-1 flex flex-col gap-4 animate-in fade-in duration-300">
+                         <input type="text" value={editingNote.title} onChange={e => setEditingNote({...editingNote, title: e.target.value})} placeholder="ノートのタイトル" className="text-lg sm:text-xl font-black p-4 border border-slate-200/60 rounded-2xl focus:ring-4 focus:ring-sky-50 focus:border-sky-300 outline-none bg-slate-50/50" autoFocus />
+                         <textarea value={editingNote.content} onChange={e => setEditingNote({...editingNote, content: e.target.value})} placeholder="内容を入力..." className="flex-1 p-4 text-sm font-medium border border-slate-200/60 rounded-2xl resize-none focus:ring-4 focus:ring-sky-50 focus:border-sky-300 outline-none min-h-[30vh] bg-slate-50/50 leading-relaxed" />
+                         <div className="flex justify-end gap-3 shrink-0 pt-2">
+                           <button onClick={() => setEditingNote(null)} className="px-5 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 font-black text-sm transition-colors">キャンセル</button>
+                           <button onClick={handleSaveNote} className="px-8 py-3 rounded-xl bg-sky-400 hover:bg-sky-500 text-white font-black text-sm shadow-lg shadow-sky-200 active:scale-95 transition-all">保存する</button>
+                         </div>
+                      </div>
+                    ) : (
+                      <div className="flex-1 flex flex-col min-h-0 animate-in fade-in duration-300">
+                         <div className="flex flex-col sm:flex-row gap-3 mb-6 shrink-0">
+                            <div className="flex-1 relative">
+                               <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg">🔍</span>
+                               <input type="text" value={noteSearchQuery} onChange={e => setNoteSearchQuery(e.target.value)} placeholder="ノートを検索..." className="w-full pl-11 pr-4 py-3 bg-white border border-slate-200 rounded-xl font-bold outline-none focus:ring-4 focus:ring-sky-50 focus:border-sky-300 transition-all shadow-sm" />
+                            </div>
+                            <button onClick={() => setEditingNote({id: Date.now().toString(), title: '', content: ''})} className="bg-sky-400 hover:bg-sky-500 text-white font-black px-6 py-3 rounded-xl shadow-md shadow-sky-200 transition-all active:scale-95 shrink-0 flex items-center justify-center gap-2">
+                               <span className="text-lg leading-none">＋</span> <span className="sm:inline">新規作成</span>
+                            </button>
+                         </div>
+                         
+                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 overflow-y-auto pb-4 pr-1">
+                            {notesData
+                              .filter(n => (n.title || '').toLowerCase().includes(noteSearchQuery.toLowerCase()) || (n.content || '').toLowerCase().includes(noteSearchQuery.toLowerCase()))
+                              .sort((a,b) => b.updatedAt - a.updatedAt)
+                              .map(note => (
+                               <div key={note.id} onClick={() => setEditingNote({...note})} className="border border-slate-200/60 rounded-2xl p-5 hover:border-sky-300 hover:shadow-md transition-all cursor-pointer bg-white group flex flex-col h-44 shadow-sm relative">
+                                  <div className="font-black text-slate-700 text-base mb-2 truncate pr-6">{note.title || '無題のノート'}</div>
+                                  <div className="text-xs text-slate-500 line-clamp-4 mb-auto whitespace-pre-wrap leading-relaxed">{note.content}</div>
+                                  <div className="text-[10px] font-bold text-slate-400 mt-3 pt-3 border-t border-slate-100 flex justify-between items-center">
+                                    {new Date(note.updatedAt).toLocaleDateString('ja-JP')}
+                                    <button onClick={(e) => { e.stopPropagation(); if(confirm('本当に削除しますか？')) { saveNotes(notesData.filter(n => n.id !== note.id)); } }} className="text-rose-400 hover:text-rose-600 hover:bg-rose-50 px-2 py-1 rounded transition-colors absolute right-3 bottom-3 opacity-0 group-hover:opacity-100">削除</button>
+                                  </div>
+                               </div>
+                            ))}
+                            {notesData.length === 0 && !noteSearchQuery && (
+                               <div className="col-span-full py-16 text-center flex flex-col items-center justify-center text-slate-400 bg-slate-50/50 rounded-2xl border border-slate-200/60 border-dashed">
+                                 <span className="text-4xl mb-3 drop-shadow-sm grayscale opacity-50">📓</span>
+                                 <span className="text-sm font-black">まだノートがありません。右上の「新規作成」から書き始めましょう！</span>
+                               </div>
+                            )}
+                            {notesData.length > 0 && notesData.filter(n => (n.title || '').toLowerCase().includes(noteSearchQuery.toLowerCase()) || (n.content || '').toLowerCase().includes(noteSearchQuery.toLowerCase())).length === 0 && (
+                               <div className="col-span-full py-12 text-center text-slate-400 font-bold bg-slate-50 rounded-2xl border border-slate-100">「{noteSearchQuery}」に一致するノートは見つかりませんでした。</div>
+                            )}
+                         </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
