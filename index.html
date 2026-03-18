@@ -1320,49 +1320,81 @@
                   <button onClick={() => { const today = new Date(); setCurrentMonth(new Date(today.getFullYear(), today.getMonth(), 1)); setCurrentWeekStart(getMonday(today)); }} className="text-xs font-black text-sky-600 bg-sky-50 border border-sky-100 px-4 py-2 rounded-xl hover:bg-sky-100 transition-colors shadow-sm">今月</button>
                 </div>
                 <div className="flex-1 flex flex-col p-2 sm:p-4 overflow-hidden">
-                  <div className="grid grid-cols-7 gap-2 text-center mb-2 shrink-0">
-                    {DAYS.map((d, i) => (<div key={d} className={`text-xs font-black py-1 bg-white rounded-lg shadow-sm border border-slate-100 ${i===5?'text-sky-500':i===6?'text-rose-500':'text-slate-600'}`}>{d}</div>))}
-                  </div>
                   
-                  <div className="grid grid-cols-7 grid-rows-6 gap-1 sm:gap-2 flex-1 min-h-0 overflow-y-auto pb-8">
-                    {getCalendarDays().map((dayObj, i) => {
-                      const dateStr = formatDate(dayObj.date); const isCurrentMonth = dayObj.isCurrentMonth; const isToday = dateStr === formatDate(new Date());
-                      let dayIdx = dayObj.date.getDay() - 1; if(dayIdx === -1) dayIdx = 6;
-                      const dailyEvents = getDailyEvents(dateStr, dayIdx); 
-                      const isVac = vacations.some(v => dateStr >= v.start && dateStr <= v.end);
-                      
-                      const bgClass = isCurrentMonth 
-                        ? (isVac ? 'bg-amber-50/40 border-amber-100 hover:border-amber-300' : 'bg-white border-slate-200/60 hover:border-sky-300')
-                        : 'bg-stone-50/50 border-transparent opacity-60';
-
-                      return (
-                        <div key={i} onClick={() => handleCellClick(dayObj.date)}
-                             className={`min-h-[70px] sm:min-h-[100px] rounded-xl sm:rounded-2xl border p-1 sm:p-2 flex flex-col overflow-hidden transition-all cursor-pointer group shadow-sm hover:shadow-md ${bgClass} ${isToday ? 'ring-2 ring-pink-300 ring-offset-1' : ''}`}>
-                            <div className="flex justify-between items-start mb-1 shrink-0">
-                              <button type="button" onClick={(e) => handleNumberClick(e, dayObj.date, dateStr)}
-                                className={`text-[10px] sm:text-xs font-black w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center rounded-full shadow-sm transition-transform hover:scale-110 relative z-10 ${isToday ? 'bg-pink-400 text-white shadow-pink-200' : 'bg-slate-50 text-slate-600 border border-slate-200 hover:bg-sky-100 hover:text-sky-600 hover:border-sky-200'}`} title="予定一覧を見る">
-                                {dayObj.date.getDate()}
-                              </button>
-                            </div>
-                            
-                            <div className="flex-1 overflow-y-auto space-y-1 pr-0.5 mt-0.5 hide-scrollbar min-h-0">
-                              {dailyEvents.map((ev, idx) => {
-                                let styleClass = 'bg-slate-50 text-slate-600 border-slate-100';
-                                let icon = '';
-                                
-                                if (ev.type === 'event') { styleClass = 'bg-pink-50 text-pink-600 border-pink-100'; icon = '🚩 '; }
-                                else if (ev.type === 'todo') { styleClass = 'bg-teal-50 text-teal-600 border-teal-100'; icon = '✅ '; }
-                                
-                                return (
-                                  <div key={idx} className={`text-[8.5px] sm:text-[10px] font-bold rounded-md px-1 sm:px-1.5 py-0.5 sm:py-1 leading-tight border shadow-[0_1px_2px_rgb(0,0,0,0.02)] ${styleClass}`}>
-                                    <div className="truncate">{icon}{ev.text}</div>
-                                  </div>
-                                );
-                              })}
-                            </div>
+                  {/* 🌟 月間カレンダーを隙間のないグリッド（表）形式にリニューアル */}
+                  <div className="bg-white rounded-2xl sm:rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.03)] border-2 border-slate-200 overflow-hidden flex flex-col flex-1 min-h-0">
+                    
+                    {/* 曜日ヘッダー */}
+                    <div className="grid grid-cols-7 border-b-2 border-slate-200 bg-slate-50/80 shrink-0">
+                      {DAYS.map((d, i) => (
+                        <div key={d} className={`text-[10px] sm:text-xs font-black py-1.5 sm:py-2 text-center border-r border-slate-200 last:border-r-0 ${i===5?'text-sky-500':i===6?'text-rose-500':'text-slate-500'}`}>
+                          {d}
                         </div>
-                      )
-                    })}
+                      ))}
+                    </div>
+                    
+                    {/* カレンダー本体（6行7列） */}
+                    <div className="grid grid-cols-7 grid-rows-6 flex-1 min-h-0">
+                      {getCalendarDays().map((dayObj, i) => {
+                        const dateStr = formatDate(dayObj.date); const isCurrentMonth = dayObj.isCurrentMonth; const isToday = dateStr === formatDate(new Date());
+                        let dayIdx = dayObj.date.getDay() - 1; if(dayIdx === -1) dayIdx = 6;
+                        const dailyEvents = getDailyEvents(dateStr, dayIdx); 
+                        const isVac = vacations.some(v => dateStr >= v.start && dateStr <= v.end);
+                        
+                        const isSun = dayIdx === 6;
+                        const isSat = dayIdx === 5;
+                        
+                        // 背景色の設定
+                        let bgClass = 'bg-white';
+                        if (!isCurrentMonth) {
+                          bgClass = 'bg-slate-50/50';
+                        } else if (isVac) {
+                          bgClass = isSun ? 'bg-rose-50/30' : isSat ? 'bg-sky-50/30' : 'bg-amber-50/30';
+                        } else if (isSun) {
+                          bgClass = 'bg-rose-50/10';
+                        } else if (isSat) {
+                          bgClass = 'bg-sky-50/10';
+                        }
+
+                        // 罫線の設定（一番下と一番右の罫線は消す）
+                        const isBottomRow = i >= 35;
+                        const isRightCol = (i + 1) % 7 === 0;
+
+                        return (
+                          <div key={i} onClick={() => handleCellClick(dayObj.date)}
+                               className={`p-1 sm:p-1.5 flex flex-col overflow-hidden cursor-pointer group hover:bg-slate-50 transition-colors relative
+                               ${bgClass} ${!isBottomRow ? 'border-b border-slate-200' : ''} ${!isRightCol ? 'border-r border-slate-200' : ''}`}>
+                              
+                              <div className="flex justify-between items-start mb-0.5 sm:mb-1 shrink-0">
+                                <button type="button" onClick={(e) => handleNumberClick(e, dayObj.date, dateStr)}
+                                  className={`text-[10px] sm:text-xs font-black w-5 h-5 sm:w-6 sm:h-6 flex items-center justify-center rounded-full transition-transform hover:scale-110 relative z-10 
+                                  ${isToday ? 'bg-pink-400 text-white shadow-md' : isCurrentMonth ? (isSun ? 'text-rose-500' : isSat ? 'text-sky-500' : 'text-slate-600 hover:bg-slate-100') : 'text-slate-300'}`} title="予定一覧を見る">
+                                  {dayObj.date.getDate()}
+                                </button>
+                              </div>
+                              
+                              <div className="flex-1 overflow-y-auto space-y-0.5 pr-0.5 hide-scrollbar min-h-0">
+                                {dailyEvents.map((ev, idx) => {
+                                  let styleClass = 'bg-slate-100 text-slate-600 border-slate-200';
+                                  let icon = '';
+                                  
+                                  if (ev.type === 'event') { styleClass = 'bg-pink-100 text-pink-700 border-pink-200'; icon = '🚩'; }
+                                  else if (ev.type === 'todo') { styleClass = 'bg-teal-100 text-teal-700 border-teal-200'; icon = '✅'; }
+                                  
+                                  return (
+                                    <div key={idx} className={`text-[8.5px] sm:text-[10px] font-bold rounded px-1 py-0.5 truncate border shadow-sm ${styleClass}`}>
+                                      <span className="mr-0.5 opacity-80">{icon}</span>{ev.text}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                              
+                              {/* 今日の枠線ハイライト */}
+                              {isToday && <div className="absolute inset-0 border-2 border-pink-400 pointer-events-none z-20"></div>}
+                          </div>
+                        )
+                      })}
+                    </div>
                   </div>
                 </div>
               </div>
