@@ -625,6 +625,60 @@
       const [documents, setDocuments] = useState([]);
       const [vacations, setVacations] = useState([]);
       
+      // Undo/Redo 履歴
+      const undoStack = useRef([]);
+      const redoStack = useRef([]);
+      const isUndoRedo = useRef(false);
+      const MAX_HISTORY = 30;
+      
+      const pushUndo = (snapshot) => {
+        if (isUndoRedo.current) return;
+        undoStack.current = [...undoStack.current.slice(-MAX_HISTORY + 1), snapshot];
+        redoStack.current = [];
+      };
+      
+      const getCurrentSnapshot = () => ({
+        weeklyData: JSON.parse(JSON.stringify(weeklyData)),
+        weeklySettings: JSON.parse(JSON.stringify(weeklySettings)),
+        todos: JSON.parse(JSON.stringify(todos)),
+        baseTemplate: JSON.parse(JSON.stringify(baseTemplate)),
+        templateSettings: JSON.parse(JSON.stringify(templateSettings)),
+      });
+      
+      const applySnapshot = (snap) => {
+        isUndoRedo.current = true;
+        setWeeklyData(snap.weeklyData);
+        setWeeklySettings(snap.weeklySettings);
+        setTodos(snap.todos);
+        setBaseTemplate(snap.baseTemplate);
+        setTemplateSettings(snap.templateSettings);
+        // Firestoreにも保存
+        saveToFirestore('weekly', { weeklyData: snap.weeklyData, weeklySettings: snap.weeklySettings });
+        saveToFirestore('template', { baseTemplate: snap.baseTemplate, templateSettings: snap.templateSettings });
+        saveToFirestore('todos', { todos: snap.todos });
+        setTimeout(() => { isUndoRedo.current = false; }, 100);
+      };
+      
+      const handleUndo = () => {
+        if (undoStack.current.length === 0) { showToast('これ以上戻れません'); return; }
+        const current = getCurrentSnapshot();
+        redoStack.current = [...redoStack.current, current];
+        const prev = undoStack.current[undoStack.current.length - 1];
+        undoStack.current = undoStack.current.slice(0, -1);
+        applySnapshot(prev);
+        showToast('↩️ 元に戻しました');
+      };
+      
+      const handleRedo = () => {
+        if (redoStack.current.length === 0) { showToast('やり直す操作がありません'); return; }
+        const current = getCurrentSnapshot();
+        undoStack.current = [...undoStack.current, current];
+        const next = redoStack.current[redoStack.current.length - 1];
+        redoStack.current = redoStack.current.slice(0, -1);
+        applySnapshot(next);
+        showToast('↪️ やり直しました');
+      };
+      
       const [notesData, setNotesData] = useState([]);
       const [noteSearchQuery, setNoteSearchQuery] = useState('');
       const [editingNote, setEditingNote] = useState(null);
@@ -659,11 +713,17 @@
         const handleOnline = () => setIsOnline(true);
         const handleOffline = () => setIsOnline(false);
         const handleResize = () => setIsMobile(window.innerWidth < 768);
+        const handleKeyDown = (e) => {
+          if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); handleUndo(); }
+          if ((e.metaKey || e.ctrlKey) && e.key === 'z' && e.shiftKey) { e.preventDefault(); handleRedo(); }
+          if ((e.metaKey || e.ctrlKey) && e.key === 'y') { e.preventDefault(); handleRedo(); }
+        };
         window.addEventListener('online', handleOnline);
         window.addEventListener('offline', handleOffline);
         window.addEventListener('resize', handleResize);
-        return () => { window.removeEventListener('online', handleOnline); window.removeEventListener('offline', handleOffline); window.removeEventListener('resize', handleResize); };
-      }, []);
+        window.addEventListener('keydown', handleKeyDown);
+        return () => { window.removeEventListener('online', handleOnline); window.removeEventListener('offline', handleOffline); window.removeEventListener('resize', handleResize); window.removeEventListener('keydown', handleKeyDown); };
+      }, [weeklyData, weeklySettings, todos, baseTemplate, templateSettings]);
 
       // Firebase初期化
       useEffect(() => {
@@ -732,11 +792,12 @@
       };
 
       const saveAll = async (tData, tSettings, wData, wSettings) => {
+        if (!isUndoRedo.current) pushUndo(getCurrentSnapshot());
         saveToFirestore('template', { baseTemplate: tData, templateSettings: tSettings });
         saveToFirestore('weekly', { weeklyData: wData, weeklySettings: wSettings });
       };
       const saveExtraData = async (ny, nd, nv) => { setYearlyData(ny); setDocuments(nd); setVacations(nv); saveToFirestore('extra', { yearlyData: ny, documents: nd, vacations: nv }); };
-      const saveTodos = async (nt) => { setTodos(nt); saveToFirestore('todos', { todos: nt }); };
+      const saveTodos = async (nt) => { if (!isUndoRedo.current) pushUndo(getCurrentSnapshot()); setTodos(nt); saveToFirestore('todos', { todos: nt }); };
       const saveQuickMemos = async (nm) => { setQuickMemos(nm); saveToFirestore('quickMemos', { memos: nm }); };
       const saveSyllabus = async (ns) => { setSyllabusData(ns); saveToFirestore('syllabus', { syllabus: ns }); };
       const saveNotes = async (nn) => { setNotesData(nn); saveToFirestore('notes', { notes: nn }); };
@@ -1048,6 +1109,11 @@
                 </h1>
                 {!isMobile && (
                   <div className="flex items-center gap-1.5 border-l border-slate-200 pl-3">
+                    <div className="flex items-center bg-slate-50 border border-slate-200 rounded-lg shadow-sm overflow-hidden">
+                      <button onClick={handleUndo} className="px-1.5 py-1 text-slate-400 hover:text-blue-500 hover:bg-blue-50 transition-colors" title="元に戻す (Undo)"><span className="text-xs">↩️</span></button>
+                      <div className="w-px h-4 bg-slate-200"></div>
+                      <button onClick={handleRedo} className="px-1.5 py-1 text-slate-400 hover:text-blue-500 hover:bg-blue-50 transition-colors" title="やり直す (Redo)"><span className="text-xs">↪️</span></button>
+                    </div>
                     <button onClick={() => setShowQuickMemoList(true)} className="bg-slate-50 hover:bg-slate-100 border border-slate-200 px-2 py-1 rounded-lg text-[10px] font-bold text-slate-600 transition-all flex items-center gap-1 shadow-sm active:scale-95" title="クイックメモ"><span className="text-xs">✍️</span><span className="hidden lg:inline">メモ</span></button>
                     <button onClick={() => setShowTodo(true)} className="bg-slate-50 hover:bg-slate-100 border border-slate-200 px-2 py-1 rounded-lg text-[10px] font-bold text-slate-600 transition-all flex items-center gap-1 shadow-sm active:scale-95 relative" title="TODO"><span className="text-xs">📝</span><span className="hidden lg:inline">TODO</span>
                       {todos.filter(t=>!t.completed).length > 0 && <span className="absolute -top-1 -right-1 bg-rose-500 text-white text-[7px] font-black w-3.5 h-3.5 rounded-full flex items-center justify-center shadow border border-white">{todos.filter(t=>!t.completed).length}</span>}
