@@ -660,9 +660,9 @@
 
       return (
         <div className="flex flex-col h-[100dvh] w-full relative overflow-hidden">
-          {toastMessage && <div className="fixed top-16 left-1/2 -translate-x-1/2 bg-slate-800 text-white px-4 py-2 rounded-full z-[300] shadow-lg anim-scale-in font-bold text-sm">{toastMessage}</div>}
+          {toastMessage && <div className="fixed top-[calc(4rem+env(safe-area-inset-top))] left-1/2 -translate-x-1/2 bg-slate-800 text-white px-4 py-2 rounded-full z-[300] shadow-lg anim-scale-in font-bold text-sm">{toastMessage}</div>}
           
-          <header className="h-14 bg-white border-b border-slate-400 flex items-center px-4 sm:px-6 justify-between no-print shrink-0 shadow-sm z-30">
+          <header className="bg-white border-b border-slate-400 flex items-center px-4 sm:px-6 justify-between no-print shrink-0 shadow-sm z-30 pt-[env(safe-area-inset-top)] h-[calc(3.5rem+env(safe-area-inset-top))]">
             <div className="flex items-center gap-3 shrink-0">
               <h1 className="font-black text-blue-700 flex items-center gap-2 text-lg"><LogoIcon className="w-6 h-6"/> <span className="hidden sm:inline">EduPlanner</span></h1>
               
