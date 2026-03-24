@@ -49,14 +49,6 @@
     .anim-scale-in { animation: scaleIn 0.3s ease-out both; }
     .pulse-dot { animation: pulse-dot 2s ease-in-out infinite; }
 
-    @media print {
-      body { background: white !important; font-size: 10pt; }
-      .no-print, header, .glass, aside, [class*="fixed"] { display: none !important; }
-      .print-only { display: block !important; }
-      .print-table { page-break-inside: avoid; }
-      .print-table td, .print-table th { border: 1px solid #333 !important; padding: 4px 6px !important; font-size: 9pt; }
-    }
-    .print-only { display: none; }
     .card-lift { transition: transform 0.2s ease, box-shadow 0.2s ease; }
     .card-lift:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
     @keyframes today-pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4); } 50% { box-shadow: 0 0 0 6px rgba(59, 130, 246, 0); } }
@@ -763,9 +755,6 @@
                             <button onClick={() => exportICS('weekly')} className="text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2.5 py-1.5 rounded-lg hover:bg-blue-100 shadow-sm transition-colors flex items-center gap-1 whitespace-nowrap" title="Googleカレンダー等に出力">
                               📅 カレンダー出力
                             </button>
-                            <button onClick={() => window.print()} className="text-[10px] font-bold text-slate-700 bg-white border border-slate-400 px-2.5 py-1.5 rounded-lg hover:bg-slate-100 shadow-sm transition-colors flex items-center gap-1 whitespace-nowrap">
-                              🖨️ 印刷
-                            </button>
                           </div>
                         )}
                       </div>
@@ -1144,8 +1133,14 @@
                           const y=m<=3?schoolYear+1:schoolYear;const dt=new Date(y,m-1,d);const iv=dt.getDate()===d;const hol=iv?getHolidayName(y,m,d):null;const ut=yearlyData[schoolYear]?.[`${m}-${d}`]||'';
                           return <td key={m} className={`border-r border-slate-300 p-1 sm:p-1.5 align-top overflow-hidden relative ${!iv?'bg-stone-100/50':dt.getDay()===0||hol?'bg-rose-50/60':dt.getDay()===6?'bg-blue-50/30':''}`}>
                             {iv&&<div className="flex flex-col h-full w-full">
-                              <span className={`text-[9px] font-black ${dt.getDay()===0||hol?'text-rose-700':dt.getDay()===6?'text-blue-700':'text-slate-700'}`}>{['日','月','火','水','木','金','土'][dt.getDay()]}</span>
-                              {hol&&<span className="text-[8px] font-black text-rose-700 leading-tight mt-0.5 truncate">{hol}</span>}
+                              <div 
+                                onClick={()=>{setCurrentWeekStart(getMonday(dt));setActiveTab('weekly');}} 
+                                className="cursor-pointer hover:bg-slate-200/60 transition-colors rounded -mx-0.5 px-0.5 flex flex-col"
+                                title="この日の週案を開く"
+                              >
+                                <span className={`text-[9px] font-black ${dt.getDay()===0||hol?'text-rose-700':dt.getDay()===6?'text-blue-700':'text-slate-700'}`}>{['日','月','火','水','木','金','土'][dt.getDay()]}</span>
+                                {hol&&<span className="text-[8px] font-black text-rose-700 leading-tight mt-0.5 truncate">{hol}</span>}
+                              </div>
                               <textarea className={`w-full flex-1 text-[10px] font-bold bg-transparent outline-none resize-none leading-tight mt-1 break-all ${dt.getDay()===0||hol?'text-rose-900':dt.getDay()===6?'text-blue-900':'text-slate-800'}`} value={ut} onChange={e=>saveExtraData({...yearlyData,[schoolYear]:{...(yearlyData[schoolYear]||{}),[`${m}-${d}`]:e.target.value}},documents,vacations)} rows={1} onInput={e=>{e.target.style.height='auto';e.target.style.height=e.target.scrollHeight+'px';}}/>
                             </div>}
                           </td>
