@@ -1025,7 +1025,16 @@
       const currentYearlyData = yearlyData[schoolYear] || {};
       const todayStr = formatDate(new Date());
       
-      const sortedIncompleteTodos = todos.filter(t=>!t.completed).sort((a,b)=>{ if(a.important&&!b.important) return -1; if(!a.important&&b.important) return 1; if(a.dueDate&&b.dueDate) return a.dueDate.localeCompare(b.dueDate); if(a.dueDate) return -1; if(b.dueDate) return 1; return b.id-a.id; });
+      const sortedIncompleteTodos = todos.filter(t=>!t.completed).sort((a,b)=>{ 
+        // 期限あり → 期限なしの順。期限あり同士は日付が近い順
+        if(a.dueDate&&b.dueDate) { const cmp=a.dueDate.localeCompare(b.dueDate); if(cmp!==0) return cmp; }
+        if(a.dueDate&&!b.dueDate) return -1;
+        if(!a.dueDate&&b.dueDate) return 1;
+        // 同じ期限内では重要マーク優先
+        if(a.important&&!b.important) return -1;
+        if(!a.important&&b.important) return 1;
+        return b.id-a.id; 
+      });
 
       const templateClasses = [];
       [0,1,2,3,4].forEach(dIdx => { ['p1','p2','p3','p4','p5','p6'].forEach(pid => { const k=`${dIdx}-${pid}`; const d=baseTemplate[k]; if(d?.subject?.trim()) templateClasses.push({label:`${DAYS[dIdx]}${pid.replace('p','')}`,subject:d.subject,memo:d.memo||''}); }); });
@@ -1627,7 +1636,7 @@
                               else if(row.id==='morning'){headerBg='bg-yellow-50/60';headerText='text-yellow-700';}
 
                               return (
-                                <div key={row.id} className={`flex ${flexClass} ${rowHeight} transition-colors border-b border-slate-500 last:border-b-0 ${rowBg}`}>
+                                <div key={row.id} className={`flex ${flexClass} ${rowHeight} transition-colors border-b border-slate-500 last:border-b-0 ${rowBg} ${row.id==='event'?'relative z-20':''}`}>
                                   <div className={`w-8 sm:w-10 lg:w-12 shrink-0 border-r border-slate-500 sticky left-0 z-20 flex flex-col items-center justify-center ${headerBg}`}>
                                     <span className="text-xs lg:text-sm leading-none mb-0.5">{row.id.startsWith('p') ? <span className={`text-[10px] lg:text-[12px] ${headerText} font-black opacity-50`}>{row.id.replace('p','')}</span> : row.icon}</span>
                                     <span className={`text-[6px] lg:text-[7px] font-bold ${headerText}`}>{row.name}</span>
@@ -1760,7 +1769,7 @@
                             <button onClick={() => setShowTodo(true)} className="text-[8px] lg:text-[10px] font-bold bg-white border border-slate-500 text-slate-500 hover:text-blue-600 hover:border-blue-200 px-2 py-1 rounded-md transition-colors">詳細</button>
                           </div>
                           <div className="flex-1 overflow-y-auto p-1.5 space-y-1">
-                            {todos.filter(t=>!t.completed).map(t => {
+                            {sortedIncompleteTodos.map(t => {
                               const isOverdue=t.dueDate&&t.dueDate<todayStr;
                               return (
                                 <div key={t.id} className={`flex items-start gap-1.5 p-1.5 rounded-lg border shadow-sm ${t.important?'bg-amber-50/30 border-amber-200':isOverdue?'bg-rose-50/30 border-rose-200':'bg-slate-50/50 border-slate-500'}`}>
@@ -1772,7 +1781,7 @@
                                 </div>
                               );
                             })}
-                            {todos.filter(t=>!t.completed).length===0&&<div className="text-center text-[10px] text-slate-400 font-bold py-4">完了 ✨</div>}
+                            {sortedIncompleteTodos.length===0&&<div className="text-center text-[10px] text-slate-400 font-bold py-4">完了 ✨</div>}
                           </div>
                         </div>
                       </div>
@@ -1784,7 +1793,7 @@
                       <div className="bg-white rounded-xl shadow-sm border border-slate-500 flex flex-col overflow-hidden">
                         <div className="bg-slate-50/80 px-2 py-1.5 border-b border-slate-500 font-black text-[10px] text-slate-600 flex items-center gap-1.5 shrink-0">☑️ ToDo</div>
                         <div className="p-1.5 space-y-1">
-                          {todos.filter(t=>!t.completed).map(t => (
+                          {sortedIncompleteTodos.map(t => (
                             <div key={t.id} className={`flex items-start gap-1.5 p-1.5 rounded-lg border shadow-sm ${t.important?'bg-amber-50/30 border-amber-200':'bg-slate-50/50 border-slate-500'}`}>
                               <div className="flex-1 flex flex-col pt-0.5 overflow-hidden">
                                 <span className="text-[9px] font-black leading-tight truncate text-slate-700">{t.important&&<span className="text-amber-500 mr-0.5">★</span>}{t.text}</span>
@@ -1792,7 +1801,7 @@
                               </div>
                             </div>
                           ))}
-                          {todos.filter(t=>!t.completed).length===0&&<div className="text-center text-[10px] text-slate-400 font-bold py-4">完了 ✨</div>}
+                          {sortedIncompleteTodos.length===0&&<div className="text-center text-[10px] text-slate-400 font-bold py-4">完了 ✨</div>}
                         </div>
                       </div>
                     </div>
