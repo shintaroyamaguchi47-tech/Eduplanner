@@ -189,7 +189,7 @@
     // ============================
     const Dashboard = ({ weeklyData, baseTemplate, todos, syllabusData, yearlyData, vacations, weeklySettings, templateSettings, onGoToWeekly, onGoToDate }) => {
       const today = new Date(); const todayStr = formatDate(today); let dayIdx = today.getDay() - 1; if (dayIdx === -1) dayIdx = 6;
-      const getDaySetting = (ds, di) => weeklySettings[ds] || vacations.find(v => ds >= v.start && ds <= v.end) ? { type:'holiday' } : templateSettings[di] || DEFAULT_TEMPLATE_SETTINGS[di];
+      const getDaySetting = (ds, di) => vacations.find(v => ds >= v.start && ds <= v.end) ? { type:'holiday' } : (weeklySettings[ds] || templateSettings[di] || DEFAULT_TEMPLATE_SETTINGS[di]);
       const setting = getDaySetting(todayStr, dayIdx);
       
       const getCellData = (ds, pid, di) => {
@@ -576,7 +576,7 @@
         try { const file = new File([blob], fileName, { type: 'text/calendar' }); if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ title: '週案の予定', files: [file] }); } else { throw new Error('Share API not supported'); } } catch (e) { if (e.name !== 'AbortError') { const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = fileName; document.body.appendChild(link); link.click(); document.body.removeChild(link); } }
       };
 
-      const getDaySetting = (ds, di) => weeklySettings[ds] || vacations.find(v=>ds>=v.start&&ds<=v.end) ? {type:'holiday'} : templateSettings[di] || DEFAULT_TEMPLATE_SETTINGS[di];
+      const getDaySetting = (ds, di) => vacations.find(v=>ds>=v.start&&ds<=v.end) ? {type:'holiday'} : (weeklySettings[ds] || templateSettings[di] || DEFAULT_TEMPLATE_SETTINGS[di]);
       const getCellData = (ds, pid, di) => { const wk=`${ds}-${pid}`; const tk=`${di}-${pid}`; let base=baseTemplate[tk]||{subject:'',memo:''}; if(pid==='event'&&activeTab!=='template'){ const [y,m,d]=ds.split('-').map(Number); const sy=m<4?y-1:y; const ye=yearlyData[sy]?.[`${m}-${d}`]; if(ye) base={...base,subject:ye}; } if(activeTab==='template') return base; const set=getDaySetting(ds,di); if(set.type==='holiday'&&(pid.startsWith('p')||pid==='morning'||pid==='lunch')) base={subject:'',memo:''}; const ov=weeklyData[wk]; if(ov&&!ov.useTemplate) { if(pid==='event'&&!ov.subject&&base.subject) return {...ov,subject:base.subject}; return ov; } return base; };
       const getPeriodTime = (setting, pid) => SCHEDULE_TIMES[setting.type]?.[pid];
       const handleSettingChange = (ds, di, ns) => { if(activeTab==='template'){ const n={...templateSettings,[di]:ns}; setTemplateSettings(n); saveAll(baseTemplate,n,weeklyData,weeklySettings); } else { const n={...weeklySettings,[ds]:ns}; setWeeklySettings(n); saveAll(baseTemplate,templateSettings,weeklyData,n); } };
