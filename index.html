@@ -111,6 +111,7 @@
     const formatDate = (date) => `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
     const getDurationMinutes = (start, end) => { if(!start||!end) return 45; const [sh,sm]=start.split(':').map(Number); const [eh,em]=end.split(':').map(Number); const diff=(eh*60+em)-(sh*60+sm); return diff>0?diff:45; };
     const parseUnits = (text) => { if(!text) return []; return text.split('\n').filter(l=>l.trim()!=='').map(l => { const p=l.split(','); return {name:p[0]?.trim()||'',hours:parseInt(p[1])||1}; }); };
+    const formatUnits = (units) => { if(!units) return ''; return units.map(u=>`${u.name},${u.hours}`).join('\n'); };
 
     const FIREBASE_CONFIG = { apiKey: "AIzaSyAdOREqv-PvjtjJ__7PwhpVyfcJxmdXPAs", authDomain: "eduplanner-v2.firebaseapp.com", projectId: "eduplanner-v2", storageBucket: "eduplanner-v2.firebasestorage.app", messagingSenderId: "931393732389", appId: "1:931393732389:web:60d39fec28a2a2e179e4cc" };
 
@@ -441,6 +442,16 @@
       const showToast = (msg) => { setToastMessage(msg); setTimeout(() => setToastMessage(''), 3000); };
       const handleAuthSubmit = async (e) => { e.preventDefault(); setAuthError(''); try { const {signInWithEmailAndPassword,createUserWithEmailAndPassword} = await _importDynamic("https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js"); if(isRegistering) await createUserWithEmailAndPassword(window.__firebaseAuth, authEmail, authPassword); else await signInWithEmailAndPassword(window.__firebaseAuth, authEmail, authPassword); } catch(err) { setAuthError(err.message); } };
       
+      const handleLogout = async () => {
+        try {
+          const { getAuth, signOut } = await _importDynamic("https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js");
+          await signOut(window.__firebaseAuth);
+          showToast('ログアウトしました');
+        } catch (e) {
+          showToast('ログアウトに失敗しました');
+        }
+      };
+
       const changeWeek = (offset) => { const nd = new Date(currentWeekStart); nd.setDate(nd.getDate()+offset*7); setCurrentWeekStart(nd); };
       
       const copyFromPreviousWeek = () => {
@@ -458,6 +469,63 @@
         }
         setWeeklyData(nextData); setWeeklySettings(nextSettings); saveAll(baseTemplate, templateSettings, nextData, nextSettings);
         showToast(`📋 前週から${copied}件コピーしました`);
+      };
+
+      // データのエクスポート
+      const exportData = () => {
+        const data = {
+          baseTemplate, templateSettings, weeklyData, weeklySettings,
+          todos, yearlyData, documents, vacations, notesData, syllabusData, quickMemos
+        };
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `EduPlanner_Backup_${formatDate(new Date())}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showToast('バックアップをダウンロードしました');
+      };
+
+      // データのインポート
+      const importData = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          try {
+            const data = JSON.parse(event.target.result);
+            if (confirm('現在のデータが上書きされます。よろしいですか？')) {
+              if (data.baseTemplate) setBaseTemplate(data.baseTemplate);
+              if (data.templateSettings) setTemplateSettings(data.templateSettings);
+              if (data.weeklyData) setWeeklyData(data.weeklyData);
+              if (data.weeklySettings) setWeeklySettings(data.weeklySettings);
+              if (data.todos) setTodos(data.todos);
+              if (data.yearlyData) setYearlyData(data.yearlyData);
+              if (data.documents) setDocuments(data.documents);
+              if (data.vacations) setVacations(data.vacations);
+              if (data.notesData) setNotesData(data.notesData);
+              if (data.syllabusData) setSyllabusData(data.syllabusData);
+              if (data.quickMemos) setQuickMemos(data.quickMemos);
+              
+              // サーバーにも保存
+              saveToFirestore('template', { baseTemplate: data.baseTemplate, templateSettings: data.templateSettings });
+              saveToFirestore('weekly', { weeklyData: data.weeklyData, weeklySettings: data.weeklySettings });
+              saveToFirestore('todos', { todos: data.todos });
+              saveToFirestore('notes', { notes: data.notesData });
+              saveToFirestore('syllabus', { syllabus: data.syllabusData });
+              saveToFirestore('extra', { yearlyData: data.yearlyData, documents: data.documents, vacations: data.vacations });
+              saveToFirestore('quickMemos', { memos: data.quickMemos });
+
+              showToast('データを復元しました');
+            }
+          } catch(err) {
+            showToast('ファイルの読み込みに失敗しました');
+          }
+        };
+        reader.readAsText(file);
       };
 
       const exportICS = async (type) => {
@@ -507,10 +575,19 @@
 
       const getDaySetting = (ds, di) => weeklySettings[ds] || vacations.find(v=>ds>=v.start&&ds<=v.end) ? {type:'holiday'} : templateSettings[di] || DEFAULT_TEMPLATE_SETTINGS[di];
       const getCellData = (ds, pid, di) => { const wk=`${ds}-${pid}`; const tk=`${di}-${pid}`; let base=baseTemplate[tk]||{subject:'',memo:''}; if(pid==='event'&&activeTab!=='template'){ const [y,m,d]=ds.split('-').map(Number); const sy=m<4?y-1:y; const ye=yearlyData[sy]?.[`${m}-${d}`]; if(ye) base={...base,subject:ye}; } if(activeTab==='template') return base; const set=getDaySetting(ds,di); if(set.type==='holiday'&&(pid.startsWith('p')||pid==='morning'||pid==='lunch')) base={subject:'',memo:''}; const ov=weeklyData[wk]; if(ov&&!ov.useTemplate) { if(pid==='event'&&!ov.subject&&base.subject) return {...ov,subject:base.subject}; return ov; } return base; };
+      const getPeriodTime = (setting, pid) => SCHEDULE_TIMES[setting.type]?.[pid];
       const handleSettingChange = (ds, di, ns) => { if(activeTab==='template'){ const n={...templateSettings,[di]:ns}; setTemplateSettings(n); saveAll(baseTemplate,n,weeklyData,weeklySettings); } else { const n={...weeklySettings,[ds]:ns}; setWeeklySettings(n); saveAll(baseTemplate,templateSettings,weeklyData,n); } };
+      
       const handleSaveCell = (d) => { if(!editingCell.isTemplate && d.subject){ let up=[...syllabusData]; let ch=false; for(let i=0;i<up.length;i++){ let s=up[i]; if(s.type==='auto'&&s.units?.[s.currentUnitIdx]){ const exp=`${s.name}（${s.units[s.currentUnitIdx].name} ${s.currentHour}/${s.units[s.currentUnitIdx].hours}）`; if(d.subject===exp){ let nh=s.currentHour+1; let nu=s.currentUnitIdx; if(nh>s.units[s.currentUnitIdx].hours){nh=1;nu++;} up[i]={...s,currentHour:nh,currentUnitIdx:nu}; ch=true; break; } }else if(s.type==='history'){ const m=d.subject.match(new RegExp(`^${s.name}（(.+)）$`)); if(m){ let h=s.history||[]; if(!h.includes(m[1])){ up[i]={...s,history:[m[1],...h].slice(0,15)}; ch=true; } } } } if(ch) saveSyllabus(up); } if(editingCell.isTemplate){ const n={...baseTemplate,[`${editingCell.dayIndex}-${editingCell.periodId}`]:d}; saveAll(n,templateSettings,weeklyData,weeklySettings); } else { const n={...weeklyData,[`${editingCell.dateStr}-${editingCell.periodId}`]:{...d,useTemplate:false}}; saveAll(baseTemplate,templateSettings,n,weeklySettings); } setEditingCell(null); };
       
       const handleCopyDay = (target,source) => { if(source==='') return; const sIdx=parseInt(source); const ns={...weeklySettings,[target]:templateSettings[sIdx]||DEFAULT_TEMPLATE_SETTINGS[sIdx]}; const nd={...weeklyData}; ROWS.forEach(r=>{ nd[`${target}-${r.id}`]={...(baseTemplate[`${sIdx}-${r.id}`]||{}),useTemplate:false}; }); setWeeklySettings(ns); setWeeklyData(nd); saveAll(baseTemplate,templateSettings,nd,ns); };
+      const handleRevertDay = (target) => {
+        const nd = {...weeklyData}; const ns = {...weeklySettings};
+        delete ns[target];
+        ROWS.forEach(r => { delete nd[`${target}-${r.id}`]; });
+        setWeeklyData(nd); setWeeklySettings(ns); saveAll(baseTemplate, templateSettings, nd, ns); showToast('振替をリセットしました');
+      };
+
       const openEditModal = (cd, ds, row, di, dn, ih) => { if(isMobile) return; if(row.id==='afterschool'){ let ie=cd.events?.length>0?[...cd.events]:[]; if(ie.length===0&&(cd.subject||cd.memo)) ie=[{startTime:cd.startTime||'',endTime:cd.endTime||'',subject:cd.subject||'',memo:cd.memo||''}]; while(ie.length<5) ie.push({startTime:'',endTime:'',subject:'',memo:''}); setTempEvents(ie); } else { setTempSubject(cd.subject||''); setTempMemo(cd.memo||''); setTempStartTime(cd.startTime||''); setTempEndTime(cd.endTime||''); } setTempHandwriting(cd.handwriting||null); setEditingCell({dateStr:ds, periodId:row.id, dayIndex:di, dayName:dn, periodName:row.name, isTemplate:activeTab==='template', ih}); };
       const updateTempEvent = (i,f,v) => { const n=[...tempEvents]; n[i][f]=v; setTempEvents(n); };
       
@@ -528,13 +605,28 @@
       });
 
       const combinedNotes = useMemo(() => { const c=[...notesData.map(n=>({...n,type:'note'}))]; Object.keys(weeklyData).forEach(k=>{if(k.endsWith('-diary')){const ds=k.replace('-diary','');const d=weeklyData[k];if(d?.memo?.trim())c.push({id:`diary-${ds}`,type:'diary',title:`${new Date(ds).getMonth()+1}月${new Date(ds).getDate()}日のメモ`,content:d.memo,updatedAt:new Date(ds).getTime()+86399000,dateStr:ds});}}); return c.sort((a,b)=>b.updatedAt-a.updatedAt); }, [notesData, weeklyData]);
-      const templateClasses = []; [0,1,2,3,4].forEach(di=>{['p1','p2','p3','p4','p5','p6'].forEach(pi=>{const d=baseTemplate[`${di}-${pi}`];if(d?.subject?.trim())templateClasses.push({label:`${DAYS[di]}${pi.replace('p','')}`,subject:d.subject,memo:d.memo||''});});});
 
       const addTodo = (e) => { e.preventDefault(); if(!newTodoText.trim()) return; saveTodos([...todos,{id:Date.now(),text:newTodoText,completed:false,dueDate:newTodoDate,tag:newTodoTag,important:newTodoImportant}]); setNewTodoText(''); };
+      
       const clearHandwriting = () => { if(canvasRef.current){ const ctx=canvasRef.current.getContext('2d'); ctx.clearRect(0,0,800,600); ctx.fillStyle='white'; ctx.fillRect(0,0,800,600); } };
       const saveHandwriting = () => { const du=canvasRef.current.toDataURL(); if(handwritingMode==='quick') saveQuickMemos([{id:Date.now(),dataUrl:du,timestamp:new Date().toISOString()},...quickMemos]); else setTempHandwriting(du); setShowHandwritingPad(false); };
       const startDrawing = (e) => { const r=canvasRef.current.getBoundingClientRect(); const ctx=canvasRef.current.getContext('2d'); ctx.beginPath(); ctx.moveTo(e.clientX-r.left,e.clientY-r.top); setIsDrawing(true); };
       const draw = (e) => { if(!isDrawing) return; const r=canvasRef.current.getBoundingClientRect(); const ctx=canvasRef.current.getContext('2d'); ctx.lineTo(e.clientX-r.left,e.clientY-r.top); ctx.stroke(); };
+      const endDrawing = () => { setIsDrawing(false); };
+
+      const shareMemo = async (dataUrl) => {
+        try {
+          const blob = await (await fetch(dataUrl)).blob();
+          const file = new File([blob], `memo_${Date.now()}.png`, { type: 'image/png' });
+          if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({ title: 'EduPlanner クイックメモ', files: [file] });
+          } else {
+            showToast('お使いのブラウザでは画像共有がサポートされていません');
+          }
+        } catch (error) {
+           if (error.name !== 'AbortError') showToast('共有に失敗しました');
+        }
+      };
 
       const getDailyEvents = (ds, di) => { const evs=[]; const [y,m,d]=ds.split('-').map(Number); const hol=getHolidayName(y,m,d); if(hol) evs.push({type:'holiday',text:hol}); todos.filter(t=>!t.completed&&t.dueDate===ds).forEach(t=>evs.push({type:'todo',text:t.text})); const ed=getCellData(ds,'event',di); if(ed?.subject) evs.push({type:'event',text:ed.subject}); return evs; };
       const getCalendarDays = () => { const y=currentMonth.getFullYear(); const m=currentMonth.getMonth(); const fd=new Date(y,m,1); const ld=new Date(y,m+1,0); let fdi=fd.getDay()-1; if(fdi===-1) fdi=6; const days=[]; for(let i=fdi-1;i>=0;i--) days.push({date:new Date(y,m-1,new Date(y,m,0).getDate()-i),isCurrentMonth:false}); for(let i=1;i<=ld.getDate();i++) days.push({date:new Date(y,m,i),isCurrentMonth:true}); while(days.length<42) days.push({date:new Date(y,m+1,days.length-ld.getDate()-fdi+1),isCurrentMonth:false}); return days; };
@@ -590,9 +682,9 @@
             </div>
 
             <div className="flex gap-1.5 sm:gap-2.5 overflow-x-auto hide-scrollbar pl-4 ml-auto">
-              {['dashboard','yearly','monthly','weekly','notes','syllabus','documents'].map(t=>(
+              {['dashboard','yearly','monthly','weekly','notes','syllabus','documents', 'settings'].map(t=>(
                 <button key={t} onClick={()=>setActiveTab(t)} className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-black whitespace-nowrap transition-colors ${activeTab===t?'bg-blue-100 text-blue-800 shadow-sm border border-blue-300':'text-slate-600 hover:bg-slate-100 border border-transparent'}`}>
-                  {t==='dashboard'?'今日':t==='yearly'?'年間':t==='monthly'?'月間':t==='weekly'?'週案':t==='notes'?'ノート':t==='syllabus'?'進度':'資料'}
+                  {t==='dashboard'?'今日':t==='yearly'?'年間':t==='monthly'?'月間':t==='weekly'?'週案':t==='notes'?'ノート':t==='syllabus'?'進度':t==='documents'?'資料':'設定'}
                 </button>
               ))}
               <button onClick={()=>setActiveTab('template')} className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-black whitespace-nowrap transition-colors ${activeTab==='template'?'bg-purple-100 text-purple-800 shadow-sm border border-purple-300':'text-slate-600 hover:bg-slate-100 border border-transparent'}`}>
@@ -1057,6 +1149,49 @@
                     {documents.map((d,i)=>(<div key={i} className="flex items-center gap-4 p-4 border border-slate-300 rounded-2xl hover:shadow-md bg-slate-50 transition-shadow"><span className="text-3xl bg-white p-2 rounded-xl border border-slate-200 shadow-sm">📎</span><div className="flex-1 min-w-0"><div className="font-black text-base truncate text-slate-800 mb-1">{d.title}</div><a href={d.url} target="_blank" className="text-xs text-blue-600 font-bold truncate block hover:underline font-mono">{d.url}</a></div><button onClick={()=>saveExtraData(yearlyData,documents.filter((_,x)=>x!==i),vacations)} className="text-rose-600 border border-rose-300 bg-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-rose-50 shadow-sm">削除</button></div>))}
                   </div>
                   <div className="bg-purple-50 border border-purple-200 p-5 rounded-2xl space-y-3 shadow-sm"><input id="dt" placeholder="資料名" className="w-full p-3 text-sm font-bold rounded-xl border border-slate-300 outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-100 shadow-inner"/><input id="du" placeholder="URL" className="w-full p-3 text-sm font-bold rounded-xl border border-slate-300 outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-100 shadow-inner font-mono"/><button onClick={()=>{const t=document.getElementById('dt').value;const u=document.getElementById('du').value;if(t&&u)saveExtraData(yearlyData,[...documents,{title:t,url:u}],vacations)}} className="w-full bg-purple-600 text-white py-3 rounded-xl font-black shadow-md hover:bg-purple-700 text-base">追加</button></div>
+                </div>
+              </div>
+            )}
+
+            {/* 設定タブ（バックアップ・ログアウト） */}
+            {activeTab === 'settings' && (
+              <div className="p-4 flex-1 overflow-y-auto bg-[var(--paper)]">
+                <div className="max-w-3xl mx-auto space-y-6">
+                  <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-300 shadow-md">
+                    <h2 className="text-2xl font-black mb-6 text-slate-800 flex items-center gap-2">⚙️ 設定・バックアップ</h2>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* バックアップと復元 */}
+                      <div className="border border-blue-200 bg-blue-50/50 rounded-2xl p-5 shadow-sm">
+                        <h3 className="text-lg font-black text-blue-900 mb-2 flex items-center gap-2">💾 データバックアップ</h3>
+                        <p className="text-xs text-slate-600 mb-4 font-bold">手元の端末に全データを保存、または復元します。万が一のデータ消失に備えて定期的にバックアップしてください。</p>
+                        
+                        <div className="space-y-3">
+                          <button onClick={exportData} className="w-full bg-blue-600 text-white py-2.5 rounded-xl font-black shadow-md hover:bg-blue-700 transition-colors flex items-center justify-center gap-2">
+                            <span>📥 データをダウンロード</span>
+                          </button>
+                          
+                          <div className="relative">
+                            <input type="file" accept=".json" onChange={importData} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+                            <button className="w-full bg-white text-blue-700 border border-blue-300 py-2.5 rounded-xl font-black shadow-sm hover:bg-blue-50 transition-colors flex items-center justify-center gap-2 pointer-events-none">
+                              <span>📤 データを復元 (インポート)</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* アカウント・ログアウト */}
+                      <div className="border border-slate-200 bg-slate-50 rounded-2xl p-5 shadow-sm">
+                        <h3 className="text-lg font-black text-slate-800 mb-2 flex items-center gap-2">👤 アカウント</h3>
+                        <p className="text-xs text-slate-600 mb-4 font-bold">現在のデバイスからログアウトします。</p>
+                        <div className="mt-auto">
+                          <button onClick={handleLogout} className="w-full bg-white text-rose-600 border border-rose-300 py-2.5 rounded-xl font-black shadow-sm hover:bg-rose-50 transition-colors flex items-center justify-center gap-2">
+                            <span>🚪 ログアウト</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
