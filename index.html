@@ -312,6 +312,7 @@
       const [newTodoImportant, setNewTodoImportant] = useState(false);
       const [toastMessage, setToastMessage] = useState('');
       const [editingCell, setEditingCell] = useState(null);
+      const [editingTodoId, setEditingTodoId] = useState(null);
       const [tempSubject, setTempSubject] = useState('');
       const [tempMemo, setTempMemo] = useState('');
       const [tempStartTime, setTempStartTime] = useState('');
@@ -1189,19 +1190,53 @@
                 const isOverdue = !t.completed && t.dueDate && t.dueDate < todayStr;
                 return (
                 <div key={t.id} className={`flex gap-3 items-start p-4 rounded-2xl border shadow-sm group transition-all hover:shadow-md ${t.important ? 'border-amber-300 bg-amber-50/50' : isOverdue ? 'border-rose-300 bg-rose-50/50' : 'border-slate-300 bg-white'}`}>
-                  <div className="relative flex items-center justify-center mt-0.5">
+                  <div className="relative flex items-center justify-center mt-0.5 shrink-0">
                     <input type="checkbox" checked={t.completed} onChange={() => saveTodos(todos.map(todo => todo.id === t.id ? { ...todo, completed: !todo.completed } : todo))} 
                       className="peer appearance-none w-5 h-5 border-[2px] border-slate-400 rounded-md checked:bg-blue-500 checked:border-blue-500 cursor-pointer transition-colors" />
                     <svg className="absolute w-3 h-3 text-white pointer-events-none opacity-0 peer-checked:opacity-100" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>
                   </div>
                   <div className="flex-1 flex flex-col min-w-0">
                     <div className="flex items-start justify-between gap-2">
-                      <span className={`text-base leading-snug break-words flex-1 ${t.completed ? 'text-slate-400 line-through' : isOverdue ? 'text-rose-600 font-black' : 'text-slate-800 font-black'}`}>
-                        {t.important && <span className="text-amber-500 mr-1.5 text-lg relative top-[1px]">★</span>}{t.text}
-                      </span>
+                      <button 
+                        onClick={() => saveTodos(todos.map(todo => todo.id === t.id ? { ...todo, important: !todo.important } : todo))}
+                        className={`text-lg transition-transform active:scale-90 shrink-0 relative top-[-2px] ${t.important ? 'text-amber-500 hover:text-amber-600 drop-shadow-sm' : 'text-slate-300 hover:text-amber-400'}`}
+                        title="重要マークの切り替え"
+                      >
+                        {t.important ? '★' : '☆'}
+                      </button>
+                      {editingTodoId === t.id ? (
+                        <input 
+                          autoFocus
+                          defaultValue={t.text}
+                          onBlur={(e) => {
+                             const newText = e.target.value.trim();
+                             if(newText) saveTodos(todos.map(todo => todo.id === t.id ? { ...todo, text: newText } : todo));
+                             setEditingTodoId(null);
+                          }}
+                          onKeyDown={(e) => {
+                             if(e.key === 'Enter') { e.preventDefault(); e.target.blur(); }
+                          }}
+                          className="flex-1 w-full outline-none text-base font-black text-slate-800 bg-white border border-blue-400 rounded-lg px-2 py-0.5 shadow-inner min-w-0"
+                        />
+                      ) : (
+                        <span 
+                          onClick={() => setEditingTodoId(t.id)}
+                          className={`text-base leading-snug break-words flex-1 cursor-pointer hover:bg-slate-100/50 rounded px-1 -mx-1 transition-colors ${t.completed ? 'text-slate-400 line-through' : isOverdue ? 'text-rose-600 font-black' : 'text-slate-800 font-black'}`}
+                          title="クリックしてテキストを編集"
+                        >
+                          {t.text}
+                        </span>
+                      )}
                     </div>
-                    <div className="flex items-center flex-wrap gap-2 mt-3">
-                      {t.tag && <span className="text-[10px] bg-slate-100 border border-slate-200 text-slate-600 px-2 py-1 rounded-md font-bold shadow-sm">{t.tag}</span>}
+                    <div className="flex items-center flex-wrap gap-2 mt-3 pl-7">
+                      <select 
+                        value={t.tag || ''} 
+                        onChange={(e) => saveTodos(todos.map(todo => todo.id === t.id ? { ...todo, tag: e.target.value } : todo))}
+                        className="text-[10px] bg-slate-100 border border-slate-200 text-slate-600 px-2 py-1 rounded-md font-bold shadow-sm outline-none cursor-pointer hover:bg-slate-200 transition-colors"
+                      >
+                        <option value="">タグなし</option>
+                        {TODO_TAGS.map(tag => <option key={tag} value={tag}>{tag}</option>)}
+                      </select>
                       <div className="flex items-center gap-1.5 bg-white border border-slate-300 px-2 py-1 rounded-md shadow-sm">
                         <span className="text-[10px] text-slate-500 font-bold">期限:</span>
                         <input type="date" value={t.dueDate || ''} onChange={(e) => saveTodos(todos.map(todo => todo.id === t.id ? { ...todo, dueDate: e.target.value } : todo))}
@@ -1209,7 +1244,7 @@
                       </div>
                     </div>
                   </div>
-                  <button onClick={() => saveTodos(todos.filter(todo => todo.id !== t.id))} className="text-rose-400 bg-white border border-rose-200 hover:bg-rose-50 hover:text-rose-600 rounded-lg p-2 shrink-0 opacity-0 group-hover:opacity-100 transition-all shadow-sm">🗑</button>
+                  <button onClick={() => saveTodos(todos.filter(todo => todo.id !== t.id))} className="text-rose-400 bg-white border border-rose-200 hover:bg-rose-50 hover:text-rose-600 rounded-lg p-2 shrink-0 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all shadow-sm">🗑</button>
                 </div>
                 )
               })}
