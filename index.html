@@ -839,16 +839,26 @@
                       })()}
 
                       {ROWS.filter(r=>r.id!=='diary').map(row => {
-                        // 高さをmin-hに変更し、テキストの量に応じて柔軟に広がるように修正
-                        let rh='min-h-[3.5rem] lg:min-h-[4.5rem]'; let fc='flex-1'; let rb='';
-                        if(row.id==='lunch'){rh='min-h-[2rem] sm:min-h-[2.5rem]';fc='shrink-0';rb='bg-amber-50/20';}
-                        else if(row.id==='morning'||row.id==='event'){rh='min-h-[2.5rem] sm:min-h-[3.5rem]';fc='shrink-0';}
-                        else if(row.id==='afterschool'){rh='min-h-[6rem] lg:min-h-[8rem]';fc='shrink-0';}
+                        // アクティブタブに応じて高さを切り替え
+                        let rh=''; let fc=''; let rb='';
+                        if (activeTab === 'template') {
+                          // 基本設定時はスクロールなしで1画面に収めるためflexで分割
+                          if(row.id==='lunch'){rh='min-h-[20px] h-5 sm:h-6';fc='shrink-0';rb='bg-amber-50/20';}
+                          else if(row.id==='morning'||row.id==='event'){rh='min-h-[24px] h-6 sm:h-8';fc='shrink-0';}
+                          else if(row.id==='afterschool'){rh='min-h-[40px]';fc='flex-[1.5]';}
+                          else {rh='min-h-[40px]';fc='flex-[2]';}
+                        } else {
+                          // 週案時はテキストの量に応じて柔軟に広がるように修正
+                          rh='min-h-[3.5rem] lg:min-h-[4.5rem]'; fc='flex-1 h-auto'; rb='';
+                          if(row.id==='lunch'){rh='min-h-[2rem] sm:min-h-[2.5rem]';fc='shrink-0 h-auto';rb='bg-amber-50/20';}
+                          else if(row.id==='morning'||row.id==='event'){rh='min-h-[2.5rem] sm:min-h-[3.5rem]';fc='shrink-0 h-auto';}
+                          else if(row.id==='afterschool'){rh='min-h-[6rem] lg:min-h-[8rem]';fc='shrink-0 h-auto';}
+                        }
                         
                         const zClass = row.id === 'event' ? 'relative z-20' : 'relative z-0';
 
                         return (
-                          <div key={row.id} className={`flex ${fc} ${rh} h-auto border-b border-slate-400 last:border-b-0 ${rb} ${zClass}`}>
+                          <div key={row.id} className={`flex ${fc} ${rh} border-b border-slate-400 last:border-b-0 ${rb} ${zClass}`}>
                             <div className="w-10 sm:w-14 lg:w-16 border-r border-slate-300 flex flex-col items-center justify-center bg-slate-50 shrink-0 sticky left-0 z-20">
                               <div className="text-xs sm:text-base">{row.id.startsWith('p')?<span className="text-[10px] sm:text-[12px] text-slate-500 font-black">{row.id.replace('p','')}</span>:row.icon}</div>
                               <div className="text-[7px] sm:text-[9px] font-black text-slate-700 mt-0.5">{row.name}</div>
@@ -875,33 +885,32 @@
                                 else if (row.id === 'p5' || row.id === 'p6') { blockBg = 'bg-purple-50 hover:bg-purple-100'; blockBorder = 'border-purple-500'; blockText = 'text-purple-900'; }
 
                                 return (
-                                  <div key={i} onClick={()=>openEditModal(data,ds,row,i,day,isH,null)} className={`min-w-0 ${cf} border-r border-slate-300 last:border-0 p-0.5 sm:p-1 cursor-pointer flex flex-col overflow-x-hidden ${activeTab==='weekly'&&isT?'bg-blue-50/20':''} hover:bg-slate-100/70 transition-colors`}>
+                                  <div key={i} onClick={()=>openEditModal(data,ds,row,i,day,isH,null)} className={`min-w-0 ${cf} border-r border-slate-300 last:border-0 p-0.5 sm:p-1 cursor-pointer flex flex-col ${activeTab === 'weekly' ? 'overflow-x-hidden' : 'overflow-hidden'} ${activeTab==='weekly'&&isT?'bg-blue-50/20':''} hover:bg-slate-100/70 transition-colors`}>
                                     {hasData ? (
-                                      <div className={`w-full min-h-full rounded sm:rounded-md shadow-[0_1px_2px_rgba(0,0,0,0.08)] flex flex-col px-1 sm:px-2 py-0.5 sm:py-1 border-l-[3px] sm:border-l-[4px] transition-colors ${blockBg} ${blockBorder}`}>
+                                      <div className={`w-full ${activeTab === 'weekly' ? 'min-h-full' : 'h-full'} rounded sm:rounded-md shadow-[0_1px_2px_rgba(0,0,0,0.08)] flex flex-col px-1 sm:px-2 py-0.5 sm:py-1 border-l-[3px] sm:border-l-[4px] transition-colors overflow-hidden ${blockBg} ${blockBorder}`}>
                                         {row.id === 'afterschool' ? (
-                                          <div className="space-y-1.5 flex flex-col">
+                                          <div className={`space-y-1.5 flex flex-col ${activeTab === 'weekly' ? '' : 'h-full justify-start'}`}>
                                             {(data.events?.length?data.events:[{subject:data.subject,start:data.startTime}]).filter(e=>e.subject).map((e,idx)=>(
                                               <div key={idx} className="flex flex-col">
                                                 {e.startTime && <div className={`text-[6px] sm:text-[8px] font-mono font-bold leading-none opacity-90 ${blockText}`}>{e.startTime}{e.endTime?`-${e.endTime}`:''}</div>}
-                                                <div className={`text-[8px] sm:text-[11px] lg:text-xs font-black leading-tight mt-0.5 break-words whitespace-pre-wrap ${blockText}`} title={e.subject}>{e.subject}</div>
+                                                <div className={`text-[8px] sm:text-[11px] lg:text-xs font-black leading-tight mt-0.5 break-words ${activeTab === 'weekly' ? 'whitespace-pre-wrap' : 'line-clamp-1'} ${blockText}`} title={e.subject}>{e.subject}</div>
                                               </div>
                                             ))}
                                           </div>
                                         ) : (
-                                          <div className="flex flex-col justify-center">
+                                          <div className="flex flex-col justify-center h-full">
                                             {(data.startTime || data.endTime) && (
-                                              <div className={`text-[6px] sm:text-[8px] font-mono font-bold mb-0.5 opacity-90 ${blockText}`}>
+                                              <div className={`text-[6px] sm:text-[8px] font-mono font-bold mb-0.5 opacity-90 shrink-0 ${blockText}`}>
                                                 {data.startTime}{data.startTime && data.endTime ? '-' : ''}{data.endTime}
                                               </div>
                                             )}
-                                            {/* 内容に応じて高さが自動で拡張するように修正 */}
-                                            <div className={`text-[8px] sm:text-[11px] lg:text-xs font-black leading-tight break-words whitespace-pre-wrap ${blockText}`}>{data.subject}</div>
-                                            {data.memo && <div className={`text-[6px] sm:text-[8px] font-bold mt-1 opacity-80 break-words whitespace-pre-wrap ${blockText}`}>{data.memo}</div>}
+                                            <div className={`text-[8px] sm:text-[11px] lg:text-xs font-black leading-tight break-words ${activeTab === 'weekly' ? 'whitespace-pre-wrap' : 'line-clamp-2'} ${blockText}`} title={data.subject}>{data.subject}</div>
+                                            {data.memo && <div className={`text-[6px] sm:text-[8px] font-bold mt-1 opacity-80 break-words ${activeTab === 'weekly' ? 'whitespace-pre-wrap' : 'line-clamp-1'} ${blockText}`}>{data.memo}</div>}
                                           </div>
                                         )}
                                       </div>
                                     ) : (
-                                      <div className="w-full min-h-full"></div>
+                                      <div className={`w-full ${activeTab === 'weekly' ? 'min-h-full' : 'h-full'}`}></div>
                                     )}
                                   </div>
                                 );
