@@ -10,6 +10,11 @@
   <meta name="apple-mobile-web-app-title" content="EduPlanner">
 
   <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+    }
+  </script>
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -24,6 +29,10 @@
       --paper: #faf9f7;
       --shadow-sm: 0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.02);
       --shadow-md: 0 4px 16px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.04);
+    }
+    .dark {
+      --ink: #f8fafc;
+      --paper: #0f172a;
     }
     body { 
       font-family: 'Zen Maru Gothic', sans-serif; 
@@ -56,6 +65,27 @@
     
     /* 入力エリアのプレースホルダーやフォーカスを見やすく */
     textarea, input { transition: border-color 0.2s ease, box-shadow 0.2s ease; }
+
+    /* リッチエディタ用のスタイル */
+    .editor-content { outline: none; }
+    .editor-content img { display: block; max-width: 100%; margin: 12px 0; border-radius: 8px; border: 1px solid #e2e8f0; }
+    .dark .editor-content img { border-color: #334155; }
+    .editor-content:empty:before {
+      content: attr(data-placeholder);
+      color: #94a3b8;
+      pointer-events: none;
+      display: block;
+    }
+    
+    /* メモ帳の書式設定スタイル */
+    .editor-content h1 { font-size: 1.4em; font-weight: 900; margin-top: 1em; margin-bottom: 0.5em; border-bottom: 2px solid #cbd5e1; padding-bottom: 0.2em; }
+    .editor-content h2 { font-size: 1.2em; font-weight: 800; margin-top: 1em; margin-bottom: 0.5em; border-left: 4px solid #3b82f6; padding-left: 0.5em; }
+    .editor-content ul { list-style-type: disc; padding-left: 1.5em; margin-top: 0.5em; margin-bottom: 0.5em; }
+    .editor-content ol { list-style-type: decimal; padding-left: 1.5em; margin-top: 0.5em; margin-bottom: 0.5em; }
+    .editor-content li { margin-bottom: 0.2em; }
+    .editor-content b, .editor-content strong { font-weight: 900; color: #1d4ed8; }
+    .dark .editor-content h1 { border-bottom-color: #475569; }
+    .dark .editor-content b, .dark .editor-content strong { color: #60a5fa; }
   </style>
 </head>
 <body class="selection:bg-blue-100 selection:text-blue-900 overflow-hidden">
@@ -165,7 +195,7 @@
                   return (
                     <div key={block.id} className={`absolute left-14 right-3 rounded-lg border shadow-sm flex overflow-hidden ${block.color.bg}`} style={{ top: topY + 'px', height: height + 'px' }}>
                       <div className={`w-1 shrink-0 ${block.color.bar}`}></div>
-                      <div className="flex-1 px-2 py-1 overflow-hidden"><div className="text-xs font-bold text-slate-700">{block.startTime}</div><div className={`text-sm font-black truncate ${block.color.text}`}>{block.subject}</div></div>
+                      <div className="flex-1 px-2 py-1 overflow-hidden flex flex-col justify-center"><div className="text-xs font-bold text-slate-700">{block.startTime}</div><div className={`text-xs sm:text-sm font-black break-words whitespace-pre-wrap leading-tight overflow-y-auto hide-scrollbar ${block.color.text}`}>{block.subject}</div></div>
                     </div>
                   );
                 })}
@@ -190,12 +220,7 @@
         const override = weeklyData[wKey]; return (override && !override.useTemplate) ? override : base;
       };
 
-      const upcomingTodos = todos.filter(t => !t.completed).sort((a,b) => {
-        if (a.dueDate && b.dueDate) { if (a.dueDate !== b.dueDate) return a.dueDate.localeCompare(b.dueDate); }
-        else if (a.dueDate && !b.dueDate) { return -1; } else if (!a.dueDate && b.dueDate) { return 1; }
-        if (a.important && !b.important) return -1; if (!a.important && b.important) return 1;
-        return b.id - a.id; 
-      }).slice(0, 5);
+      const upcomingTodos = todos.filter(t => !t.completed).slice(0, 5);
 
       const isHoliday = setting.type === 'holiday';
       const greetingHour = today.getHours();
@@ -238,7 +263,7 @@
                     todaySchedule.map((item) => (
                       <div key={item.id} className="flex items-center gap-4 px-4 py-3.5 rounded-2xl bg-slate-50 border border-slate-200 hover:border-blue-300 hover:bg-blue-50/50 transition-colors group">
                         <div className="w-12 h-12 rounded-xl bg-white border border-slate-300 flex flex-col items-center justify-center text-base shrink-0 shadow-sm text-slate-600 group-hover:text-blue-600 group-hover:border-blue-300 transition-colors"><span className="text-sm font-black">{item.id.startsWith('p') ? item.id.replace('p','') : item.icon}</span></div>
-                        <div className="flex-1 min-w-0"><div className="text-base font-black text-slate-800 truncate group-hover:text-blue-900 transition-colors">{item.data?.subject}</div>{item.time?.start && <div className="text-xs font-mono text-slate-500 font-bold mt-1">{item.time.start}–{item.time.end}</div>}</div>
+                        <div className="flex-1 min-w-0"><div className="text-sm sm:text-base font-black text-slate-800 break-words whitespace-pre-wrap leading-tight group-hover:text-blue-900 transition-colors">{item.data?.subject}</div>{item.time?.start && <div className="text-xs font-mono text-slate-500 font-bold mt-1">{item.time.start}–{item.time.end}</div>}</div>
                       </div>
                     ))
                   )}
@@ -262,7 +287,7 @@
                       return (
                         <div key={t.id} className={`flex items-start gap-4 p-4 rounded-2xl border shadow-sm transition-all ${cardStyle}`}>
                           <div className={`w-6 h-6 rounded-md border-[3px] mt-0.5 shrink-0 flex items-center justify-center bg-white ${t.important ? 'border-amber-500' : isOverdue ? 'border-rose-500' : 'border-slate-400'}`}></div>
-                          <div className="flex-1 min-w-0 flex flex-col justify-center"><div className="text-base font-black text-slate-800 leading-snug">{t.important && <span className="text-amber-500 mr-2">★</span>}{t.text}</div>{t.dueDate && <div className={`text-xs font-bold mt-2 font-mono ${dueStyle}`}>{dueText} : {t.dueDate}</div>}</div>
+                          <div className="flex-1 min-w-0 flex flex-col justify-center"><div className="text-base font-black text-slate-800 leading-snug break-words whitespace-pre-wrap">{t.important && <span className="text-amber-500 mr-2">★</span>}{t.text}</div>{t.dueDate && <div className={`text-xs font-bold mt-2 font-mono ${dueStyle}`}>{dueText} : {t.dueDate}</div>}</div>
                         </div>
                       );
                     })
@@ -286,9 +311,17 @@
       const [authPassword, setAuthPassword] = useState('');
       const [authError, setAuthError] = useState('');
       const [isRegistering, setIsRegistering] = useState(false);
-      const [activeTab, setActiveTab] = useState('weekly');
+      
+      const [activeTab, setActiveTab] = useState('dashboard');
+      
       const [currentWeekStart, setCurrentWeekStart] = useState(getMonday(new Date()));
-      const [currentMonth, setCurrentMonth] = useState(new Date(currentWeekStart.getFullYear(), currentWeekStart.getMonth(), 1));
+      
+      // 起動時に現在の月が初期表示されるように修正
+      const [currentMonth, setCurrentMonth] = useState(() => {
+        const now = new Date();
+        return new Date(now.getFullYear(), now.getMonth(), 1);
+      });
+      
       const [showTodo, setShowTodo] = useState(false);
       const [selectedDateDetails, setSelectedDateDetails] = useState(null);
       const [baseTemplate, setBaseTemplate] = useState({});
@@ -320,12 +353,95 @@
       const [tempEvents, setTempEvents] = useState([]);
       const [tempHandwriting, setTempHandwriting] = useState(null);
       const [showHandwritingPad, setShowHandwritingPad] = useState(false);
+      
+      // 📒 今週のノート（メモ）用のStateとRef
+      const [editingWeekMemo, setEditingWeekMemo] = useState(null);
+      const [showWeekMemoPad, setShowWeekMemoPad] = useState(false);
+      const savedRangeRef = useRef(null);
+
+      // 手書き・システム設定用State
+      const [penColor, setPenColor] = useState('#0f172a');
+      const [isEraser, setIsEraser] = useState(false);
+      const [pencilOnly, setPencilOnly] = useState(true);
+      const [theme, setTheme] = useState(() => {
+        try { return localStorage.getItem('eduplanner-theme') || 'light'; }
+        catch (e) { return 'light'; }
+      });
+
       const [isOnline, setIsOnline] = useState(navigator.onLine);
-      const canvasRef = useRef(null);
-      const [isDrawing, setIsDrawing] = useState(false);
+      const quickCanvasRef = useRef(null);
+      
+      // クイックメモ用 Reactのレンダリングループ回避Ref
+      const isDrawingRef = useRef(false);
+      const lastPosRef = useRef({ x: 0, y: 0 });
+
+      const exportICS = (type) => {
+        showToast('ICSエクスポート機能は現在準備中です。');
+      };
 
       const todayStr = formatDate(new Date());
       const schoolYear = currentMonth.getMonth() < 3 ? currentMonth.getFullYear() - 1 : currentMonth.getFullYear();
+
+      // 文字数に応じてフォントサイズを動的に縮小するヘルパー関数
+      const getDynamicFontSize = (text, isMobile) => {
+        if (!text) return isMobile ? 'text-[8px]' : 'text-xs';
+        const len = text.length;
+        if (isMobile) {
+          if (len < 6) return 'text-[10px]';
+          if (len < 12) return 'text-[9px]';
+          if (len < 20) return 'text-[8px]';
+          if (len < 30) return 'text-[7px] leading-tight';
+          return 'text-[6px] leading-tight';
+        } else {
+          if (len < 8) return 'text-xs';
+          if (len < 16) return 'text-[11px]';
+          if (len < 25) return 'text-[10px] leading-tight';
+          if (len < 35) return 'text-[9px] leading-tight';
+          if (len < 50) return 'text-[8px] leading-tight';
+          return 'text-[7px] leading-tight';
+        }
+      };
+
+      // 行事用のさらに小さいフォントサイズ（はみ出し防止）
+      const getEventFontSize = (text, isMobile) => {
+        if (!text) return isMobile ? 'text-[8px]' : 'text-xs';
+        const len = text.length;
+        if (isMobile) {
+          if (len < 6) return 'text-[9px] leading-tight';
+          if (len < 12) return 'text-[8px] leading-tight';
+          if (len < 20) return 'text-[7px] leading-tight';
+          return 'text-[6px] leading-tight';
+        } else {
+          if (len < 8) return 'text-[10px] leading-tight';
+          if (len < 16) return 'text-[9px] leading-tight';
+          if (len < 25) return 'text-[8px] leading-tight';
+          return 'text-[7px] leading-tight';
+        }
+      };
+
+      // 📒 今週のメモデータの取得と過去データ(diary)の統合
+      const weekMemoKey = `${formatDate(currentWeekStart)}-weekMemos`;
+      const savedWeekMemos = (weeklyData[weekMemoKey] && weeklyData[weekMemoKey].memos) ? weeklyData[weekMemoKey].memos : [];
+      
+      const oldMemos = useMemo(() => {
+        const arr = [];
+        for (let i = 0; i < 7; i++) {
+          const d = new Date(currentWeekStart); d.setDate(d.getDate() + i);
+          const wKey = `${formatDate(d)}-diary`;
+          if (weeklyData[wKey] && weeklyData[wKey].memo) {
+            arr.push({
+              id: `old-${wKey}`,
+              htmlContent: (weeklyData[wKey].memo || '').replace(/\n/g, '<br>'),
+              timestamp: d.getTime(), 
+              isOld: true,
+              originalKey: wKey
+            });
+          }
+        }
+        return arr;
+      }, [weeklyData, currentWeekStart]);
+
+      const displayWeekMemos = [...savedWeekMemos, ...oldMemos].sort((a, b) => b.timestamp - a.timestamp); // 新しい順
 
       const undoStack = useRef([]);
       const redoStack = useRef([]);
@@ -393,6 +509,11 @@
       }, [handleUndo, handleRedo]);
 
       useEffect(() => {
+        document.documentElement.classList.toggle('dark', theme === 'dark');
+        try { localStorage.setItem('eduplanner-theme', theme); } catch(e) {}
+      }, [theme]);
+
+      useEffect(() => {
         let isM = true;
         const init = async () => {
           try {
@@ -419,7 +540,7 @@
           unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','todos'), s => { if(s.exists()&&s.data().todos) setTodos(s.data().todos); }));
           unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','notes'), s => { if(s.exists()&&s.data().notes) setNotesData(s.data().notes); }));
           unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','syllabus'), s => { if(s.exists()&&s.data().syllabus) setSyllabusData(s.data().syllabus); }));
-          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','quickMemos'), s => { if(s.exists()&&s.data().memos) setQuickMemos(s.data().memos); }));
+          unsubs.push(onSnapshot(doc(doc(db,'users',uid),'teacherPlanner','quickMemos'), s => { if(s.exists()&&s.data().memos) setQuickMemos(s.data().memos); }));
           unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','extra'), s => { if(s.exists()){ const d=s.data(); if(d.yearlyData){ let cy=d.yearlyData; if(cy["4-8"]&&typeof cy["4-8"]==="string") cy={"2025":cy}; const m={...NEW_INITIAL_YEARLY_DATA}; Object.keys(cy).forEach(y=>{m[y]={...m[y],...cy[y]};}); setYearlyData(m); } if(d.documents) setDocuments(d.documents); if(d.vacations) setVacations(d.vacations); } }));
         };
         listen(); return () => unsubs.forEach(u=>u());
@@ -467,7 +588,6 @@
         showToast(`📋 前週から${copied}件コピーしました`);
       };
 
-      // データのエクスポート
       const exportData = () => {
         const data = {
           baseTemplate, templateSettings, weeklyData, weeklySettings,
@@ -485,7 +605,6 @@
         showToast('バックアップをダウンロードしました');
       };
 
-      // データのインポート
       const importData = (e) => {
         const file = e.target.files[0];
         if (!file) return;
@@ -506,7 +625,6 @@
               if (data.syllabusData) setSyllabusData(data.syllabusData);
               if (data.quickMemos) setQuickMemos(data.quickMemos);
               
-              // サーバーにも保存
               saveToFirestore('template', { baseTemplate: data.baseTemplate, templateSettings: data.templateSettings });
               saveToFirestore('weekly', { weeklyData: data.weeklyData, weeklySettings: data.weeklySettings });
               saveToFirestore('todos', { todos: data.todos });
@@ -524,8 +642,52 @@
         reader.readAsText(file);
       };
 
-      const getDaySetting = (ds, di) => weeklySettings[ds] ? weeklySettings[ds] : vacations.find(v=>ds>=v.start&&ds<=v.end) ? {type:'holiday'} : (templateSettings[di] || DEFAULT_TEMPLATE_SETTINGS[di]);
-      const getCellData = (ds, pid, di) => { const wk=`${ds}-${pid}`; const tk=`${di}-${pid}`; let base=baseTemplate[tk]||{subject:'',memo:''}; if(pid==='event'&&activeTab!=='template'){ const [y,m,d]=ds.split('-').map(Number); const sy=m<4?y-1:y; const ye=yearlyData[sy]?.[`${m}-${d}`]; if(ye) base={...base,subject:ye}; } if(activeTab==='template') return base; const set=getDaySetting(ds,di); if(set.type==='holiday'&&(pid.startsWith('p')||pid==='morning'||pid==='lunch')) base={subject:'',memo:''}; const ov=weeklyData[wk]; if(ov&&!ov.useTemplate) { if(pid==='event'&&!ov.subject&&base.subject) return {...ov,subject:base.subject}; return ov; } return base; };
+      // 休日の判定（祝日も含む）
+      const getDaySetting = (ds, di) => {
+        if (weeklySettings[ds]) return weeklySettings[ds];
+        if (vacations.find(v => ds >= v.start && ds <= v.end)) return { type: 'holiday' };
+        const [y, m, d] = ds.split('-').map(Number);
+        if (getHolidayName(y, m, d)) return { type: 'holiday' }; // 祝日なら自動で休日に
+        return templateSettings[di] || DEFAULT_TEMPLATE_SETTINGS[di];
+      };
+      
+      const getCellData = (ds, pid, di) => { 
+        const wk=`${ds}-${pid}`; 
+        const tk=`${di}-${pid}`; 
+        let base = baseTemplate[tk] || { subject:'', memo:'' }; 
+        if (activeTab === 'template') return base; 
+
+        const set = getDaySetting(ds, di);
+        if (set.type === 'holiday' && pid !== 'event' && pid !== 'diary') {
+          base = { subject:'', memo:'' };
+        }
+
+        let result = base;
+        const ov = weeklyData[wk]; 
+        if (ov && !ov.useTemplate) { 
+          result = { ...ov };
+        }
+
+        // 年間行事の紐付け処理を強化
+        if (pid === 'event' && activeTab !== 'template') { 
+          const [y,m,d] = ds.split('-').map(Number); 
+          const sy = m < 4 ? y - 1 : y; 
+          const ye = yearlyData[sy]?.[`${m}-${d}`]; 
+          if (ye && ye.trim() !== '') {
+            // 週案側で手書きされた内容がある場合、重複しないように結合
+            if (result.subject && result.subject.trim() !== '') {
+               if (!result.subject.includes(ye.trim())) {
+                  result = { ...result, subject: ye.trim() + "\n" + result.subject.trim() };
+               }
+            } else {
+               result = { ...result, subject: ye.trim() };
+            }
+          }
+        } 
+
+        return result; 
+      };
+      
       const getPeriodTime = (setting, pid) => SCHEDULE_TIMES[setting.type]?.[pid];
       const handleSettingChange = (ds, di, ns) => { if(activeTab==='template'){ const n={...templateSettings,[di]:ns}; setTemplateSettings(n); saveAll(baseTemplate,n,weeklyData,weeklySettings); } else { const n={...weeklySettings,[ds]:ns}; setWeeklySettings(n); saveAll(baseTemplate,templateSettings,weeklyData,n); } };
       
@@ -546,24 +708,322 @@
       const shareNoteText = async(n) => { const dStr = new Date(n.updatedAt || Date.now()).toLocaleDateString('ja-JP'); const t = `■ ${n.title||'無題'}\n(${dStr})\n\n${n.content||''}`; try{ if(navigator.share){await navigator.share({title:n.title||'EduPlanner',text:t});showToast('共有しました');return;}}catch(e){if(e.name!=='AbortError')console.error(e);} try{await navigator.clipboard.writeText(t);showToast('📋 コピーしました');}catch(e){showToast('コピーに失敗しました');} };
       const copyTodosToClipboard = () => { const pending = todos.filter(t => !t.completed); if (!pending.length) { showToast('未完了のタスクがありません'); return; } const text = pending.map(t => { let line = t.important ? `⭐ ${t.text}` : t.text; if (t.dueDate) line += ` (期限: ${t.dueDate})`; return line; }).join('\n'); const textArea = document.createElement("textarea"); textArea.value = text; document.body.appendChild(textArea); textArea.select(); try { document.execCommand('copy'); showToast('📋 TODOをコピーしました！'); } catch (err) { showToast('コピーに失敗しました。'); } document.body.removeChild(textArea); };
 
-      const sortedIncompleteTodos = todos.filter(t => !t.completed).sort((a,b) => {
-        if (a.dueDate && b.dueDate) { if (a.dueDate !== b.dueDate) return a.dueDate.localeCompare(b.dueDate); }
-        else if (a.dueDate && !b.dueDate) { return -1; }
-        else if (!a.dueDate && b.dueDate) { return 1; }
-        if (a.important && !b.important) return -1;
-        if (!a.important && b.important) return 1;
-        return b.id - a.id; 
-      });
+      const incompleteTodos = useMemo(() => todos.filter(t => !t.completed), [todos]);
 
       const combinedNotes = useMemo(() => { const c=[...notesData.map(n=>({...n,type:'note'}))]; Object.keys(weeklyData).forEach(k=>{if(k.endsWith('-diary')){const ds=k.replace('-diary','');const d=weeklyData[k];if(d?.memo?.trim())c.push({id:`diary-${ds}`,type:'diary',title:`${new Date(ds).getMonth()+1}月${new Date(ds).getDate()}日のメモ`,content:d.memo,updatedAt:new Date(ds).getTime()+86399000,dateStr:ds});}}); return c.sort((a,b)=>b.updatedAt-a.updatedAt); }, [notesData, weeklyData]);
 
-      const addTodo = (e) => { e.preventDefault(); if(!newTodoText.trim()) return; saveTodos([...todos,{id:Date.now(),text:newTodoText,completed:false,dueDate:newTodoDate,tag:newTodoTag,important:newTodoImportant}]); setNewTodoText(''); };
+      const addTodo = (e) => { e.preventDefault(); if(!newTodoText.trim()) return; saveTodos([{id:Date.now(),text:newTodoText,completed:false,dueDate:newTodoDate,tag:newTodoTag,important:newTodoImportant}, ...todos]); setNewTodoText(''); };
       
-      const clearHandwriting = () => { if(canvasRef.current){ const ctx=canvasRef.current.getContext('2d'); ctx.clearRect(0,0,800,600); ctx.fillStyle='white'; ctx.fillRect(0,0,800,600); } };
-      const saveHandwriting = () => { const du=canvasRef.current.toDataURL(); if(handwritingMode==='quick') saveQuickMemos([{id:Date.now(),dataUrl:du,timestamp:new Date().toISOString()},...quickMemos]); else setTempHandwriting(du); setShowHandwritingPad(false); };
-      const startDrawing = (e) => { const r=canvasRef.current.getBoundingClientRect(); const ctx=canvasRef.current.getContext('2d'); ctx.beginPath(); ctx.moveTo(e.clientX-r.left,e.clientY-r.top); setIsDrawing(true); };
-      const draw = (e) => { if(!isDrawing) return; const r=canvasRef.current.getBoundingClientRect(); const ctx=canvasRef.current.getContext('2d'); ctx.lineTo(e.clientX-r.left,e.clientY-r.top); ctx.stroke(); };
-      const endDrawing = () => { setIsDrawing(false); };
+      // TODOドラッグ＆ドロップ機能
+      const dragItemIdx = useRef(null);
+      const dragOverItemIdx = useRef(null);
+      const [dragHoverIdx, setDragHoverIdx] = useState(null);
+
+      const handleDragStart = (e, index) => {
+        dragItemIdx.current = index;
+        e.dataTransfer.effectAllowed = 'move';
+        setTimeout(() => { if (e.target && e.target.classList) e.target.classList.add('opacity-50'); }, 0);
+      };
+
+      const handleDragEnter = (e, index) => {
+        e.preventDefault();
+        dragOverItemIdx.current = index;
+        setDragHoverIdx(index);
+      };
+
+      const handleDragOver = (e) => {
+        e.preventDefault();
+      };
+
+      const handleDrop = (e, index) => {
+        e.preventDefault();
+        dragOverItemIdx.current = index;
+      };
+
+      const handleDragEnd = (e) => {
+        if (e.target && e.target.classList) e.target.classList.remove('opacity-50');
+        setDragHoverIdx(null);
+        const srcIdx = dragItemIdx.current;
+        const dstIdx = dragOverItemIdx.current;
+        
+        if (srcIdx !== null && dstIdx !== null && srcIdx !== dstIdx) {
+          const incomplete = todos.filter(t => !t.completed);
+          const complete = todos.filter(t => t.completed);
+          
+          const draggedItem = incomplete.splice(srcIdx, 1)[0];
+          incomplete.splice(dstIdx, 0, draggedItem);
+          
+          saveTodos([...incomplete, ...complete]);
+        }
+        dragItemIdx.current = null;
+        dragOverItemIdx.current = null;
+      };
+
+      // 📒 今週のノートの選択範囲保存
+      const saveSelection = useCallback(() => {
+        try {
+          const sel = window.getSelection();
+          if (sel && sel.rangeCount > 0) {
+            const range = sel.getRangeAt(0);
+            const wEditor = document.getElementById('week-memo-editor');
+            const nEditor = document.getElementById('note-editor');
+            if (wEditor && wEditor.contains(range.commonAncestorContainer)) {
+               savedRangeRef.current = { range, id: 'week-memo-editor' };
+            } else if (nEditor && nEditor.contains(range.commonAncestorContainer)) {
+               savedRangeRef.current = { range, id: 'note-editor' };
+            }
+          }
+        } catch (err) {}
+      }, []);
+
+      const restoreSelectionAndInsertHtml = useCallback((htmlString, defaultEditorId) => {
+        try {
+          let targetId = defaultEditorId;
+          let range = null;
+          
+          if (savedRangeRef.current && (!defaultEditorId || savedRangeRef.current.id === defaultEditorId)) {
+            targetId = savedRangeRef.current.id;
+            range = savedRangeRef.current.range;
+          }
+
+          const editor = document.getElementById(targetId);
+          if (editor) editor.focus();
+          
+          if (range) {
+            const sel = window.getSelection();
+            if (sel) {
+              sel.removeAllRanges();
+              sel.addRange(range);
+            }
+          }
+          document.execCommand('insertHTML', false, htmlString);
+          savedRangeRef.current = null;
+        } catch (err) {
+          console.error(err);
+        }
+      }, []);
+
+      // 書式設定ツールバー関数
+      const formatText = useCallback((command, value = null, editorId) => {
+        try {
+          const editor = document.getElementById(editorId);
+          if (!editor) return;
+          editor.focus();
+          
+          if (savedRangeRef.current && savedRangeRef.current.id === editorId) {
+            const sel = window.getSelection();
+            if (sel) {
+              sel.removeAllRanges();
+              sel.addRange(savedRangeRef.current.range);
+            }
+          }
+          
+          document.execCommand(command, false, value);
+          
+          // 強制的に状態更新
+          saveSelection();
+          if (editorId === 'week-memo-editor') {
+            setEditingWeekMemo(prev => ({...prev, htmlContent: editor.innerHTML}));
+          } else if (editorId === 'note-editor') {
+            setEditingNote(prev => ({...prev, content: editor.innerHTML}));
+          }
+        } catch (err) {
+          console.error("Format error:", err);
+        }
+      }, [saveSelection]);
+
+      const insertCheckbox = useCallback((editorId) => {
+        restoreSelectionAndInsertHtml('<input type="checkbox" class="w-4 h-4 mr-2 align-middle cursor-pointer" />&nbsp;', editorId);
+        const editor = document.getElementById(editorId);
+        if(editor) {
+          if (editorId === 'week-memo-editor') {
+            setEditingWeekMemo(prev => ({...prev, htmlContent: editor.innerHTML}));
+          } else if (editorId === 'note-editor') {
+            setEditingNote(prev => ({...prev, content: editor.innerHTML}));
+          }
+        }
+      }, [restoreSelectionAndInsertHtml]);
+
+      const handleEditorClick = useCallback((e, editorId) => {
+        if (e.target.type === 'checkbox') {
+          if (e.target.checked) {
+            e.target.setAttribute('checked', 'checked');
+          } else {
+            e.target.removeAttribute('checked');
+          }
+          if (editorId === 'week-memo-editor') {
+            setEditingWeekMemo(prev => ({...prev, htmlContent: e.currentTarget.innerHTML}));
+          } else if (editorId === 'note-editor') {
+            setEditingNote(prev => ({...prev, content: e.currentTarget.innerHTML}));
+          }
+        }
+        saveSelection();
+      }, [saveSelection]);
+
+      const handlePhotoUpload = (e, editorId) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          restoreSelectionAndInsertHtml(`<img src="${event.target.result}" alt="添付画像" style="max-width:100%; border-radius:8px; margin:8px 0; border:1px solid #e2e8f0;"><br>`, editorId);
+        };
+        reader.readAsDataURL(file);
+        e.target.value = '';
+      };
+
+      const saveWeekMemoFromPad = () => {
+        const editor = document.getElementById('week-memo-editor');
+        const currentHtml = editor ? editor.innerHTML : editingWeekMemo.htmlContent;
+        
+        const isOld = editingWeekMemo.isOld;
+        const newId = isOld ? Date.now() : (editingWeekMemo.id || Date.now());
+
+        const updatedMemo = {
+          id: newId,
+          htmlContent: currentHtml,
+          timestamp: editingWeekMemo.timestamp || Date.now()
+        };
+
+        let newMemos = [];
+        if (isOld) {
+          newMemos = [...savedWeekMemos, updatedMemo];
+        } else {
+          const isNew = !savedWeekMemos.find(m => m.id === updatedMemo.id);
+          newMemos = isNew 
+            ? [...savedWeekMemos, updatedMemo]
+            : savedWeekMemos.map(m => m.id === updatedMemo.id ? updatedMemo : m);
+        }
+
+        const nd = { ...weeklyData, [weekMemoKey]: { memos: newMemos, useTemplate: false } };
+        
+        if (isOld && editingWeekMemo.originalKey) {
+          nd[editingWeekMemo.originalKey] = { ...(nd[editingWeekMemo.originalKey] || {}), useTemplate: true, memo: '', subject: '', startTime: '', endTime: '' }; 
+        }
+
+        setWeeklyData(nd);
+        saveAll(baseTemplate, templateSettings, nd, weeklySettings);
+        setEditingWeekMemo(null);
+        setShowWeekMemoPad(false);
+        showToast('ノートを保存しました');
+      };
+
+      const deleteWeekMemo = (id, isOld, originalKey) => {
+        const nd = { ...weeklyData };
+        if (isOld) {
+          nd[originalKey] = { ...(nd[originalKey] || {}), useTemplate: true, memo: '', subject: '', startTime: '', endTime: '' }; 
+        } else {
+          const newMemos = savedWeekMemos.filter(m => m.id !== id);
+          nd[weekMemoKey] = { ...(nd[weekMemoKey] || {}), memos: newMemos, useTemplate: false };
+        }
+        setWeeklyData(nd);
+        saveAll(baseTemplate, templateSettings, nd, weeklySettings);
+        setEditingWeekMemo(null);
+        setShowWeekMemoPad(false);
+        showToast('ノートを削除しました（Undoで復元可）');
+      };
+
+      const clearHandwriting = () => { if(quickCanvasRef.current){ const ctx=quickCanvasRef.current.getContext('2d'); ctx.clearRect(0,0,quickCanvasRef.current.width,quickCanvasRef.current.height); } };
+
+      const startDrawing = (e) => { 
+        try {
+          if (pencilOnly && e.pointerType !== 'pen' && e.pointerType !== 'mouse') return;
+          if (!quickCanvasRef.current) return;
+          
+          isDrawingRef.current = true;
+          
+          const r = quickCanvasRef.current.getBoundingClientRect(); 
+          const ctx = quickCanvasRef.current.getContext('2d'); 
+          
+          const x = (e.clientX - r.left) * (quickCanvasRef.current.width / (r.width || 1));
+          const y = (e.clientY - r.top) * (quickCanvasRef.current.height / (r.height || 1));
+          
+          if (!isFinite(x) || !isFinite(y)) return;
+
+          ctx.beginPath(); 
+          ctx.moveTo(x, y); 
+          lastPosRef.current = { x, y };
+        } catch(err) { console.error("Canvas start error:", err); }
+      };
+      
+      const draw = (e) => { 
+        try {
+          if (!isDrawingRef.current) return; 
+          if (pencilOnly && e.pointerType !== 'pen' && e.pointerType !== 'mouse') return;
+          if (!quickCanvasRef.current) return;
+          
+          const r = quickCanvasRef.current.getBoundingClientRect(); 
+          const ctx = quickCanvasRef.current.getContext('2d'); 
+          
+          ctx.globalCompositeOperation = isEraser ? 'destination-out' : 'source-over';
+          ctx.strokeStyle = isEraser ? 'rgba(0,0,0,1)' : (penColor || '#0f172a');
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+          
+          let pressure = e.pressure !== undefined ? e.pressure : 0.5;
+          if (pressure === 0) pressure = 0.5;
+          
+          let tilt = 0;
+          if (e.tiltX !== undefined && e.tiltY !== undefined) {
+            tilt = Math.sqrt(e.tiltX * e.tiltX + e.tiltY * e.tiltY);
+          }
+          
+          let baseSize = isEraser ? 30 : 3;
+          let finalSize = baseSize * (pressure * 2);
+          if (!isEraser && tilt > 45) { 
+            finalSize += (tilt - 45) * 0.2;
+            ctx.strokeStyle = (penColor || '#0f172a') + '80'; 
+          }
+          ctx.lineWidth = finalSize || baseSize;
+          
+          const x = (e.clientX - r.left) * (quickCanvasRef.current.width / (r.width || 1));
+          const y = (e.clientY - r.top) * (quickCanvasRef.current.height / (r.height || 1));
+          
+          if (!isFinite(x) || !isFinite(y)) return;
+
+          ctx.beginPath();
+          ctx.moveTo(lastPosRef.current.x, lastPosRef.current.y);
+          ctx.lineTo(x, y); 
+          ctx.stroke(); 
+          
+          lastPosRef.current = { x, y };
+        } catch (err) {
+          console.error("Canvas draw error:", err);
+        }
+      };
+
+      const endDrawing = () => { 
+        if (isDrawingRef.current) {
+          isDrawingRef.current = false; 
+        }
+      };
+
+      const saveHandwriting = () => { 
+        const canvas = quickCanvasRef.current;
+        if (!canvas) return;
+        try {
+          const tempCanvas = document.createElement('canvas');
+          tempCanvas.width = canvas.width; tempCanvas.height = canvas.height;
+          const tCtx = tempCanvas.getContext('2d');
+          tCtx.fillStyle = '#ffffff'; 
+          tCtx.fillRect(0,0,tempCanvas.width,tempCanvas.height);
+          tCtx.drawImage(canvas, 0, 0);
+          const du = tempCanvas.toDataURL('image/png'); 
+          
+          if (handwritingMode === 'quick') {
+            saveQuickMemos([{id:Date.now(),dataUrl:du,timestamp:new Date().toISOString()},...quickMemos]); 
+          } else if (handwritingMode === 'weekMemo') {
+            restoreSelectionAndInsertHtml(`<img src="${du}" alt="手書きメモ" style="max-width:100%; border-radius:8px; margin:8px 0; border:1px solid #e2e8f0;"><br>`, 'week-memo-editor');
+          } else if (handwritingMode === 'note') {
+            restoreSelectionAndInsertHtml(`<img src="${du}" alt="手書きメモ" style="max-width:100%; border-radius:8px; margin:8px 0; border:1px solid #e2e8f0;"><br>`, 'note-editor');
+          } else {
+            setTempHandwriting(du); 
+          }
+          setShowHandwritingPad(false); 
+        } catch (e) {
+          console.error("Save handwriting error:", e);
+          showToast("保存中にエラーが発生しました");
+        }
+      };
 
       const shareMemo = async (dataUrl) => {
         try {
@@ -582,10 +1042,14 @@
       const getDailyEvents = (ds, di) => { const evs=[]; const [y,m,d]=ds.split('-').map(Number); const hol=getHolidayName(y,m,d); if(hol) evs.push({type:'holiday',text:hol}); todos.filter(t=>!t.completed&&t.dueDate===ds).forEach(t=>evs.push({type:'todo',text:t.text})); const ed=getCellData(ds,'event',di); if(ed?.subject) evs.push({type:'event',text:ed.subject}); return evs; };
       const getCalendarDays = () => { const y=currentMonth.getFullYear(); const m=currentMonth.getMonth(); const fd=new Date(y,m,1); const ld=new Date(y,m+1,0); let fdi=fd.getDay()-1; if(fdi===-1) fdi=6; const days=[]; for(let i=fdi-1;i>=0;i--) days.push({date:new Date(y,m-1,new Date(y,m,0).getDate()-i),isCurrentMonth:false}); for(let i=1;i<=ld.getDate();i++) days.push({date:new Date(y,m,i),isCurrentMonth:true}); while(days.length<42) days.push({date:new Date(y,m+1,days.length-ld.getDate()-fdi+1),isCurrentMonth:false}); return days; };
 
-      const MonthTabs = ({ className="" }) => (
+      const renderMonthTabs = (className="") => (
         <div className={`flex gap-1 overflow-x-auto p-2 bg-white border-b border-slate-400 no-print ${className}`}>
           {[4,5,6,7,8,9,10,11,12,1,2,3].map(m => (
-            <button key={m} onClick={() => setCurrentMonth(new Date(schoolYear + (m<=3?1:0), m-1, 1))} className={`px-3 py-1 rounded-lg text-xs font-bold ${currentMonth.getMonth()+1===m?'bg-blue-600 text-white shadow-md':'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>{m}月</button>
+            <button key={m} onClick={() => {
+              const d = new Date(schoolYear + (m<=3?1:0), m-1, 1);
+              setCurrentMonth(d);
+              setCurrentWeekStart(getMonday(d));
+            }} className={`px-3 py-1 rounded-lg text-xs font-bold ${currentMonth.getMonth()+1===m?'bg-blue-600 text-white shadow-md':'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>{m}月</button>
           ))}
         </div>
       );
@@ -607,49 +1071,50 @@
       );
 
       return (
-        <div className="flex flex-col h-[100dvh] w-full relative overflow-hidden">
+        <div className={`flex flex-col h-[100dvh] w-full relative overflow-hidden transition-colors ${theme === 'dark' ? 'dark bg-slate-900 text-slate-200' : ''}`}>
           {toastMessage && <div className="fixed top-[calc(4rem+env(safe-area-inset-top))] left-1/2 -translate-x-1/2 bg-slate-800 text-white px-4 py-2 rounded-full z-[300] shadow-lg anim-scale-in font-bold text-sm">{toastMessage}</div>}
           
-          <header className="bg-white border-b border-slate-400 flex items-center px-4 sm:px-6 justify-between no-print shrink-0 shadow-sm z-30 pt-[env(safe-area-inset-top)] h-[calc(3.5rem+env(safe-area-inset-top))]">
+          <header className="bg-white dark:bg-slate-800 border-b border-slate-400 dark:border-slate-700 flex items-center px-4 sm:px-6 justify-between no-print shrink-0 shadow-sm z-30 pt-[env(safe-area-inset-top)] h-[calc(3.5rem+env(safe-area-inset-top))] transition-colors">
             <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
-              <h1 className="font-black text-blue-700 flex items-center gap-1 sm:gap-2 text-base sm:text-lg">
+              <h1 className="font-black text-blue-700 dark:text-blue-400 flex items-center gap-1 sm:gap-2 text-base sm:text-lg">
                 <LogoIcon className="w-5 h-5 sm:w-6 sm:h-6"/> 
                 <span className="hidden sm:inline">EduPlanner</span>
               </h1>
               
-              <div className="flex items-center gap-1 sm:gap-1.5 border-l border-slate-300 pl-2 sm:pl-3 ml-1 sm:ml-1">
+              <div className="flex items-center gap-1 sm:gap-1.5 border-l border-slate-300 dark:border-slate-600 pl-2 sm:pl-3 ml-1 sm:ml-1">
                 {!isMobile && (
-                  <div className="flex items-center bg-slate-50 border border-slate-300 rounded-lg shadow-sm overflow-hidden h-8 mr-1.5">
-                    <button onClick={handleUndo} className="px-2 py-1 text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition-colors h-full flex items-center" title="元に戻す (Undo)"><span className="text-sm">↩️</span></button>
-                    <div className="w-px h-4 bg-slate-300"></div>
-                    <button onClick={handleRedo} className="px-2 py-1 text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition-colors h-full flex items-center" title="やり直す (Redo)"><span className="text-sm">↪️</span></button>
+                  <div className="flex items-center bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg shadow-sm overflow-hidden h-8 mr-1.5">
+                    <button onClick={handleUndo} className="px-2 py-1 text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-slate-800 transition-colors h-full flex items-center" title="元に戻す (Undo)"><span className="text-sm">↩️</span></button>
+                    <div className="w-px h-4 bg-slate-300 dark:bg-slate-600"></div>
+                    <button onClick={handleRedo} className="px-2 py-1 text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-slate-800 transition-colors h-full flex items-center" title="やり直す (Redo)"><span className="text-sm">↪️</span></button>
                   </div>
                 )}
-                <button onClick={() => setShowQuickMemoList(true)} className="bg-white hover:bg-slate-50 border border-slate-300 px-2 sm:px-3 py-1.5 h-8 rounded-lg text-[11px] font-bold text-slate-700 transition-all flex items-center gap-1 sm:gap-1.5 shadow-sm active:scale-95" title="クイックメモ">
+                <button onClick={() => setShowQuickMemoList(true)} className="bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-600 px-2 sm:px-3 py-1.5 h-8 rounded-lg text-[11px] font-bold text-slate-700 dark:text-slate-300 transition-all flex items-center gap-1 sm:gap-1.5 shadow-sm active:scale-95" title="クイックメモ">
                   <span className="text-sm leading-none">✍️</span><span className="hidden lg:inline">メモ</span>
                 </button>
-                <button onClick={() => setShowTodo(true)} className="bg-white hover:bg-slate-50 border border-slate-300 px-2 sm:px-3 py-1.5 h-8 rounded-lg text-[11px] font-bold text-slate-700 transition-all flex items-center gap-1 sm:gap-1.5 shadow-sm active:scale-95 relative" title="TODO">
+                <button onClick={() => setShowTodo(true)} className="bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-600 px-2 sm:px-3 py-1.5 h-8 rounded-lg text-[11px] font-bold text-slate-700 dark:text-slate-300 transition-all flex items-center gap-1 sm:gap-1.5 shadow-sm active:scale-95 relative" title="TODO">
                   <span className="text-sm leading-none">📝</span><span className="hidden lg:inline">TODO</span>
-                  {todos.filter(t=>!t.completed).length > 0 && <span className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center shadow-md border border-white">{todos.filter(t=>!t.completed).length}</span>}
+                  {todos.filter(t=>!t.completed).length > 0 && <span className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center shadow-md border border-white dark:border-slate-800">{todos.filter(t=>!t.completed).length}</span>}
                 </button>
               </div>
             </div>
 
             <div className="flex gap-1.5 sm:gap-2.5 overflow-x-auto hide-scrollbar pl-4 ml-auto">
               {['dashboard','yearly','monthly','weekly','notes','syllabus','documents', 'settings'].map(t=>(
-                <button key={t} onClick={()=>setActiveTab(t)} className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-black whitespace-nowrap transition-colors ${activeTab===t?'bg-blue-100 text-blue-800 shadow-sm border border-blue-300':'text-slate-600 hover:bg-slate-100 border border-transparent'}`}>
+                <button key={t} onClick={()=>setActiveTab(t)} className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-black whitespace-nowrap transition-colors ${activeTab===t?'bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-300 shadow-sm border border-blue-300 dark:border-blue-700':'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 border border-transparent'}`}>
                   {t==='dashboard'?'今日':t==='yearly'?'年間':t==='monthly'?'月間':t==='weekly'?'週案':t==='notes'?'ノート':t==='syllabus'?'進度':t==='documents'?'資料':'設定'}
                 </button>
               ))}
-              <button onClick={()=>setActiveTab('template')} className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-black whitespace-nowrap transition-colors ${activeTab==='template'?'bg-purple-100 text-purple-800 shadow-sm border border-purple-300':'text-slate-600 hover:bg-slate-100 border border-transparent'}`}>
+              <button onClick={()=>setActiveTab('template')} className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-black whitespace-nowrap transition-colors ${activeTab==='template'?'bg-purple-100 dark:bg-purple-900/50 text-purple-800 dark:text-purple-300 shadow-sm border border-purple-300 dark:border-purple-700':'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 border border-transparent'}`}>
                 基本
               </button>
             </div>
           </header>
 
-          {(activeTab==='monthly'||activeTab==='weekly'||activeTab==='template') && <MonthTabs className="shrink-0" />}
+          {(activeTab==='monthly'||activeTab==='weekly'||activeTab==='template') && renderMonthTabs("shrink-0 dark:bg-slate-900 dark:border-slate-700")}
 
-          <div className="flex-1 min-h-0 relative flex flex-col">
+          <div className="flex-1 min-h-0 relative flex flex-col bg-[var(--paper)] dark:bg-slate-900">
+
             {activeTab === 'dashboard' && <Dashboard weeklyData={weeklyData} baseTemplate={baseTemplate} todos={todos} syllabusData={syllabusData} yearlyData={yearlyData} vacations={vacations} weeklySettings={weeklySettings} templateSettings={templateSettings} onGoToWeekly={()=>setActiveTab('weekly')} onGoToDate={d=>setSelectedDateDetails({dateStr:formatDate(d),dateObj:d})} />}
             
             {/* 月間カレンダー */}
@@ -748,22 +1213,18 @@
                               {activeTab==='weekly' && (
                                 <div className="space-y-1.5">
                                   <div className={`text-[8px] sm:text-[10px] font-black rounded px-1 py-0.5 border bg-white shadow-sm ${style.color}`}>
-                                    {isMobile ? <div className="text-center">{style.label}</div> : (
-                                      <select value={setting.type} onChange={(e) => handleSettingChange(ds,i,{...setting,type:e.target.value})} className="bg-transparent font-black w-full text-center outline-none appearance-none cursor-pointer">
-                                        {Object.values(SCHEDULE_TYPES).map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
-                                      </select>
-                                    )}
+                                    <select value={setting.type} onChange={(e) => handleSettingChange(ds,i,{...setting,type:e.target.value})} className="bg-transparent font-black w-full text-center outline-none appearance-none cursor-pointer">
+                                      {Object.values(SCHEDULE_TYPES).map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
+                                    </select>
                                   </div>
                                   
-                                  {!isMobile && (
-                                    <div className="relative w-full hidden lg:block">
-                                      <select value="" onChange={(e) => { const v=e.target.value; if(v==='revert') handleRevertDay(ds); else if(v!=='') handleCopyDay(ds,v); }}
-                                        className="w-full text-[8px] sm:text-[9px] bg-white hover:bg-slate-50 border border-slate-300 text-slate-600 font-bold rounded px-1.5 py-1 outline-none cursor-pointer text-center appearance-none shadow-sm transition-colors">
-                                        <option value="" disabled>🔄 振替</option><option value="revert">🧹 リセット</option>
-                                        {DAYS.map((dn,di) => <option key={di} value={di}>➡️ {dn}曜</option>)}
-                                      </select>
-                                    </div>
-                                  )}
+                                  <div className="relative w-full">
+                                    <select value="" onChange={(e) => { const v=e.target.value; if(v==='revert') handleRevertDay(ds); else if(v!=='') handleCopyDay(ds,v); }}
+                                      className="w-full text-[8px] sm:text-[9px] bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 font-bold rounded px-0.5 sm:px-1 py-1 outline-none cursor-pointer text-center appearance-none shadow-sm transition-colors">
+                                      <option value="" disabled>🔄 日課</option><option value="revert">🧹 リセット</option>
+                                      {DAYS.map((dn,di) => <option key={di} value={di}>{dn}曜日課</option>)}
+                                    </select>
+                                  </div>
                                 </div>
                               )}
 
@@ -774,8 +1235,147 @@
                     </div>
 
                     <div className="flex-1 flex flex-col relative min-h-0">
-                      {/* 休日列オーバーレイ (絶対位置のリスト形式に変更し、重なりを防止) */}
-                      {activeTab === 'weekly' && (() => {
+                      {ROWS.filter(r=>r.id!=='diary').map(row => {
+                        // アクティブタブに応じて高さを切り替え
+                        let rh=''; let fc=''; let rb='';
+                        let customStyle = {};
+
+                        if (activeTab === 'template') {
+                          // 基本設定時はスクロールなしで1画面に収めるためflexで分割
+                          if(row.id==='lunch'){rh='min-h-[20px] h-5 sm:h-6';fc='shrink-0';rb='bg-amber-50/20';}
+                          else if(row.id==='morning'||row.id==='event'){rh='min-h-[24px] h-6 sm:h-8';fc='shrink-0';}
+                          else if(row.id==='afterschool'){rh='min-h-[40px]';fc='flex-[1.5]';}
+                          else {rh='min-h-[40px]';fc='flex-[2]';}
+                        } else {
+                          // 週案時は高さを固定し、1画面で見渡せるようにする
+                          rh='h-[4.5rem] sm:h-[5rem] lg:h-[5.5rem]'; fc='flex-1'; rb='';
+                          if(row.id==='lunch'){rh='h-8 sm:h-10';fc='shrink-0';rb='bg-amber-50/20';}
+                          else if(row.id==='morning'||row.id==='event'){rh='h-10 sm:h-12';fc='shrink-0';}
+                          else if(row.id==='afterschool'){rh='h-20 sm:h-24 lg:h-32';fc='shrink-0';}
+                        }
+                        
+                        const zClass = row.id === 'event' ? 'relative z-20' : 'relative z-0';
+
+                        return (
+                          <div key={row.id} className={`flex ${fc} ${rh} ${rb} ${zClass}`} style={customStyle}>
+                            <div className="w-10 sm:w-14 lg:w-16 border-r border-b border-slate-300 dark:border-slate-700 flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-900 shrink-0 sticky left-0 z-20">
+                              <div className="text-xs sm:text-base">{row.id.startsWith('p')?<span className="text-[10px] sm:text-[12px] text-slate-500 font-black">{row.id.replace('p','')}</span>:row.icon}</div>
+                              <div className="text-[7px] sm:text-[9px] font-black text-slate-700 mt-0.5">{row.name}</div>
+                            </div>
+                            <div className="flex-1 grid min-w-0" style={{ gridTemplateColumns: 'repeat(19, minmax(0, 1fr))' }}>
+                              {DAYS.map((day,i)=>{
+                                const cd=new Date(currentWeekStart); cd.setDate(cd.getDate()+i); const ds=formatDate(cd);
+                                const data=getCellData(ds,row.id,i); const set=getDaySetting(ds,i); const isH=set.type==='holiday';
+                                const cf=i>=5?'col-span-2':'col-span-3'; const isT=ds===todayStr;
+                                
+                                const isLastRow = row.id === 'afterschool';
+                                // 休日でもうっすら枠線を残してデザインを安定させる
+                                // ユーザー要望「休日の時は１限とか２限とかの枠いらないじゃん。」
+                                // よって、休日の場合はイベント行と最後の行以外は枠線を消す
+                                const borderBottomClass = (activeTab === 'weekly' && isH && row.id !== 'event' && !isLastRow) 
+                                  ? 'border-b border-transparent dark:border-transparent' 
+                                  : 'border-b border-slate-400 dark:border-slate-700';
+
+                                const cellBg = (activeTab==='weekly' && isH && row.id!=='event' && row.id!=='afterschool') ? 'bg-slate-50/30 dark:bg-slate-800/30' : 'bg-transparent';
+                                const overflowClass = activeTab === 'weekly' && row.id !== 'event' ? 'overflow-visible' : 'overflow-hidden';
+
+                                // 休日の場合はセル内に予定を描画しない（イベント以外）
+                                if (activeTab === 'weekly' && isH && row.id !== 'event') {
+                                  return (
+                                    <div key={i} 
+                                         className={`min-w-0 ${cf} border-r border-slate-300 dark:border-slate-700 last:border-r-0 ${borderBottomClass} p-0.5 ${cellBg} transition-colors h-full`}>
+                                    </div>
+                                  );
+                                }
+
+                                const hasData = (data.subject?.trim()) || (row.id === 'afterschool' && data.events?.some(e => e.subject?.trim()));
+
+                                let blockBg = 'bg-blue-50 hover:bg-blue-100';
+                                let blockBorder = 'border-blue-500';
+                                let blockText = 'text-blue-900';
+                                
+                                if (row.id === 'event') { blockBg = 'bg-pink-50 hover:bg-pink-100'; blockBorder = 'border-pink-500'; blockText = 'text-pink-900'; }
+                                else if (row.id === 'morning') { blockBg = 'bg-yellow-50 hover:bg-yellow-100'; blockBorder = 'border-yellow-500'; blockText = 'text-yellow-900'; }
+                                else if (row.id === 'lunch') { blockBg = 'bg-amber-50 hover:bg-amber-100'; blockBorder = 'border-amber-500'; blockText = 'text-amber-900'; }
+                                else if (row.id === 'afterschool') { blockBg = 'bg-teal-50 hover:bg-teal-100'; blockBorder = 'border-teal-500'; blockText = 'text-teal-900'; }
+                                else if (row.id === 'p5' || row.id === 'p6') { blockBg = 'bg-purple-50 hover:bg-purple-100'; blockBorder = 'border-purple-500'; blockText = 'text-purple-900'; }
+
+                                // 時間に応じた帯（ブロック）の高さ計算
+                                let blockStyle = { height: 'calc(100% - 4px)' };
+                                let blockClasses = 'relative w-full h-full';
+                                
+                                if (activeTab === 'weekly' && row.id !== 'event') {
+                                  let s = data.startTime;
+                                  let e = data.endTime;
+                                  const t = SCHEDULE_TIMES[set.type]?.[row.id];
+                                  if (!s && t) s = t.start;
+                                  if (!e && t) e = t.end;
+
+                                  if (s && e) {
+                                    let dur = getDurationMinutes(s, e);
+                                    if (!dur || dur <= 0) dur = 45;
+                                    
+                                    let baseDur = t ? getDurationMinutes(t.start, t.end) : 50;
+                                    if (!baseDur || baseDur <= 0) baseDur = 50;
+                                    
+                                    let pct = (dur / baseDur) * 100;
+                                    
+                                    if (pct > 110 && !isH) {
+                                       // 長い予定は絶対配置で下にはみ出させる（浮いているのを分かりやすくするためshadowを強めに）
+                                       blockStyle = { height: `calc(${pct}% - 4px)`, zIndex: 30 };
+                                       blockClasses = 'absolute left-0.5 right-0.5 top-0.5 w-auto shadow-md border-b-[3px] border-b-slate-300 dark:border-b-slate-600';
+                                    } else {
+                                       // 短い予定でも見栄えを保つため最低70%の高さは確保
+                                       pct = Math.max(70, Math.min(100, pct)); 
+                                       blockStyle = { height: `calc(${pct}% - 4px)` };
+                                       blockClasses = 'relative w-full h-full';
+                                    }
+                                  }
+                                } else {
+                                   blockStyle = { minHeight: 'calc(100% - 4px)' };
+                                   blockClasses = 'relative w-full h-full';
+                                }
+
+                                const fontSizeClass = row.id === 'event' ? getEventFontSize(data.subject, isMobile) : getDynamicFontSize(data.subject, isMobile);
+
+                                return (
+                                  <div key={i} onClick={()=>openEditModal(data,ds,row,i,day,isH,null)} className={`min-w-0 ${cf} border-r border-slate-300 dark:border-slate-700 last:border-r-0 ${borderBottomClass} p-0.5 cursor-pointer flex flex-col justify-start relative ${overflowClass} ${activeTab==='weekly'&&isT?'bg-blue-50/20':''} ${cellBg} hover:bg-slate-100/70 transition-colors h-full`}>
+                                    {hasData ? (
+                                      <div className={`${blockClasses} rounded sm:rounded-md shadow-[0_1px_2px_rgba(0,0,0,0.08)] flex flex-col px-1 py-0.5 sm:py-1 border-l-[3px] sm:border-l-[4px] transition-colors overflow-y-auto hide-scrollbar ${blockBg} ${blockBorder}`} style={blockStyle}>
+                                        {row.id === 'afterschool' ? (
+                                          <div className={`space-y-1.5 flex flex-col ${activeTab === 'weekly' ? '' : 'h-full justify-start'}`}>
+                                            {(data.events?.length?data.events:[{subject:data.subject,start:data.startTime}]).filter(e=>e.subject).map((e,idx)=>(
+                                              <div key={idx} className="flex flex-col">
+                                                {e.startTime && <div className={`text-[6px] sm:text-[7px] font-mono font-bold leading-none opacity-90 ${blockText} mb-0.5`}>{e.startTime}{e.endTime?`-${e.endTime}`:''}</div>}
+                                                <div className={`${fontSizeClass} font-black mt-0.5 break-words ${activeTab === 'weekly' && row.id !== 'event' ? 'whitespace-pre-wrap' : ''} ${blockText}`} title={e.subject}>{e.subject}</div>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        ) : (
+                                          <div className="flex flex-col justify-center h-full">
+                                            {(data.startTime || data.endTime) && (
+                                              <div className={`text-[6px] sm:text-[7px] font-mono font-bold opacity-90 shrink-0 ${blockText} mb-0.5`}>
+                                                {data.startTime}{data.startTime && data.endTime ? '-' : ''}{data.endTime}
+                                              </div>
+                                            )}
+                                            <div className={`${fontSizeClass} font-black break-words ${activeTab === 'weekly' && row.id !== 'event' ? 'whitespace-pre-wrap' : ''} ${blockText}`} title={data.subject}>{data.subject}</div>
+                                            {data.memo && <div className={`text-[6px] sm:text-[8px] font-bold mt-1 opacity-80 break-words ${activeTab === 'weekly' && row.id !== 'event' ? 'whitespace-pre-wrap' : 'line-clamp-1'} ${blockText}`}>{data.memo}</div>}
+                                          </div>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <div className={`w-full ${activeTab === 'weekly' ? 'min-h-full' : 'h-full'}`}></div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {/* 休日列オーバーレイ (Z-indexと配置順で手前に表示) */}
+                    {activeTab === 'weekly' && (() => {
                         const overlays = [];
                         DAYS.forEach((day, i) => {
                           const d = new Date(currentWeekStart); d.setDate(d.getDate() + i);
@@ -793,20 +1393,23 @@
                             }
                           });
                           
+                          // 休日は朝7時から夕方18時までの全体タイムラインとする
                           const RANGE_START = 7 * 60; // 7:00
-                          const RANGE_END = 19 * 60;  // 19:00
+                          const RANGE_END = 18 * 60;  // 18:00
                           const TOTAL_RANGE = RANGE_END - RANGE_START;
                           const COLORS = ['#0d9488','#3b82f6','#8b5cf6','#06b6d4','#10b981','#f59e0b','#ec4899'];
                           
                           overlays.push(
-                            <div key={`hol-overlay-${i}`} className="absolute top-0 left-0 right-0 bottom-0 z-10 pointer-events-none flex">
+                            <div key={`hol-overlay-${i}`} className="absolute top-10 sm:top-12 bottom-20 sm:bottom-24 lg:bottom-32 left-0 right-0 z-30 pointer-events-none flex">
                               <div className="w-10 sm:w-14 lg:w-16 shrink-0"></div>
                               <div className="flex-1 grid" style={{ gridTemplateColumns: 'repeat(19, minmax(0, 1fr))' }}>
                                 {DAYS.map((_, j) => {
                                   const cf = j >= 5 ? 'col-span-2' : 'col-span-3';
                                   if (j !== i) return <div key={j} className={`min-w-0 ${cf}`}></div>;
                                   return (
-                                    <div key={j} className={`min-w-0 ${cf} bg-stone-50/95 backdrop-blur-sm pointer-events-auto border-r border-slate-300 last:border-0 relative z-20`}>
+                                    <div key={j} 
+                                         className={`min-w-0 ${cf} pointer-events-auto relative z-30 cursor-pointer hover:bg-slate-100/95 dark:hover:bg-slate-700/95 transition-colors`}
+                                         onClick={() => openEditModal({subject:'',memo:'',startTime:'',endTime:'',events:[],handwriting:null}, dateStr, ROWS.find(r=>r.id==='p1'), i, day, true, null)}>
                                       {allItems.map((e, idx) => {
                                         let topPct = 85, heightPct = 10;
                                         if (e.start) {
@@ -819,15 +1422,14 @@
                                         }
                                         const color = COLORS[idx % COLORS.length];
                                         return (
-                                          <div key={idx} onClick={()=>openEditModal(getCellData(dateStr,e.pid,i),dateStr,ROWS.find(r=>r.id===e.pid),i,day,true,null)} 
-                                               className="absolute left-1 right-1 sm:left-1.5 sm:right-1.5 rounded shadow-sm cursor-pointer hover:shadow-md hover:z-30 overflow-y-auto hide-scrollbar flex flex-col p-1 sm:p-1.5 transition-all bg-white"
-                                               style={{ top: `${topPct}%`, height: `${heightPct}%`, minHeight:'32px', borderLeft: `3px solid ${color}`, backgroundColor: color+'1a' }}>
+                                          <div key={idx} onClick={(ev)=>{ev.stopPropagation(); openEditModal(getCellData(dateStr,e.pid,i),dateStr,ROWS.find(r=>r.id===e.pid),i,day,true,null);}} 
+                                               className="absolute left-1 right-1 sm:left-1.5 sm:right-1.5 rounded shadow-sm cursor-pointer hover:shadow-md hover:z-40 overflow-y-auto hide-scrollbar flex flex-col p-1 sm:p-1.5 transition-all bg-white dark:bg-slate-900 border dark:border-slate-700"
+                                               style={{ top: `${topPct}%`, height: `${heightPct}%`, minHeight:'32px', borderLeft: `3px solid ${color}` }}>
                                             {e.start && <div className="text-[7px] sm:text-[9px] font-mono font-bold leading-none mb-1 opacity-90 shrink-0" style={{color}}>{e.start}{e.end?`-${e.end}`:''}</div>}
-                                            <div className="text-[8px] sm:text-[11px] font-black leading-tight text-slate-800 break-words">{e.subject}</div>
+                                            <div className={`${getDynamicFontSize(e.subject, isMobile)} font-black leading-tight text-slate-800 dark:text-slate-200 break-words whitespace-pre-wrap`}>{e.subject}</div>
                                           </div>
                                         )
                                       })}
-                                      <div className="absolute inset-0 z-[-1]" onClick={()=>openEditModal({subject:'',memo:'',startTime:'',endTime:'',events:[],handwriting:null}, dateStr, ROWS.find(r=>r.id==='afterschool'), i, day, true, null)}></div>
                                     </div>
                                   );
                                 })}
@@ -837,108 +1439,62 @@
                         });
                         return overlays;
                       })()}
-
-                      {ROWS.filter(r=>r.id!=='diary').map(row => {
-                        // アクティブタブに応じて高さを切り替え
-                        let rh=''; let fc=''; let rb='';
-                        if (activeTab === 'template') {
-                          // 基本設定時はスクロールなしで1画面に収めるためflexで分割
-                          if(row.id==='lunch'){rh='min-h-[20px] h-5 sm:h-6';fc='shrink-0';rb='bg-amber-50/20';}
-                          else if(row.id==='morning'||row.id==='event'){rh='min-h-[24px] h-6 sm:h-8';fc='shrink-0';}
-                          else if(row.id==='afterschool'){rh='min-h-[40px]';fc='flex-[1.5]';}
-                          else {rh='min-h-[40px]';fc='flex-[2]';}
-                        } else {
-                          // 週案時はテキストの量に応じて柔軟に広がるように修正
-                          rh='min-h-[3.5rem] lg:min-h-[4.5rem]'; fc='flex-1 h-auto'; rb='';
-                          if(row.id==='lunch'){rh='min-h-[2rem] sm:min-h-[2.5rem]';fc='shrink-0 h-auto';rb='bg-amber-50/20';}
-                          else if(row.id==='morning'||row.id==='event'){rh='min-h-[2.5rem] sm:min-h-[3.5rem]';fc='shrink-0 h-auto';}
-                          else if(row.id==='afterschool'){rh='min-h-[6rem] lg:min-h-[8rem]';fc='shrink-0 h-auto';}
-                        }
-                        
-                        const zClass = row.id === 'event' ? 'relative z-20' : 'relative z-0';
-
-                        return (
-                          <div key={row.id} className={`flex ${fc} ${rh} border-b border-slate-400 last:border-b-0 ${rb} ${zClass}`}>
-                            <div className="w-10 sm:w-14 lg:w-16 border-r border-slate-300 flex flex-col items-center justify-center bg-slate-50 shrink-0 sticky left-0 z-20">
-                              <div className="text-xs sm:text-base">{row.id.startsWith('p')?<span className="text-[10px] sm:text-[12px] text-slate-500 font-black">{row.id.replace('p','')}</span>:row.icon}</div>
-                              <div className="text-[7px] sm:text-[9px] font-black text-slate-700 mt-0.5">{row.name}</div>
-                            </div>
-                            <div className="flex-1 grid min-w-0" style={{ gridTemplateColumns: 'repeat(19, minmax(0, 1fr))' }}>
-                              {DAYS.map((day,i)=>{
-                                const cd=new Date(currentWeekStart); cd.setDate(cd.getDate()+i); const ds=formatDate(cd);
-                                const data=getCellData(ds,row.id,i); const set=getDaySetting(ds,i); const isH=set.type==='holiday';
-                                const cf=i>=5?'col-span-2':'col-span-3'; const isT=ds===todayStr;
-                                
-                                // 休日でイベント以外のセルは空表示
-                                if(activeTab === 'weekly' && isH && row.id!=='event') return <div key={i} className={`min-w-0 ${cf} border-r border-slate-300 last:border-0 bg-transparent`}></div>;
-
-                                const hasData = (data.subject?.trim()) || (row.id === 'afterschool' && data.events?.some(e => e.subject?.trim()));
-
-                                let blockBg = 'bg-blue-50 hover:bg-blue-100';
-                                let blockBorder = 'border-blue-500';
-                                let blockText = 'text-blue-900';
-                                
-                                if (row.id === 'event') { blockBg = 'bg-pink-50 hover:bg-pink-100'; blockBorder = 'border-pink-500'; blockText = 'text-pink-900'; }
-                                else if (row.id === 'morning') { blockBg = 'bg-yellow-50 hover:bg-yellow-100'; blockBorder = 'border-yellow-500'; blockText = 'text-yellow-900'; }
-                                else if (row.id === 'lunch') { blockBg = 'bg-amber-50 hover:bg-amber-100'; blockBorder = 'border-amber-500'; blockText = 'text-amber-900'; }
-                                else if (row.id === 'afterschool') { blockBg = 'bg-teal-50 hover:bg-teal-100'; blockBorder = 'border-teal-500'; blockText = 'text-teal-900'; }
-                                else if (row.id === 'p5' || row.id === 'p6') { blockBg = 'bg-purple-50 hover:bg-purple-100'; blockBorder = 'border-purple-500'; blockText = 'text-purple-900'; }
-
-                                return (
-                                  <div key={i} onClick={()=>openEditModal(data,ds,row,i,day,isH,null)} className={`min-w-0 ${cf} border-r border-slate-300 last:border-0 p-0.5 sm:p-1 cursor-pointer flex flex-col ${activeTab === 'weekly' ? 'overflow-x-hidden' : 'overflow-hidden'} ${activeTab==='weekly'&&isT?'bg-blue-50/20':''} hover:bg-slate-100/70 transition-colors`}>
-                                    {hasData ? (
-                                      <div className={`w-full ${activeTab === 'weekly' ? 'min-h-full' : 'h-full'} rounded sm:rounded-md shadow-[0_1px_2px_rgba(0,0,0,0.08)] flex flex-col px-1 sm:px-2 py-0.5 sm:py-1 border-l-[3px] sm:border-l-[4px] transition-colors overflow-hidden ${blockBg} ${blockBorder}`}>
-                                        {row.id === 'afterschool' ? (
-                                          <div className={`space-y-1.5 flex flex-col ${activeTab === 'weekly' ? '' : 'h-full justify-start'}`}>
-                                            {(data.events?.length?data.events:[{subject:data.subject,start:data.startTime}]).filter(e=>e.subject).map((e,idx)=>(
-                                              <div key={idx} className="flex flex-col">
-                                                {e.startTime && <div className={`text-[6px] sm:text-[8px] font-mono font-bold leading-none opacity-90 ${blockText}`}>{e.startTime}{e.endTime?`-${e.endTime}`:''}</div>}
-                                                <div className={`text-[8px] sm:text-[11px] lg:text-xs font-black leading-tight mt-0.5 break-words ${activeTab === 'weekly' ? 'whitespace-pre-wrap' : 'line-clamp-1'} ${blockText}`} title={e.subject}>{e.subject}</div>
-                                              </div>
-                                            ))}
-                                          </div>
-                                        ) : (
-                                          <div className="flex flex-col justify-center h-full">
-                                            {(data.startTime || data.endTime) && (
-                                              <div className={`text-[6px] sm:text-[8px] font-mono font-bold mb-0.5 opacity-90 shrink-0 ${blockText}`}>
-                                                {data.startTime}{data.startTime && data.endTime ? '-' : ''}{data.endTime}
-                                              </div>
-                                            )}
-                                            <div className={`text-[8px] sm:text-[11px] lg:text-xs font-black leading-tight break-words ${activeTab === 'weekly' ? 'whitespace-pre-wrap' : 'line-clamp-2'} ${blockText}`} title={data.subject}>{data.subject}</div>
-                                            {data.memo && <div className={`text-[6px] sm:text-[8px] font-bold mt-1 opacity-80 break-words ${activeTab === 'weekly' ? 'whitespace-pre-wrap' : 'line-clamp-1'} ${blockText}`}>{data.memo}</div>}
-                                          </div>
-                                        )}
-                                      </div>
-                                    ) : (
-                                      <div className={`w-full ${activeTab === 'weekly' ? 'min-h-full' : 'h-full'}`}></div>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
                   </div>
                 </div>
                 
                 {/* 右サイド (PC/iPad) 幅を固定 */}
                 {!isMobile && activeTab === 'weekly' && (
                   <div className="hidden md:flex w-[280px] lg:w-[320px] shrink-0 flex-col gap-3 min-h-0">
-                    <div className="flex-1 bg-white rounded-2xl shadow-sm border border-slate-300 flex flex-col overflow-hidden min-h-0">
-                      <div className="bg-slate-50 border-b border-slate-300 p-3 text-xs font-black flex items-center gap-1.5 text-slate-800">✍️ 今週のメモ</div>
-                      <div className="flex-1 p-2 space-y-2 overflow-y-auto min-h-0 hide-scrollbar bg-slate-50/50">
-                        {[0,1,2,3,4,5,6].map(i=>{
-                          const d=new Date(currentWeekStart); d.setDate(d.getDate()+i); const ds=formatDate(d); const wKey=`${ds}-diary`;
-                          return <div key={i} className="flex bg-white border border-slate-300 rounded-xl focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 min-h-[50px] transition-all"><div className="w-10 bg-slate-50 border-r border-slate-200 flex flex-col items-center justify-center shrink-0 rounded-l-xl"><span className="text-[8px] font-bold text-slate-500">{d.getMonth()+1}/{d.getDate()}</span><span className={`text-[10px] font-black ${i===5?'text-blue-600':i===6?'text-rose-600':'text-slate-700'}`}>{DAYS[i]}</span></div><textarea value={weeklyData[wKey]?.memo||''} onChange={e=>{const n={...weeklyData,[wKey]:{memo:e.target.value,useTemplate:false}};setWeeklyData(n);}} onBlur={()=>saveToFirestore('weekly',{weeklyData,weeklySettings})} className="flex-1 p-2.5 pr-4 text-[10px] sm:text-xs font-bold text-slate-800 outline-none resize-none bg-transparent break-words w-full" placeholder="メモ..."/></div>
+                    <div className="flex-1 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-300 dark:border-slate-700 flex flex-col overflow-hidden min-h-0 transition-colors">
+                      <div className="bg-slate-50 dark:bg-slate-900 border-b border-slate-300 dark:border-slate-700 p-3 flex justify-between items-center shrink-0">
+                        <div className="text-xs font-black flex items-center gap-1.5 text-slate-800 dark:text-slate-200">📒 今週のメモ</div>
+                        <button onClick={() => { setEditingWeekMemo({id: Date.now(), htmlContent: '', timestamp: Date.now()}); setShowWeekMemoPad(true); }} className="text-[10px] font-bold bg-blue-600 text-white px-3 py-1 rounded-lg shadow-sm hover:bg-blue-700 transition-colors active:scale-95">＋ 追加</button>
+                      </div>
+                      <div className="flex-1 p-3 space-y-4 overflow-y-auto min-h-0 hide-scrollbar bg-slate-50/50 dark:bg-slate-900/50">
+                        {displayWeekMemos.map((memo, idx) => {
+                          const tempDiv = document.createElement('div');
+                          tempDiv.innerHTML = memo.htmlContent || '';
+                          const textPreview = tempDiv.textContent || tempDiv.innerText || '';
+                          const hasImg = tempDiv.querySelector('img') !== null;
+                          
+                          const stickyColors = [
+                            'bg-yellow-100 dark:bg-yellow-900/40 border-yellow-200 dark:border-yellow-700/50 text-yellow-900 dark:text-yellow-100',
+                            'bg-pink-100 dark:bg-pink-900/40 border-pink-200 dark:border-pink-700/50 text-pink-900 dark:text-pink-100',
+                            'bg-blue-100 dark:bg-blue-900/40 border-blue-200 dark:border-blue-700/50 text-blue-900 dark:text-blue-100',
+                            'bg-emerald-100 dark:bg-emerald-900/40 border-emerald-200 dark:border-emerald-700/50 text-emerald-900 dark:text-emerald-100'
+                          ];
+                          const colorClass = stickyColors[idx % stickyColors.length];
+                          const rotation = idx % 2 === 0 ? '-rotate-1' : 'rotate-1';
+
+                          return (
+                            <div key={memo.id} onClick={() => { setEditingWeekMemo({...memo}); setShowWeekMemoPad(true); }} className={`${colorClass} border shadow-md hover:shadow-lg rounded-sm p-3 cursor-pointer transition-all group relative flex flex-col gap-1.5 transform hover:-translate-y-1 ${rotation} hover:rotate-0`}>
+                              <button 
+                                 onClick={(e) => { e.preventDefault(); e.stopPropagation(); deleteWeekMemo(memo.id, memo.isOld, memo.originalKey); }}
+                                 onPointerDown={(e) => e.stopPropagation()}
+                                 className="absolute top-1 right-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity text-xs text-slate-400 hover:text-rose-500 bg-white/80 dark:bg-slate-800/80 rounded-full w-6 h-6 flex items-center justify-center z-10 shadow-sm"
+                                 title="削除"
+                              >✖</button>
+                              <div className="text-[10px] font-bold font-mono border-b border-black/10 dark:border-white/10 pb-1 opacity-70">
+                                {new Date(memo.timestamp).toLocaleString('ja-JP', {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})}
+                              </div>
+                              {textPreview && <div className="text-xs font-bold line-clamp-3 leading-relaxed pr-4 whitespace-pre-wrap">{textPreview.replace(/<br\s*\/?>/mg, '\n')}</div>}
+                              {!textPreview && !hasImg && <div className="text-xs font-bold opacity-50 italic">空白のメモ</div>}
+                              {hasImg && <div className="text-[10px] bg-black/5 dark:bg-white/10 inline-flex items-center gap-1 px-2 py-1 rounded font-bold self-start mt-1 opacity-80"><span>🖼</span> 画像/手書きあり</div>}
+                            </div>
+                          )
                         })}
+                        {displayWeekMemos.length === 0 && (
+                          <div className="h-full flex flex-col items-center justify-center text-slate-400 gap-2 cursor-pointer hover:text-slate-500 transition-colors" onClick={() => { setEditingWeekMemo({id: Date.now(), htmlContent: '', timestamp: Date.now()}); setShowWeekMemoPad(true); }}>
+                             <span className="text-3xl opacity-50">📝</span>
+                             <span className="text-xs font-bold">タップしてメモを追加</span>
+                          </div>
+                        )}
                       </div>
                     </div>
                     <div className="h-[40%] bg-white rounded-2xl shadow-sm border border-slate-300 flex flex-col shrink-0">
                       <div className="bg-slate-50 border-b border-slate-300 p-3 flex justify-between items-center"><div className="text-xs font-black flex items-center gap-1.5 text-slate-800">📝 TODO</div><button onClick={()=>setShowTodo(true)} className="text-[10px] font-bold bg-white border border-slate-300 px-3 py-1 rounded-lg shadow-sm hover:bg-slate-100 transition-colors text-slate-700">詳細</button></div>
                       <div className="flex-1 p-2 space-y-2 overflow-y-auto hide-scrollbar bg-slate-50/50">
-                        {sortedIncompleteTodos.map(t=>{
+                        {incompleteTodos.slice(0, 5).map(t=>{
                           const isOv=t.dueDate&&t.dueDate<todayStr;
                           return <div key={t.id} className={`flex items-start gap-2 p-2.5 border rounded-xl shadow-sm ${t.important?'bg-amber-50 border-amber-300':isOv?'bg-rose-50 border-rose-300':'bg-white border-slate-300'}`}><input type="checkbox" onChange={()=>saveTodos(todos.map(td=>td.id===t.id?{...td,completed:!td.completed}:td))} className="mt-0.5 w-4 h-4 cursor-pointer"/><div className="flex-1 min-w-0"><div className={`text-[10px] sm:text-xs font-black truncate ${isOv?'text-rose-600':'text-slate-800'}`}>{t.important&&<span className="text-amber-500 mr-1">★</span>}{t.text}</div>{t.dueDate&&<div className="text-[8px] sm:text-[9px] font-bold text-slate-600 mt-1 font-mono">期限: {t.dueDate}</div>}</div></div>
                         })}
@@ -952,13 +1508,67 @@
             {/* ノート */}
             {activeTab === 'notes' && (
               <div className="p-4 h-full flex flex-col min-h-0 bg-[var(--paper)]">
-                <div className="max-w-4xl mx-auto w-full flex-1 bg-white rounded-2xl p-6 flex flex-col min-h-0 border border-slate-400 shadow-sm">
+                <div className="max-w-4xl mx-auto w-full flex-1 bg-white rounded-2xl p-4 sm:p-6 flex flex-col min-h-0 border border-slate-400 shadow-sm">
                   {editingNote ? (
                     <div className="flex-1 flex flex-col gap-4 anim-fade-up min-h-0">
                       <input value={editingNote.title} onChange={e=>setEditingNote({...editingNote,title:e.target.value})} className="text-xl font-black p-2 border-b border-slate-400 outline-none text-slate-800" placeholder="タイトル" />
-                      <textarea value={editingNote.content} onChange={e=>setEditingNote({...editingNote,content:e.target.value})} className="flex-1 p-2 outline-none resize-none text-sm font-bold text-slate-800" placeholder="ノートの内容..." />
+                      
+                      {/* 書式設定ツールバー */}
+                      <div className="flex items-center gap-3 p-2 bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 shrink-0 flex-wrap rounded-xl">
+                        <div className="flex items-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-0.5 shadow-sm">
+                          <button onClick={() => formatText('formatBlock', 'H1', 'note-editor')} className="px-3 py-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded font-black text-slate-700 dark:text-slate-300 text-xs leading-none" title="見出し1">見出し1</button>
+                          <button onClick={() => formatText('formatBlock', 'H2', 'note-editor')} className="px-3 py-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded font-black text-slate-700 dark:text-slate-300 text-xs leading-none" title="見出し2">見出し2</button>
+                          <div className="w-px h-4 bg-slate-300 dark:bg-slate-700 mx-1"></div>
+                          <button onClick={() => formatText('bold', null, 'note-editor')} className="px-3 py-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded font-black text-slate-700 dark:text-slate-300 text-xs leading-none" title="太字">太字(B)</button>
+                          <div className="w-px h-4 bg-slate-300 dark:bg-slate-700 mx-1"></div>
+                          <button onClick={() => formatText('insertUnorderedList', null, 'note-editor')} className="px-3 py-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded font-black text-slate-700 dark:text-slate-300 text-xs flex items-center justify-center leading-none gap-1" title="箇条書き"><span className="text-base leading-none translate-y-[-1px]">•</span>箇条書き</button>
+                          <button onClick={() => insertCheckbox('note-editor')} className="px-3 py-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded font-black text-slate-700 dark:text-slate-300 text-xs flex items-center justify-center leading-none gap-1" title="チェックボックス"><span className="text-sm leading-none">☑</span>チェック</button>
+                        </div>
+                        
+                        <div className="flex items-center gap-2 ml-auto">
+                          <label className="cursor-pointer px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-bold text-[11px] sm:text-xs flex items-center gap-1.5 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors shadow-sm text-slate-700 dark:text-slate-300">
+                             <span>📷</span> <span className="hidden sm:inline">写真</span>
+                             <input type="file" accept="image/*" className="hidden" onClick={saveSelection} onChange={(e) => handlePhotoUpload(e, 'note-editor')} />
+                          </label>
+                          <button onClick={() => { saveSelection(); setHandwritingMode('note'); setShowHandwritingPad(true); }} className="px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-bold text-[11px] sm:text-xs flex items-center gap-1.5 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors shadow-sm text-slate-700 dark:text-slate-300">
+                             <span>✏️</span> <span className="hidden sm:inline">手書き</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      <div 
+                        id="note-editor"
+                        className="flex-1 p-4 outline-none text-slate-800 dark:text-slate-200 font-medium text-sm leading-relaxed bg-slate-50 dark:bg-slate-900 shadow-inner border border-slate-300 dark:border-slate-700 overflow-y-auto editor-content rounded-xl"
+                        contentEditable
+                        suppressContentEditableWarning
+                        data-placeholder="ノートの内容..."
+                        onBlur={e => {
+                          const html = e.currentTarget.innerHTML;
+                          setEditingNote(prev => ({...prev, content: html}));
+                          saveSelection();
+                        }}
+                        onKeyUp={saveSelection}
+                        onMouseUp={saveSelection}
+                        onClick={(e) => handleEditorClick(e, 'note-editor')}
+                        ref={el => {
+                          if (el && !el.dataset.initialized) {
+                            let c = editingNote.content || '';
+                            if (!c.includes('<br') && !c.includes('<div') && !c.includes('<p') && !c.includes('<img') && c.includes('\n')) {
+                              c = c.replace(/\n/g, '<br>');
+                            }
+                            el.innerHTML = c;
+                            el.dataset.initialized = 'true';
+                          }
+                        }}
+                      ></div>
+                      
                       <div className="flex justify-between items-center pt-3 border-t border-slate-200 shrink-0">
-                        <button onClick={()=>shareNoteText(editingNote)} className="px-4 py-2 bg-slate-50 hover:bg-blue-50 text-slate-600 hover:text-blue-700 border border-slate-300 rounded-lg font-bold text-xs transition-colors shadow-sm">📤 共有・コピー</button>
+                        <button onClick={()=>{
+                          const tempDiv = document.createElement('div');
+                          tempDiv.innerHTML = editingNote.content || '';
+                          const plainText = tempDiv.innerText || tempDiv.textContent || '';
+                          shareNoteText({...editingNote, content: plainText});
+                        }} className="px-4 py-2 bg-slate-50 hover:bg-blue-50 text-slate-600 hover:text-blue-700 border border-slate-300 rounded-lg font-bold text-xs transition-colors shadow-sm">📤 共有・コピー</button>
                         <div className="flex gap-3"><button onClick={()=>setEditingNote(null)} className="px-5 py-2 bg-slate-100 border border-slate-300 rounded-lg font-bold text-xs text-slate-700 shadow-sm">戻る</button><button onClick={handleSaveNote} className="px-8 py-2 bg-blue-600 text-white rounded-lg font-bold text-xs shadow-md active:scale-95">保存</button></div>
                       </div>
                     </div>
@@ -966,24 +1576,37 @@
                     <div className="flex-1 flex flex-col min-h-0">
                       <div className="flex gap-3 mb-6 shrink-0"><input value={noteSearchQuery} onChange={e=>setNoteSearchQuery(e.target.value)} className="flex-1 p-3 border border-slate-300 rounded-xl font-bold text-sm bg-slate-50 focus:bg-white focus:border-blue-400 outline-none shadow-inner" placeholder="🔍 検索..." /><button onClick={()=>setEditingNote({id:Date.now().toString(),title:'',content:''})} className="bg-blue-600 text-white px-6 py-3 rounded-xl font-bold text-sm shadow-md hover:bg-blue-700">＋ 新規</button></div>
                       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 overflow-y-auto pr-1 min-h-0">
-                        {combinedNotes.filter(n=>(n.title||'').includes(noteSearchQuery)||(n.content||'').includes(noteSearchQuery)).map(n=>(
+                        {combinedNotes.filter(n=>(n.title||'').includes(noteSearchQuery)||(n.content||'').includes(noteSearchQuery)).map(n=>{
+                          const tempDiv = document.createElement('div');
+                          let content = n.content || '';
+                          if (!content.includes('<br') && !content.includes('<div') && !content.includes('<p') && !content.includes('<img') && content.includes('\n')) {
+                            content = content.replace(/\n/g, '<br>');
+                          }
+                          tempDiv.innerHTML = content;
+                          const textPreview = tempDiv.textContent || tempDiv.innerText || '';
+                          const hasImg = tempDiv.querySelector('img') !== null;
+                          
+                          return (
                           <div key={n.id} onClick={()=>setEditingNote(n)} className={`p-4 border rounded-2xl hover:shadow-md cursor-pointer transition-all card-lift group flex flex-col h-48 shrink-0 ${n.type==='diary' ? 'bg-amber-50/60 border-amber-300' : 'bg-white border-slate-300'}`}>
                             <div className="font-black text-sm mb-2 text-slate-800 flex items-center gap-2">
                               {n.type==='diary'&&<span className="text-[9px] bg-amber-100 border border-amber-300 text-amber-800 px-1.5 py-0.5 rounded shrink-0 shadow-sm">週案</span>}
                               <span className="truncate">{n.title||'無題'}</span>
                             </div>
-                            <div className="text-xs text-slate-600 font-medium line-clamp-4 leading-relaxed mb-auto">{n.content}</div>
+                            {textPreview && <div className="text-xs text-slate-600 font-medium line-clamp-4 leading-relaxed mb-auto">{textPreview}</div>}
+                            {!textPreview && !hasImg && <div className="text-xs text-slate-400 font-medium italic mb-auto">空白のノート</div>}
+                            {hasImg && <div className="text-[10px] bg-slate-100 text-slate-600 inline-flex items-center gap-1 px-2 py-1 rounded font-bold self-start mt-2 opacity-80"><span>🖼</span> 画像/手書きあり</div>}
+                            
                             <div className="text-[10px] text-slate-400 font-bold flex justify-between items-center mt-3 border-t border-slate-200/60 pt-3 h-8 shrink-0">
                               <span>{new Date(n.updatedAt).toLocaleDateString('ja-JP')}</span>
                               <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button onClick={(e) => { e.stopPropagation(); shareNoteText(n); }} className="bg-white text-blue-600 border border-blue-200 hover:bg-blue-50 px-2.5 py-1 rounded-md font-bold transition-colors shadow-sm text-[10px]">共有・コピー</button>
+                                <button onClick={(e) => { e.stopPropagation(); shareNoteText({...n, content: textPreview}); }} className="bg-white text-blue-600 border border-blue-200 hover:bg-blue-50 px-2.5 py-1 rounded-md font-bold transition-colors shadow-sm text-[10px]">共有・コピー</button>
                                 {n.type !== 'diary' && (
                                   <button onClick={(e) => { e.stopPropagation(); if(confirm('本当に削除しますか？')) saveNotes(notesData.filter(nd=>nd.id!==n.id)); }} className="bg-white text-rose-500 border border-rose-200 hover:bg-rose-50 px-2.5 py-1 rounded-md font-bold transition-colors shadow-sm text-[10px]">削除</button>
                                 )}
                               </div>
                             </div>
                           </div>
-                        ))}
+                        )})}
                       </div>
                     </div>
                   )}
@@ -1131,15 +1754,43 @@
                       </div>
                       
                       {/* アプリの再読み込み */}
-                      <div className="border border-teal-200 bg-teal-50 rounded-2xl p-5 shadow-sm md:col-span-2">
-                        <h3 className="text-lg font-black text-teal-800 mb-2 flex items-center gap-2">🔄 アプリの更新（再読み込み）</h3>
-                        <p className="text-xs text-slate-600 mb-4 font-bold">スマホでホーム画面に追加している場合、古い画面がキャッシュ（一時保存）されて残ってしまうことがあります。プログラムが更新された時や、表示がおかしい場合はこのボタンを押してください。</p>
+                      <div className="border border-teal-200 bg-teal-50 rounded-2xl p-5 shadow-sm md:col-span-2 dark:bg-teal-900/30 dark:border-teal-800">
+                        <h3 className="text-lg font-black text-teal-800 dark:text-teal-300 mb-2 flex items-center gap-2">🔄 アプリの更新（再読み込み）</h3>
+                        <p className="text-xs text-slate-600 dark:text-slate-400 mb-4 font-bold">スマホでホーム画面に追加している場合、古い画面がキャッシュ（一時保存）されて残ってしまうことがあります。プログラムが更新された時や、表示がおかしい場合はこのボタンを押してください。</p>
                         <div>
-                          <button onClick={() => window.location.reload(true)} className="w-full bg-white text-teal-700 border border-teal-300 py-2.5 rounded-xl font-black shadow-sm hover:bg-teal-50 transition-colors flex items-center justify-center gap-2">
+                          <button onClick={() => window.location.reload(true)} className="w-full bg-white dark:bg-slate-800 text-teal-700 dark:text-teal-300 border border-teal-300 dark:border-teal-700 py-2.5 rounded-xl font-black shadow-sm hover:bg-teal-50 dark:hover:bg-teal-900/50 transition-colors flex items-center justify-center gap-2">
                             <span>🔄 最新状態に再読み込みする</span>
                           </button>
                         </div>
                       </div>
+
+                      {/* システム設定（ダークモード・Apple Pencil） */}
+                      <div className="border border-slate-200 bg-white rounded-2xl p-5 shadow-sm md:col-span-2 dark:bg-slate-800 dark:border-slate-700">
+                        <h3 className="text-lg font-black text-slate-800 dark:text-slate-200 mb-4 flex items-center gap-2">🛠 システム設定</h3>
+                        
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <div className="font-bold text-slate-800 dark:text-slate-200">ダークモード</div>
+                              <div className="text-xs text-slate-500 font-bold">画面のテーマを切り替えます（現在は簡易対応です）</div>
+                            </div>
+                            <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} className={`w-14 h-8 rounded-full transition-colors relative shadow-inner ${theme === 'dark' ? 'bg-blue-600' : 'bg-slate-300'}`}>
+                              <div className={`absolute top-1 left-1 w-6 h-6 rounded-full bg-white shadow-sm transition-transform ${theme === 'dark' ? 'translate-x-6' : 'translate-x-0'}`}></div>
+                            </button>
+                          </div>
+                          
+                          <div className="flex items-center justify-between pt-4 border-t border-slate-100 dark:border-slate-700">
+                            <div>
+                              <div className="font-bold text-slate-800 dark:text-slate-200">Apple Pencil のみで描画 (パームリジェクション)</div>
+                              <div className="text-xs text-slate-500 font-bold">手書きメモで指や手が触れても描画されないようにします</div>
+                            </div>
+                            <button onClick={() => setPencilOnly(!pencilOnly)} className={`w-14 h-8 rounded-full transition-colors relative shadow-inner ${pencilOnly ? 'bg-blue-600' : 'bg-slate-300'}`}>
+                              <div className={`absolute top-1 left-1 w-6 h-6 rounded-full bg-white shadow-sm transition-transform ${pencilOnly ? 'translate-x-6' : 'translate-x-0'}`}></div>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
                     </div>
                   </div>
                 </div>
@@ -1183,9 +1834,9 @@
             </div>
           </aside>
 
-          {/* TODO サイドバー (スマホからでもこのサイドバーを利用) */}
+          {/* TODO サイドバー (作業領域を拡大) */}
           {showTodo && <div className="fixed inset-0 bg-slate-900/20 backdrop-blur-sm z-[40] no-print" onClick={() => setShowTodo(false)}></div>}
-          <aside className={`fixed inset-y-0 right-0 w-[24rem] max-w-[90vw] bg-white border-l border-slate-300 z-[50] transition-transform duration-300 ease-out flex flex-col pt-[env(safe-area-inset-top)] shadow-2xl no-print ${showTodo ? 'translate-x-0' : 'translate-x-full'}`}>
+          <aside className={`fixed inset-y-0 right-0 w-full md:w-[32rem] lg:w-[40rem] bg-white border-l border-slate-300 z-[50] transition-transform duration-300 ease-out flex flex-col pt-[env(safe-area-inset-top)] shadow-2xl no-print ${showTodo ? 'translate-x-0' : 'translate-x-full'}`}>
             <div className="p-5 border-b border-slate-200 flex justify-between items-center bg-slate-50">
               <span className="font-black text-slate-800 flex items-center gap-2 text-lg"><span className="text-xl">📝</span> TODOリスト</span>
               <div className="flex items-center gap-2">
@@ -1195,10 +1846,25 @@
               </div>
             </div>
             <div className="flex-1 overflow-y-auto p-5 space-y-4">
-              {sortedIncompleteTodos.map(t => {
+              {incompleteTodos.map((t, index) => {
                 const isOverdue = !t.completed && t.dueDate && t.dueDate < todayStr;
+                const isHovered = dragHoverIdx === index;
                 return (
-                <div key={t.id} className={`flex gap-3 items-start p-4 rounded-2xl border shadow-sm group transition-all hover:shadow-md ${t.important ? 'border-amber-300 bg-amber-50/50' : isOverdue ? 'border-rose-300 bg-rose-50/50' : 'border-slate-300 bg-white'}`}>
+                <div 
+                  key={t.id} 
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, index)}
+                  onDragEnter={(e) => handleDragEnter(e, index)}
+                  onDragOver={handleDragOver}
+                  onDrop={(e) => handleDrop(e, index)}
+                  onDragEnd={handleDragEnd}
+                  className={`flex gap-3 items-start p-4 rounded-2xl border shadow-sm group transition-all hover:shadow-md cursor-grab active:cursor-grabbing
+                    ${t.important ? 'border-amber-300 bg-amber-50/50' : isOverdue ? 'border-rose-300 bg-rose-50/50' : 'border-slate-300 bg-white'}
+                    ${isHovered ? 'border-blue-500 border-2 scale-[1.02] shadow-lg z-10' : ''}`}
+                >
+                  <div className="flex items-center text-slate-300 group-hover:text-slate-500 cursor-grab mt-1" title="ドラッグして並べ替え">
+                    <svg className="w-5 h-5 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 8h16M4 16h16" /></svg>
+                  </div>
                   <div className="relative flex items-center justify-center mt-0.5 shrink-0">
                     <input type="checkbox" checked={t.completed} onChange={() => saveTodos(todos.map(todo => todo.id === t.id ? { ...todo, completed: !todo.completed } : todo))} 
                       className="peer appearance-none w-5 h-5 border-[2px] border-slate-400 rounded-md checked:bg-blue-500 checked:border-blue-500 cursor-pointer transition-colors" />
@@ -1257,6 +1923,12 @@
                 </div>
                 )
               })}
+              {incompleteTodos.length === 0 && (
+                <div className="flex flex-col items-center justify-center h-40 text-slate-400">
+                  <span className="text-4xl mb-3 drop-shadow-sm opacity-50">✨</span>
+                  <span className="text-sm font-black">TODOはすべて完了しています！</span>
+                </div>
+              )}
             </div>
             
             <form onSubmit={addTodo} className="p-5 bg-slate-50 border-t border-slate-300 pb-[calc(1.25rem+env(safe-area-inset-bottom))]">
@@ -1352,20 +2024,107 @@
             </div>
           )}
 
-          {/* 手書きパッド */}
-          {showHandwritingPad && (
-            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur z-[120] flex flex-col p-4 sm:p-8">
-              <div className="flex-1 bg-white rounded-[2rem] flex flex-col overflow-hidden shadow-2xl">
-                <div className="p-4 border-b bg-slate-50 flex justify-between items-center"><h2 className="font-black text-lg">✏️ 手書き入力</h2><div className="flex gap-2"><button onClick={clearHandwriting} className="px-4 py-2 bg-white rounded-lg border font-bold text-sm">消去</button><button onClick={saveHandwriting} className="px-6 py-2 bg-blue-600 text-white rounded-lg font-bold text-sm">決定</button></div></div>
-                <div className="flex-1 bg-slate-200 p-4 flex items-center justify-center touch-none"><canvas ref={canvasRef} width={800} height={600} className="bg-white rounded-xl shadow-lg border max-w-full max-h-full object-contain touch-none" onPointerDown={startDrawing} onPointerMove={draw} onPointerUp={endDrawing} onPointerCancel={endDrawing} onPointerOut={endDrawing} style={{touchAction:'none'}}/></div>
+          {/* 📒 今週のノート（モーダル） */}
+          {editingWeekMemo && (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur z-[110] flex flex-col p-4 sm:p-8">
+              <div className="flex-1 bg-white dark:bg-slate-800 rounded-[2rem] flex flex-col overflow-hidden shadow-2xl relative max-w-4xl w-full mx-auto">
+                <div className="p-4 border-b dark:border-slate-700 bg-slate-50 dark:bg-slate-900 flex justify-between items-center shrink-0">
+                  <div>
+                    <div className="text-xs text-slate-500 font-bold font-mono">{new Date(editingWeekMemo.timestamp).toLocaleString('ja-JP')}</div>
+                    <h2 className="font-black text-lg dark:text-slate-200">🖍️ メモ編集</h2>
+                  </div>
+                  <div className="flex gap-2">
+                    {editingWeekMemo.id && !editingWeekMemo.isOld && (
+                       <button onClick={() => deleteWeekMemo(editingWeekMemo.id, false, null)} className="px-4 py-2 bg-rose-50 text-rose-600 rounded-lg border border-rose-200 font-bold text-sm shadow-sm active:scale-95">削除</button>
+                    )}
+                    <button onClick={() => { setShowWeekMemoPad(false); setEditingWeekMemo(null); }} className="px-4 py-2 bg-slate-100 dark:bg-slate-700 dark:text-slate-200 rounded-lg border dark:border-slate-600 font-bold text-sm shadow-sm active:scale-95">キャンセル</button>
+                    <button onClick={saveWeekMemoFromPad} className="px-6 py-2 bg-blue-600 text-white rounded-lg font-bold text-sm shadow-md active:scale-95">保存</button>
+                  </div>
+                </div>
+                
+                {/* 書式設定ツールバー */}
+                <div className="flex items-center gap-3 p-2 px-4 bg-slate-100 dark:bg-slate-800 border-b dark:border-slate-700 shrink-0 flex-wrap">
+                  <div className="flex items-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-0.5 shadow-sm">
+                    <button onClick={() => formatText('formatBlock', 'H1', 'week-memo-editor')} className="px-3 py-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded font-black text-slate-700 dark:text-slate-300 text-xs leading-none" title="見出し1">見出し1</button>
+                    <button onClick={() => formatText('formatBlock', 'H2', 'week-memo-editor')} className="px-3 py-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded font-black text-slate-700 dark:text-slate-300 text-xs leading-none" title="見出し2">見出し2</button>
+                    <div className="w-px h-4 bg-slate-300 dark:bg-slate-700 mx-1"></div>
+                    <button onClick={() => formatText('bold', null, 'week-memo-editor')} className="px-3 py-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded font-black text-slate-700 dark:text-slate-300 text-xs leading-none" title="太字">太字(B)</button>
+                    <div className="w-px h-4 bg-slate-300 dark:bg-slate-700 mx-1"></div>
+                    <button onClick={() => formatText('insertUnorderedList', null, 'week-memo-editor')} className="px-3 py-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded font-black text-slate-700 dark:text-slate-300 text-xs flex items-center justify-center leading-none gap-1" title="箇条書き"><span className="text-base leading-none translate-y-[-1px]">•</span>箇条書き</button>
+                    <button onClick={() => insertCheckbox('week-memo-editor')} className="px-3 py-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded font-black text-slate-700 dark:text-slate-300 text-xs flex items-center justify-center leading-none gap-1" title="チェックボックス"><span className="text-sm leading-none">☑</span>チェック</button>
+                  </div>
+                  
+                  <div className="flex items-center gap-2 ml-auto">
+                    <label className="cursor-pointer px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-bold text-[11px] sm:text-xs flex items-center gap-1.5 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors shadow-sm text-slate-700 dark:text-slate-300">
+                       <span>📷</span> <span className="hidden sm:inline">写真</span>
+                       <input type="file" accept="image/*" className="hidden" onClick={saveSelection} onChange={(e) => handlePhotoUpload(e, 'week-memo-editor')} />
+                    </label>
+                    <button onClick={() => { saveSelection(); setHandwritingMode('weekMemo'); setShowHandwritingPad(true); }} className="px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-bold text-[11px] sm:text-xs flex items-center gap-1.5 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors shadow-sm text-slate-700 dark:text-slate-300">
+                       <span>✏️</span> <span className="hidden sm:inline">手書き</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex-1 bg-slate-50 dark:bg-slate-800 relative flex flex-col p-4 sm:p-6">
+                  <div 
+                    id="week-memo-editor"
+                    className="flex-1 w-full p-4 rounded-xl outline-none text-slate-800 dark:text-slate-200 font-medium text-sm leading-relaxed bg-white dark:bg-slate-900 shadow-sm border border-slate-300 dark:border-slate-700 overflow-y-auto editor-content"
+                    contentEditable
+                    suppressContentEditableWarning
+                    data-placeholder="テキストを入力..."
+                    onBlur={e => {
+                      const html = e.currentTarget.innerHTML;
+                      setEditingWeekMemo(prev => ({...prev, htmlContent: html}));
+                      saveSelection();
+                    }}
+                    onKeyUp={saveSelection}
+                    onMouseUp={saveSelection}
+                    onClick={(e) => handleEditorClick(e, 'week-memo-editor')}
+                    ref={el => {
+                      if (el && !el.dataset.initialized) {
+                        el.innerHTML = editingWeekMemo.htmlContent || '';
+                        el.dataset.initialized = 'true';
+                      }
+                    }}
+                  ></div>
+                </div>
               </div>
             </div>
           )}
 
-          {selectedDateDetails && (
-            <DayTimelineView dateStr={selectedDateDetails.dateStr} dateObj={selectedDateDetails.dateObj} onClose={() => setSelectedDateDetails(null)} getCellData={getCellData} getDaySetting={getDaySetting} todos={todos} onGoToWeekly={() => { setCurrentWeekStart(getMonday(selectedDateDetails.dateObj)); setActiveTab('weekly'); setSelectedDateDetails(null); }} />
-          )}
+          {/* 手書きパッド (セル入力・クイックメモ用) */}
+          {showHandwritingPad && (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur z-[130] flex flex-col p-4 sm:p-8">
+              <div className="flex-1 bg-white dark:bg-slate-800 rounded-[2rem] flex flex-col overflow-hidden shadow-2xl relative">
+                <div className="p-4 border-b dark:border-slate-700 bg-slate-50 dark:bg-slate-900 flex justify-between items-center shrink-0">
+                  <h2 className="font-black text-lg dark:text-slate-200">✏️ 手書き入力</h2>
+                  <div className="flex gap-2">
+                    <button onClick={clearHandwriting} className="px-4 py-2 bg-white dark:bg-slate-800 dark:text-slate-200 rounded-lg border dark:border-slate-600 font-bold text-sm shadow-sm active:scale-95">全消去</button>
+                    <button onClick={() => setShowHandwritingPad(false)} className="px-4 py-2 bg-slate-100 dark:bg-slate-700 dark:text-slate-200 rounded-lg border dark:border-slate-600 font-bold text-sm shadow-sm active:scale-95">キャンセル</button>
+                    <button onClick={saveHandwriting} className="px-6 py-2 bg-blue-600 text-white rounded-lg font-bold text-sm shadow-md active:scale-95">決定</button>
+                  </div>
+                </div>
+                
+                {/* ツールバー */}
+                <div className="flex items-center justify-center gap-4 p-2 bg-slate-100 dark:bg-slate-800 border-b dark:border-slate-700 shrink-0">
+                  <div className="flex gap-2 bg-white dark:bg-slate-900 p-1.5 rounded-xl shadow-sm border dark:border-slate-700">
+                    {['#0f172a', '#ef4444', '#3b82f6', '#10b981', '#f59e0b'].map(color => (
+                      <button key={color} onClick={() => { setPenColor(color); setIsEraser(false); }} className={`w-8 h-8 rounded-full border-2 transition-transform ${!isEraser && penColor === color ? 'scale-110 border-blue-400 shadow-md' : 'border-transparent hover:scale-105'}`} style={{ backgroundColor: color === '#0f172a' && theme === 'dark' ? '#f8fafc' : color }} title="ペン色"></button>
+                    ))}
+                  </div>
+                  <div className="w-px h-8 bg-slate-300 dark:bg-slate-700"></div>
+                  <button onClick={() => setIsEraser(true)} className={`px-4 py-1.5 rounded-xl font-bold text-sm flex items-center gap-2 transition-all ${isEraser ? 'bg-blue-100 text-blue-700 border-blue-300 border shadow-sm' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
+                    <span>▱</span> 消しゴム
+                  </button>
+                </div>
 
+                <div className="flex-1 bg-slate-200 dark:bg-slate-900 p-2 sm:p-4 flex items-center justify-center touch-none relative">
+                  {pencilOnly && <div className="absolute top-4 left-4 bg-black/50 text-white px-3 py-1 rounded-full text-xs font-bold pointer-events-none backdrop-blur-sm z-10">Apple Pencil のみ有効</div>}
+                  <canvas ref={quickCanvasRef} width={1200} height={900} className="bg-white rounded-xl shadow-lg border dark:border-slate-600 max-w-full max-h-full object-contain touch-none cursor-crosshair" onPointerDown={startDrawing} onPointerMove={draw} onPointerUp={endDrawing} onPointerCancel={endDrawing} onPointerOut={endDrawing} style={{touchAction:'none'}}/>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       );
     }
