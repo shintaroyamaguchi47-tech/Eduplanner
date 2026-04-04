@@ -1197,10 +1197,17 @@
           else if(row.id==='afterschool'){rh='min-h-[40px]';fc='flex-[1.5]';}
           else {rh='min-h-[40px]';fc='flex-[2]';}
         } else {
-          rh='h-[4.5rem] sm:h-[5rem] lg:h-[5.5rem]'; fc='flex-none'; rb='';
-          if(row.id==='lunch'){rh='h-8 sm:h-10';fc='flex-none';rb='bg-amber-50/20 dark:bg-amber-900/10';}
-          else if(row.id==='morning'||row.id==='event'){rh='h-10 sm:h-12';fc='flex-none';}
-          else if(row.id==='afterschool'){rh='h-20 sm:h-24 lg:h-32';fc='flex-none';}
+          if (isMobile && activeTab === 'weekly') {
+            if (row.id === 'event') { rh = 'h-9 shrink-0'; fc = 'flex-none'; rb = ''; }
+            else if (row.id === 'afterschool') { rh = 'min-h-11 max-h-[4.5rem] shrink-0'; fc = 'flex-none'; rb = ''; }
+            else if (row.id === 'lunch') { rh = 'flex-[0.65] basis-0 min-h-0'; fc = ''; rb = 'bg-amber-50/20 dark:bg-amber-900/10'; }
+            else { rh = 'flex-1 basis-0 min-h-0'; fc = ''; rb = ''; }
+          } else {
+            rh='h-[4.5rem] sm:h-[5rem] lg:h-[5.5rem]'; fc='flex-none'; rb='';
+            if(row.id==='lunch'){rh='h-8 sm:h-10';fc='flex-none';rb='bg-amber-50/20 dark:bg-amber-900/10';}
+            else if(row.id==='morning'||row.id==='event'){rh='h-10 sm:h-12';fc='flex-none';}
+            else if(row.id==='afterschool'){rh='h-20 sm:h-24 lg:h-32';fc='flex-none';}
+          }
         }
         
         const zClass = row.id === 'event' ? 'relative z-20' : 'relative z-0';
@@ -1527,8 +1534,8 @@
                     )}
                   </div>
                   
-                  <div className="flex-1 overflow-y-auto flex flex-col relative hide-scrollbar min-h-0">
-                    <div className="flex bg-slate-100 border-b border-slate-300 sticky top-0 z-30 shadow-sm min-h-[3rem] shrink-0">
+                  <div className={`flex-1 flex flex-col relative min-h-0 hide-scrollbar ${isMobile && activeTab === 'weekly' ? 'overflow-hidden' : 'overflow-y-auto'}`}>
+                    <div className={`flex bg-slate-100 border-b border-slate-300 sticky top-0 z-30 shadow-sm shrink-0 ${isMobile && activeTab === 'weekly' ? 'min-h-0 py-1 shrink-0' : 'min-h-[3rem]'}`}>
                       <div className="w-10 sm:w-14 lg:w-16 border-r border-slate-300 shrink-0 bg-slate-100 sticky left-0 z-40 flex flex-col items-center justify-center text-[10px] sm:text-[11px] font-black text-slate-600">
                         <span>時</span><span>間</span>
                       </div>
@@ -1543,9 +1550,9 @@
                           const headerBg = activeTab==='weekly' && setting.type==='holiday' ? 'bg-rose-100/50 dark:bg-rose-900/30' : (activeTab==='weekly'&&isT?'bg-blue-100/60':'');
 
                           return (
-                            <div key={d} className={`min-w-0 ${cf} py-1.5 sm:py-2 px-0.5 sm:px-1 flex flex-col justify-center text-center border-r border-slate-300 last:border-0 ${headerBg}`}>
+                            <div key={d} className={`min-w-0 ${cf} py-1.5 sm:py-2 px-0.5 sm:px-1 flex flex-col justify-center text-center border-r border-slate-300 last:border-0 ${headerBg} ${isMobile && activeTab === 'weekly' ? 'py-1' : ''}`}>
                               
-                              <div className="flex justify-center items-center gap-0.5 sm:gap-1 mb-1.5">
+                              <div className={`flex justify-center items-center gap-0.5 sm:gap-1 ${isMobile && activeTab === 'weekly' ? 'mb-0.5' : 'mb-1.5'}`}>
                                 <span className={`text-[11px] sm:text-sm font-black ${activeTab==='weekly'&&isT?'text-blue-800':i===5?'text-blue-700':i===6||setting.type==='holiday'?'text-rose-700':'text-slate-800'}`}>{d}</span>
                                 {activeTab==='weekly' && (
                                   <button type="button" onClick={() => setSelectedDateDetails({ dateStr: ds, dateObj: cd })} className={`text-[9px] sm:text-[10px] lg:text-[11px] font-black px-1 sm:px-2 py-0.5 rounded-full hover:scale-110 transition-transform cursor-pointer truncate ${isT?'bg-blue-600 text-white shadow-md hover:bg-blue-700':'text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 shadow-sm'}`} title="タイムライン表示">
@@ -1555,8 +1562,8 @@
                               </div>
                               
                               {activeTab==='weekly' && (
-                                <div className="space-y-1.5">
-                                  <div className={`text-[8px] sm:text-[10px] font-black rounded px-1 py-0.5 border bg-white shadow-sm ${style.color}`}>
+                                <div className={isMobile ? 'space-y-0.5' : 'space-y-1.5'}>
+                                  <div className={`text-[8px] sm:text-[10px] font-black rounded px-1 py-0.5 border bg-white shadow-sm ${style.color} ${isMobile ? 'py-px' : ''}`}>
                                     <select value={setting.type} onChange={(e) => handleSettingChange(ds,i,{...setting,type:e.target.value})} className="bg-transparent font-black w-full text-center outline-none appearance-none cursor-pointer">
                                       {Object.values(SCHEDULE_TYPES).map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
                                     </select>
@@ -1564,7 +1571,7 @@
                                   
                                   <div className="relative w-full">
                                     <select value="" onChange={(e) => { const v=e.target.value; if(v==='revert') handleRevertDay(ds); else if(v!=='') handleCopyDay(ds,v); }}
-                                      className={`w-full text-[8px] sm:text-[9px] font-bold rounded px-0.5 sm:px-1 py-1 outline-none cursor-pointer text-center appearance-none shadow-sm transition-colors ${setting.type==='holiday' ? 'bg-white/50 text-rose-700 border border-rose-300' : 'bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300'}`}>
+                                      className={`w-full text-[8px] sm:text-[9px] font-bold rounded px-0.5 sm:px-1 py-1 outline-none cursor-pointer text-center appearance-none shadow-sm transition-colors ${setting.type==='holiday' ? 'bg-white/50 text-rose-700 border border-rose-300' : 'bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300'} ${isMobile ? 'py-0.5 text-[7px]' : ''}`}>
                                       <option value="" disabled>🔄 日課</option><option value="revert">🧹 リセット</option>
                                       {DAYS.map((dn,di) => <option key={di} value={di}>{dn}曜日課</option>)}
                                     </select>
@@ -1578,12 +1585,12 @@
                       </div>
                     </div>
 
-                    <div className="flex-1 flex flex-col relative min-h-0">
+                    <div className={`flex-1 flex flex-col relative min-h-0 ${isMobile && activeTab === 'weekly' ? 'overflow-hidden' : ''}`}>
                       {/* 1. 行事の行 */}
                       {ROWS.filter(r=>r.id==='event').map(row => renderRow(row))}
 
                       {/* 2. メインスケジュール (朝〜6限) のコンテナ */}
-                      <div className="flex-1 flex flex-col relative min-h-0 overflow-y-auto hide-scrollbar border-b border-slate-400 dark:border-slate-700">
+                      <div className={`flex-1 flex flex-col relative min-h-0 border-b border-slate-400 dark:border-slate-700 ${isMobile && activeTab === 'weekly' ? 'overflow-hidden' : 'overflow-y-auto hide-scrollbar'}`}>
                          {ROWS.filter(r=>r.id!=='event' && r.id!=='afterschool' && r.id!=='diary').map(row => renderRow(row))}
                          {activeTab === 'weekly' && renderHolidayOverlays()}
                       </div>
