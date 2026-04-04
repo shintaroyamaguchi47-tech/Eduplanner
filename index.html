@@ -224,6 +224,49 @@
       );
     };
 
+    /** 月間カレンダー用：その日の予定を全文表示（モバイル向けポップアップ） */
+    const MonthDayPopup = ({ dateStr, dateObj, dayIndex, events, dark, onClose, onGoWeekly, onOpenTimeline }) => {
+      const dayName = DAYS[dayIndex];
+      const card = dark ? 'bg-slate-800 text-slate-200 border-slate-600' : 'bg-white text-slate-800 border-slate-200';
+      const itemBase = dark ? 'border-slate-600' : 'border-slate-200';
+      return (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[110] flex items-end sm:items-center justify-center sm:p-4" onClick={onClose}>
+          <div className={`w-full sm:max-w-md sm:rounded-2xl rounded-t-3xl shadow-2xl border max-h-[85dvh] flex flex-col overflow-hidden anim-scale-in ${card}`} onClick={e => e.stopPropagation()}>
+            <div className={`px-4 pt-4 pb-3 border-b shrink-0 ${dark ? 'border-slate-600 bg-slate-800' : 'border-slate-200 bg-slate-50'}`}>
+              <div className="flex justify-between items-start gap-2">
+                <div>
+                  <div className={`text-xs font-bold ${dark ? 'text-slate-400' : 'text-slate-500'}`}>{dateObj.getFullYear()}年{dateObj.getMonth()+1}月</div>
+                  <div className="text-xl font-black">{dateObj.getDate()}日（{dayName}）</div>
+                </div>
+                <button type="button" onClick={onClose} className={`text-2xl font-bold w-10 h-10 flex items-center justify-center rounded-xl shrink-0 ${dark ? 'hover:bg-slate-700 text-slate-300' : 'hover:bg-slate-200 text-slate-600'}`} aria-label="閉じる">&times;</button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2 min-h-0">
+              {events.length === 0 ? (
+                <p className={`text-sm font-bold text-center py-6 ${dark ? 'text-slate-500' : 'text-slate-500'}`}>この日の表示できる予定はありません</p>
+              ) : events.map((e, idx) => {
+                let chip = dark ? 'bg-slate-700/80 border-slate-500' : 'bg-slate-100 border-slate-300';
+                let tag = '';
+                if (e.type === 'holiday') { chip = dark ? 'bg-rose-950/50 border-rose-700 text-rose-100' : 'bg-rose-50 border-rose-300 text-rose-900'; tag = '祝・休日'; }
+                else if (e.type === 'event') { chip = dark ? 'bg-pink-950/40 border-pink-700 text-pink-100' : 'bg-pink-50 border-pink-300 text-pink-900'; tag = '行事'; }
+                else if (e.type === 'todo') { chip = dark ? 'bg-blue-950/40 border-blue-700 text-blue-100' : 'bg-blue-50 border-blue-300 text-blue-900'; tag = 'TODO'; }
+                return (
+                  <div key={idx} className={`rounded-xl border px-3 py-2.5 shadow-sm ${itemBase} ${chip}`}>
+                    {tag && <div className="text-[10px] font-black opacity-80 mb-1">{tag}</div>}
+                    <div className="text-sm font-bold leading-snug break-words whitespace-pre-wrap">{e.text}</div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className={`shrink-0 flex flex-wrap gap-2 p-4 border-t ${dark ? 'border-slate-600 bg-slate-900/40' : 'border-slate-200 bg-slate-50'}`}>
+              <button type="button" onClick={onGoWeekly} className="flex-1 min-w-[7rem] py-2.5 rounded-xl text-xs font-black bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm">週案へ</button>
+              <button type="button" onClick={onOpenTimeline} className="flex-1 min-w-[7rem] py-2.5 rounded-xl text-xs font-black bg-blue-600 text-white hover:bg-blue-700 shadow-sm">タイムライン</button>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
     // ============================
     // ダッシュボード
     // ============================
@@ -402,6 +445,8 @@
       const [isOnline, setIsOnline] = useState(navigator.onLine);
       const quickCanvasRef = useRef(null);
       const isDrawingRef = useRef(false);
+      const [selectedDateDetails, setSelectedDateDetails] = useState(null);
+      const [monthDayPopup, setMonthDayPopup] = useState(null);
 
       const exportICS = (type) => {
         showToast('ICSエクスポート機能は現在準備中です。');
@@ -1456,7 +1501,7 @@
             </div>
           </header>
 
-          {(activeTab==='monthly'||activeTab==='weekly'||activeTab==='template') && renderMonthTabs("shrink-0 dark:bg-slate-900 dark:border-slate-700", isMobile && (activeTab==='weekly' || activeTab==='template'))}
+          {(activeTab==='monthly'||activeTab==='weekly'||activeTab==='template') && renderMonthTabs("shrink-0 dark:bg-slate-900 dark:border-slate-700", isMobile && (activeTab==='monthly' || activeTab==='weekly' || activeTab==='template'))}
 
           <div className="flex-1 min-h-0 relative flex flex-col bg-[var(--paper)] dark:bg-slate-900">
 
@@ -1464,38 +1509,53 @@
             
             {/* 月間カレンダー */}
             {activeTab === 'monthly' && (
-              <div className="flex-1 flex flex-col h-full p-2 sm:p-5 min-h-0 bg-[var(--paper)]">
-                <div className="flex justify-between items-center mb-3 px-2 shrink-0">
-                  <div className="font-black text-xl text-slate-800">📅 {currentMonth.getFullYear()}年{currentMonth.getMonth()+1}月</div>
-                  <button onClick={()=>{const d=getJSTDate();setCurrentMonth(new Date(d.getFullYear(),d.getMonth(),1));setCurrentWeekStart(getMonday(d));}} className="text-sm font-bold text-blue-700 bg-white px-4 py-2 rounded-xl border border-slate-300 shadow-sm hover:bg-slate-50 transition-colors">今月へ</button>
+              <div className={`flex-1 flex flex-col h-full min-h-0 bg-[var(--paper)] ${isMobile ? 'p-1' : 'p-2 sm:p-5'}`}>
+                <div className={`flex justify-between items-center shrink-0 ${isMobile ? 'mb-1.5 px-1' : 'mb-3 px-2'}`}>
+                  <div className={`font-black text-slate-800 dark:text-slate-100 ${isMobile ? 'text-base' : 'text-xl'}`}>📅 {currentMonth.getFullYear()}年{currentMonth.getMonth()+1}月</div>
+                  <button onClick={()=>{const d=getJSTDate();setCurrentMonth(new Date(d.getFullYear(),d.getMonth(),1));setCurrentWeekStart(getMonday(d));}} className={`font-bold text-blue-700 dark:text-blue-400 bg-white dark:bg-slate-800 rounded-xl border border-slate-300 dark:border-slate-600 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors ${isMobile ? 'text-xs px-2.5 py-1.5' : 'text-sm px-4 py-2'}`}>今月へ</button>
                 </div>
-                <div className="flex-1 bg-white rounded-2xl shadow-md border border-slate-300 overflow-hidden flex flex-col min-h-0">
-                  <div className="grid grid-cols-7 bg-slate-100 border-b border-slate-300 shrink-0">
-                    {DAYS.map((d,i)=>(<div key={d} className={`py-3 text-center text-xs sm:text-sm font-black border-r border-slate-300 last:border-r-0 ${i===5?'text-blue-700':i===6?'text-rose-700':'text-slate-800'}`}>{d}</div>))}
+                <div className="flex-1 bg-white dark:bg-slate-800 rounded-xl sm:rounded-2xl shadow-md border border-slate-300 dark:border-slate-600 overflow-hidden flex flex-col min-h-0">
+                  <div className="grid grid-cols-7 bg-slate-100 dark:bg-slate-900 border-b border-slate-300 dark:border-slate-600 shrink-0">
+                    {DAYS.map((d,i)=>(<div key={d} className={`text-center font-black border-r border-slate-300 dark:border-slate-600 last:border-r-0 ${isMobile ? 'py-1 text-[10px]' : 'py-3 text-xs sm:text-sm'} ${i===5?'text-blue-700 dark:text-blue-400':i===6?'text-rose-700 dark:text-rose-400':'text-slate-800 dark:text-slate-200'}`}>{d}</div>))}
                   </div>
-                  <div className="grid grid-cols-7 grid-rows-6 flex-1 bg-slate-300 gap-[1px] min-h-0">
+                  <div className="grid grid-cols-7 grid-rows-6 flex-1 bg-slate-300 dark:bg-slate-950 gap-px min-h-0 min-w-0">
                     {getCalendarDays().map((day,i)=>{
                       const ds=formatDate(day.date); const isCM=day.isCurrentMonth; const isT=ds===todayStr;
                       let di=day.date.getDay()-1; if(di===-1) di=6;
                       const evs=getDailyEvents(ds, di);
                       const isVac = vacations.some(v=>ds>=v.start&&ds<=v.end);
-                      let bg='bg-white'; if(!isCM) bg='bg-slate-50'; else if(isVac) bg=di===6?'bg-rose-50/80':di===5?'bg-blue-50/80':'bg-amber-50/60'; else if(di===6) bg='bg-rose-50/40'; else if(di===5) bg='bg-blue-50/40';
+                      let bg='bg-white dark:bg-slate-800'; if(!isCM) bg='bg-slate-50 dark:bg-slate-900/80'; else if(isVac) bg=di===6?'bg-rose-50/80 dark:bg-rose-950/30':di===5?'bg-blue-50/80 dark:bg-blue-950/30':'bg-amber-50/60 dark:bg-amber-950/25'; else if(di===6) bg='bg-rose-50/40 dark:bg-rose-950/20'; else if(di===5) bg='bg-blue-50/40 dark:bg-blue-950/20';
                       
                       const setting = getDaySetting(ds, di);
                       const eventRow = ROWS.find(r => r.id === 'event');
+                      const dotMax = 5;
                       
                       return (
-                        <div key={i} onClick={()=>{ openEditModal(getCellData(ds,'event',di), ds, eventRow, di, DAYS[di], setting.type==='holiday', null); }} className={`p-1 sm:p-1.5 flex flex-col overflow-hidden cursor-pointer hover:brightness-95 relative transition-all ${bg}`}>
-                          <span onClick={(e)=>{ e.stopPropagation(); setCurrentWeekStart(getMonday(day.date)); setActiveTab('weekly'); }} className={`cursor-pointer hover:scale-125 hover:z-20 text-[10px] sm:text-xs font-black w-5 h-5 sm:w-6 sm:h-6 flex items-center justify-center rounded-full mb-0.5 shrink-0 z-10 relative ${isT?'bg-blue-600 text-white shadow-md today-ring':isCM?(di===6?'text-rose-700':di===5?'text-blue-700':'text-slate-800'):'text-slate-400'}`} title="週案へ移動">{day.date.getDate()}</span>
-                          <div className="flex-1 space-y-1 overflow-y-auto overflow-x-hidden hide-scrollbar min-h-0 min-w-0 w-full pointer-events-none">
-                            {evs.map((e,idx)=>{
-                              let c='bg-slate-100 text-slate-800 border-slate-300'; let ic='';
-                              if(e.type==='holiday') c='bg-rose-50 text-rose-800 border-rose-300';
-                              else if(e.type==='event') { c='bg-pink-50 text-pink-900 border-pink-300'; ic='🚩'; }
-                              else if(e.type==='todo') { c='bg-blue-50 text-blue-900 border-blue-300'; ic='☑️'; }
-                              return <div key={idx} className={`text-[9px] sm:text-[10px] lg:text-xs font-black border rounded px-1 sm:px-1.5 truncate w-full shadow-sm leading-tight py-0.5 ${c}`} title={e.text}>{ic}{e.text}</div>
-                            })}
-                          </div>
+                        <div key={i} title={isMobile ? 'タップで予定を表示' : undefined} onClick={()=>{
+                          if (isMobile) { setMonthDayPopup({ dateStr: ds, dateObj: new Date(day.date.getTime()), dayIndex: di }); }
+                          else { openEditModal(getCellData(ds,'event',di), ds, eventRow, di, DAYS[di], setting.type==='holiday', null); }
+                        }} className={`flex flex-col overflow-hidden cursor-pointer hover:brightness-95 dark:hover:brightness-110 relative transition-all min-h-0 min-w-0 ${bg} ${isMobile ? 'p-0.5' : 'p-1 sm:p-1.5'}`}>
+                          <span onClick={(e)=>{ e.stopPropagation(); setCurrentWeekStart(getMonday(day.date)); setActiveTab('weekly'); }} className={`cursor-pointer hover:scale-125 hover:z-20 font-black flex items-center justify-center rounded-full shrink-0 z-10 relative ${isMobile ? 'w-5 h-5 text-[9px] mb-px' : 'text-[10px] sm:text-xs w-5 h-5 sm:w-6 sm:h-6 mb-0.5'} ${isT?'bg-blue-600 text-white shadow-md today-ring':isCM?(di===6?'text-rose-700 dark:text-rose-300':di===5?'text-blue-700 dark:text-blue-300':'text-slate-800 dark:text-slate-100'):'text-slate-400 dark:text-slate-500'}`} title="週案へ移動">{day.date.getDate()}</span>
+                          {isMobile ? (
+                            <div className="flex-1 flex flex-wrap content-center justify-center gap-0.5 min-h-0 min-w-0 overflow-hidden pointer-events-none items-center px-0.5 pb-0.5">
+                              {evs.length === 0 ? null : evs.slice(0, dotMax).map((e, idx) => (
+                                <span key={idx} className={`w-1.5 h-1.5 rounded-full shrink-0 ${e.type==='holiday'?'bg-rose-500':e.type==='event'?'bg-pink-500':'bg-blue-500'}`} title={e.text} />
+                              ))}
+                              {evs.length > dotMax && (
+                                <span className="text-[7px] font-black leading-none text-slate-600 dark:text-slate-300">+{evs.length - dotMax}</span>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="flex-1 space-y-1 overflow-y-auto overflow-x-hidden hide-scrollbar min-h-0 min-w-0 w-full pointer-events-none">
+                              {evs.map((e,idx)=>{
+                                let c='bg-slate-100 text-slate-800 border-slate-300 dark:bg-slate-700 dark:text-slate-100 dark:border-slate-500'; let ic='';
+                                if(e.type==='holiday') c='bg-rose-50 text-rose-800 border-rose-300 dark:bg-rose-950/50 dark:text-rose-100 dark:border-rose-700';
+                                else if(e.type==='event') { c='bg-pink-50 text-pink-900 border-pink-300 dark:bg-pink-950/40 dark:text-pink-100 dark:border-pink-700'; ic='🚩'; }
+                                else if(e.type==='todo') { c='bg-blue-50 text-blue-900 border-blue-300 dark:bg-blue-950/40 dark:text-blue-100 dark:border-blue-700'; ic='☑️'; }
+                                return <div key={idx} className={`text-[9px] sm:text-[10px] lg:text-xs font-black border rounded px-1 sm:px-1.5 truncate w-full shadow-sm leading-tight py-0.5 ${c}`} title={e.text}>{ic}{e.text}</div>
+                              })}
+                            </div>
+                          )}
                           {isT && <div className="absolute inset-0 border-[3px] border-blue-500 pointer-events-none z-20 rounded-sm"></div>}
                         </div>
                       );
@@ -2123,6 +2183,42 @@
               </div>
             </form>
           </aside>
+
+          {monthDayPopup && (
+            <MonthDayPopup
+              dateStr={monthDayPopup.dateStr}
+              dateObj={monthDayPopup.dateObj}
+              dayIndex={monthDayPopup.dayIndex}
+              events={getDailyEvents(monthDayPopup.dateStr, monthDayPopup.dayIndex)}
+              dark={theme === 'dark'}
+              onClose={() => setMonthDayPopup(null)}
+              onGoWeekly={() => {
+                const d = monthDayPopup.dateObj;
+                setMonthDayPopup(null);
+                setCurrentWeekStart(getMonday(d));
+                setActiveTab('weekly');
+              }}
+              onOpenTimeline={() => {
+                setMonthDayPopup(null);
+                setSelectedDateDetails({ dateStr: monthDayPopup.dateStr, dateObj: monthDayPopup.dateObj });
+              }}
+            />
+          )}
+          {selectedDateDetails && (
+            <DayTimelineView
+              dateStr={selectedDateDetails.dateStr}
+              dateObj={selectedDateDetails.dateObj}
+              onClose={() => setSelectedDateDetails(null)}
+              getCellData={getCellData}
+              getDaySetting={getDaySetting}
+              todos={todos}
+              onGoToWeekly={() => {
+                setSelectedDateDetails(null);
+                setCurrentWeekStart(getMonday(selectedDateDetails.dateObj));
+                setActiveTab('weekly');
+              }}
+            />
+          )}
 
           {editingCell && (
             <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
