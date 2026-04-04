@@ -1243,26 +1243,26 @@
         let customStyle = {};
 
         if (activeTab === 'template') {
-          rh='h-[4rem] sm:h-[4.5rem] lg:h-[5rem]'; fc='flex-none'; rb='';
-          if(row.id==='lunch'){rh='h-8 sm:h-10';fc='flex-none';rb='bg-amber-50/20 dark:bg-amber-900/10';}
-          else if(row.id==='morning'||row.id==='event'){rh='h-10 sm:h-12';fc='flex-none';}
-          else if(row.id==='afterschool'){rh='h-20 sm:h-24 lg:h-28';fc='flex-none';}
+          rh='h-[4rem] sm:h-[4.5rem] lg:h-[5rem] shrink-0'; fc='flex-none'; rb='';
+          if(row.id==='lunch'){rh='h-8 sm:h-10 shrink-0';fc='flex-none';rb='bg-amber-50/20 dark:bg-amber-900/10';}
+          else if(row.id==='morning'||row.id==='event'){rh='h-10 sm:h-12 shrink-0';fc='flex-none';}
+          else if(row.id==='afterschool'){rh='h-20 sm:h-24 lg:h-28 shrink-0';fc='flex-none';}
         } else {
           if (isMobile && activeTab === 'weekly') {
-            if (row.id === 'event') { rh = 'h-9 shrink-0'; fc = 'flex-none'; rb = ''; }
-            else if (row.id === 'afterschool') { rh = 'min-h-11 max-h-[4.5rem] shrink-0'; fc = 'flex-none'; rb = ''; }
-            else if (row.id === 'lunch') { rh = 'flex-[0.65] basis-0 min-h-0'; fc = ''; rb = 'bg-amber-50/20 dark:bg-amber-900/10'; }
-            else { rh = 'flex-1 basis-0 min-h-0'; fc = ''; rb = ''; }
+            if (row.id === 'event' || row.id === 'morning') { rh = 'h-8 shrink-0'; fc = 'flex-none'; rb = ''; }
+            else if (row.id === 'lunch') { rh = 'h-6 shrink-0'; fc = 'flex-none'; rb = 'bg-amber-50/20 dark:bg-amber-900/10'; }
+            else if (row.id === 'afterschool') { rh = 'h-[4.5rem] shrink-0'; fc = 'flex-none'; rb = ''; }
+            else { rh = 'h-[3rem] shrink-0'; fc = 'flex-none'; rb = ''; }
           } else {
-            rh='h-[4.5rem] sm:h-[5rem] lg:h-[5.5rem]'; fc='flex-none'; rb='';
-            if(row.id==='lunch'){rh='h-8 sm:h-10';fc='flex-none';rb='bg-amber-50/20 dark:bg-amber-900/10';}
-            else if(row.id==='morning'||row.id==='event'){rh='h-10 sm:h-12';fc='flex-none';}
-            else if(row.id==='afterschool'){rh='h-20 sm:h-24 lg:h-32';fc='flex-none';}
+            if (row.id === 'event' || row.id === 'morning') { rh = 'h-10 lg:h-11 shrink-0'; fc = 'flex-none'; rb = ''; }
+            else if (row.id === 'lunch') { rh = 'h-7 lg:h-8 shrink-0'; fc = 'flex-none'; rb = 'bg-amber-50/20 dark:bg-amber-900/10'; }
+            else if (row.id === 'afterschool') { rh = 'h-[4.5rem] lg:h-[5.5rem] shrink-0'; fc = 'flex-none'; rb = ''; }
+            else { rh = 'h-[3.5rem] lg:h-[3.75rem] shrink-0'; fc = 'flex-none'; rb = ''; }
           }
         }
         
         const zClass = row.id === 'event' ? 'relative z-20' : 'relative z-0';
-        const isLastInGroup = row.id === 'p6' || row.id === 'afterschool' || row.id === 'event';
+        const isLastInGroup = row.id === 'afterschool';
         const borderBottomClassRow = isLastInGroup ? '' : 'border-b border-slate-300 dark:border-slate-700';
 
         return (
@@ -1599,7 +1599,7 @@
                     )}
                   </div>
                   
-                  <div className={`flex-1 flex flex-col relative ${activeTab === 'template' ? '' : 'min-h-0'} hide-scrollbar ${isMobile && activeTab === 'weekly' ? 'overflow-hidden' : (activeTab === 'weekly' ? 'overflow-y-auto' : '')}`}>
+                  <div className="flex-1 flex flex-col relative min-h-0 hide-scrollbar overflow-y-auto">
                     <div className={`flex bg-slate-100 border-b border-slate-300 sticky top-0 z-30 shadow-sm shrink-0 ${isMobile && activeTab === 'weekly' ? 'min-h-0 py-1' : 'min-h-[3rem]'}`}>
                       <div className="w-10 sm:w-14 lg:w-16 border-r border-slate-300 shrink-0 bg-slate-100 sticky left-0 z-40 flex flex-col items-center justify-center text-[10px] sm:text-[11px] font-black text-slate-600">
                         <span>時</span><span>間</span>
@@ -1650,18 +1650,9 @@
                       </div>
                     </div>
 
-                    <div className={`flex-1 flex flex-col relative ${activeTab === 'template' ? '' : 'min-h-0'} ${isMobile && activeTab === 'weekly' ? 'overflow-hidden' : ''}`}>
-                      {/* 1. 行事の行 */}
-                      {ROWS.filter(r=>r.id==='event').map(row => renderRow(row))}
-
-                      {/* 2. メインスケジュール (朝〜6限) のコンテナ */}
-                      <div className={`flex-1 flex flex-col relative ${activeTab === 'template' ? '' : 'min-h-0'} border-b border-slate-400 dark:border-slate-700 ${activeTab === 'template' ? '' : (isMobile && activeTab === 'weekly' ? 'overflow-hidden' : 'overflow-y-auto hide-scrollbar')}`}>
-                         {ROWS.filter(r=>r.id!=='event' && r.id!=='afterschool' && r.id!=='diary').map(row => renderRow(row))}
-                         {activeTab === 'weekly' && renderHolidayOverlays()}
-                      </div>
-
-                      {/* 3. 放課後の行 */}
-                      {ROWS.filter(r=>r.id==='afterschool').map(row => renderRow(row))}
+                    <div className="flex flex-col relative pb-4">
+                      {ROWS.filter(r=>r.id!=='diary').map(row => renderRow(row))}
+                      {activeTab === 'weekly' && renderHolidayOverlays()}
                     </div>
                   </div>
                 </div>
