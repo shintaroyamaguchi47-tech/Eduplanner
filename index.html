@@ -95,6 +95,15 @@
     const { useState, useEffect, useRef, useMemo, useCallback } = React;
     const _importDynamic = new Function('modulePath', 'return import(modulePath)');
 
+    const FIREBASE_CONFIG = { 
+      apiKey: "AIzaSyAdOREqv-PvjtjJ__7PwhpVyfcJxmdXPAs", 
+      authDomain: "eduplanner-v2.firebaseapp.com", 
+      projectId: "eduplanner-v2", 
+      storageBucket: "eduplanner-v2.firebasestorage.app", 
+      messagingSenderId: "931393732389", 
+      appId: "1:931393732389:web:60d39fec28a2a2e179e4cc" 
+    };
+
     const LogoIcon = ({ className = "w-6 h-6" }) => (
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
         <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20" /><path d="M8 7h6" /><path d="M8 11h8" />
@@ -125,13 +134,11 @@
     const TODO_TAGS = ['授業準備', '学年業務', '部活', '会議・事務', '生徒・保護者', 'その他'];
     const DEFAULT_TEMPLATE_SETTINGS = { 0:{type:'normal',clean:false}, 1:{type:'normal',clean:true}, 2:{type:'normal',clean:true}, 3:{type:'normal',clean:false}, 4:{type:'normal',clean:true}, 5:{type:'holiday',clean:false}, 6:{type:'holiday',clean:false} };
 
-    // R8年度（2026年度）の行事予定を追加
     const NEW_INITIAL_YEARLY_DATA = {
       "2025": { "4-4":"新入生体験入学","4-5":"新入生説明会","4-8":"始業式/入学式 第1ステージ「出会い」","4-11":"給食開始 専門委員会","4-12":"仮入部 発育測定(2年)","4-25":"授業参観","5-20":"中間テスト","5-23":"1年保護者会","5-24":"2年保護者会","5-31":"生徒総会","6-10":"第2ステージ「挑戦」","6-13":"中間テスト 1日目","6-14":"中間テスト 2日目","6-17":"教育実習開始","7-20":"夏季休業開始","7-23":"中体連県大会","7-24":"専門委員会","8-27":"夏季休業日終了","8-28":"授業開始日","9-3":"3年県学調(1)","9-5":"体育祭","9-12":"前期期末テスト","9-28":"合唱祭","10-11":"前期終業式","10-15":"後期始業式 第3ステージ「深化」","11-6":"後期中間テスト 1日目","11-7":"後期中間テスト 2日目","12-20":"冬季休業開始 第3ステージ終了","1-6":"冬季休業日終了","1-7":"授業開始日 第4ステージ「感謝」","1-22":"1年保護者会","2-4":"私立高校入試","2-13":"学年末テスト","3-5":"公立高校入試","3-18":"修了式","3-19":"卒業式","3-20":"学年末休業日開始" },
       "2026": { "4-3":"新入生説明会","4-6":"第2回職員会議","4-7":"始業式/入学式 第1ステージ「出会い」","4-8":"お弁当の日","4-9":"2年生学区探訪","4-13":"仮入部 発育測定(2年)","4-15":"学級協議会","4-17":"大字講座","4-18":"キャリアパスポート","4-22":"全国学力テスト 1年交通安全教室","4-24":"政見放送","4-25":"授業参観","4-30":"離任式","5-1":"1年生保護者会","5-2":"校内研修会","5-7":"1年生正式入部","5-22":"2年保護者会","6-10":"前期中間テスト 1日目 第2ステージ「挑戦」開始","6-11":"前期中間テスト 2日目","6-15":"教育実習開始","7-22":"夏季休業前授業最終日 給食最終日","7-23":"夏季休業開始","8-26":"夏季休業日終了","8-27":"夏季休業日明け授業開始日","9-2":"3年県学調(1)","9-8":"前期期末テスト","10-1":"体育祭","10-15":"前期終業式 第2ステージ終了","10-16":"後期始業式 第3ステージ「深化」開始","11-4":"後期中間テスト 1日目","11-5":"後期中間テスト 2日目","12-24":"冬季休業開始 第3ステージ終了","1-4":"冬季休業日終了","1-5":"冬季休業日明け授業開始日 第4ステージ「感謝」開始","2-2":"私立高校入試","2-3":"私立高校入試","3-3":"公立高校入試","3-4":"公立高校入試","3-18":"修了式","3-19":"卒業証書授与式","3-20":"学年末休業日開始" }
     };
-    
-    // 長期休業の初期データ
+
     const INITIAL_VACATIONS = [
       { id: 'v1', name: '夏季休業', start: '2025-07-20', end: '2025-08-27' },
       { id: 'v2', name: '冬季休業', start: '2025-12-20', end: '2026-01-06' },
@@ -156,15 +163,12 @@
     const parseUnits = (text) => { if(!text) return []; return text.split('\n').filter(l=>l.trim()!=='').map(l => { const p=l.split(','); return {name:p[0]?.trim()||'',hours:parseInt(p[1])||1}; }); };
     const formatUnits = (units) => { if(!units) return ''; return units.map(u=>`${u.name},${u.hours}`).join('\n'); };
 
-    const FIREBASE_CONFIG = { apiKey: "AIzaSyAdOREqv-PvjtjJ__7PwhpVyfcJxmdXPAs", authDomain: "eduplanner-v2.firebaseapp.com", projectId: "eduplanner-v2", storageBucket: "eduplanner-v2.firebasestorage.app", messagingSenderId: "931393732389", appId: "1:931393732389:web:60d39fec28a2a2e179e4cc" };
-
     // ============================
-    // 日別タイムラインビュー
+    // Sub Components
     // ============================
     const DayTimelineView = ({ dateStr, dateObj, onClose, getCellData, getDaySetting, todos, onGoToWeekly }) => {
       let dayIdx = dateObj.getDay() - 1; if (dayIdx === -1) dayIdx = 6;
       const setting = getDaySetting(dateStr, dayIdx);
-      const isHoliday = setting.type === 'holiday';
       const dayName = DAYS[dayIdx];
       const HOUR_HEIGHT = 60; const START_HOUR = 8; const END_HOUR = 18; const TOTAL_HEIGHT = (END_HOUR - START_HOUR) * HOUR_HEIGHT;
 
@@ -224,7 +228,6 @@
       );
     };
 
-    /** 月間カレンダー用：その日の予定を全文表示（モバイル向けポップアップ） */
     const MonthDayPopup = ({ dateStr, dateObj, dayIndex, events, dark, onClose, onGoWeekly, onOpenTimeline }) => {
       const dayName = DAYS[dayIndex];
       const card = dark ? 'bg-slate-800 text-slate-200 border-slate-600' : 'bg-white text-slate-800 border-slate-200';
@@ -267,9 +270,6 @@
       );
     };
 
-    // ============================
-    // ダッシュボード
-    // ============================
     const Dashboard = ({ weeklyData, baseTemplate, todos, syllabusData, yearlyData, vacations, weeklySettings, templateSettings, onGoToWeekly, onGoToDate }) => {
       const today = getJSTDate(); const todayStr = formatDate(today); let dayIdx = today.getDay() - 1; if (dayIdx === -1) dayIdx = 6;
       
@@ -374,8 +374,9 @@
       );
     };
 
+
     // ============================
-    // メインアプリ
+    // メインアプリ コンポーネント
     // ============================
     function TeacherPlanner() {
       const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -390,7 +391,6 @@
       
       const [activeTab, setActiveTab] = useState('dashboard');
       
-      // JSTで確実な初期化
       const [currentWeekStart, setCurrentWeekStart] = useState(() => getMonday(getJSTDate()));
       const [currentMonth, setCurrentMonth] = useState(() => {
         const now = getJSTDate();
@@ -428,12 +428,10 @@
       const [tempHandwriting, setTempHandwriting] = useState(null);
       const [showHandwritingPad, setShowHandwritingPad] = useState(false);
       
-      // 📒 今週のノート（メモ）用のStateとRef
       const [editingWeekMemo, setEditingWeekMemo] = useState(null);
       const [showWeekMemoPad, setShowWeekMemoPad] = useState(false);
       const savedRangeRef = useRef(null);
 
-      // 手書き・システム設定用State
       const [penColor, setPenColor] = useState('#0f172a');
       const [isEraser, setIsEraser] = useState(false);
       const [pencilOnly, setPencilOnly] = useState(true);
@@ -445,6 +443,7 @@
       const [isOnline, setIsOnline] = useState(navigator.onLine);
       const quickCanvasRef = useRef(null);
       const isDrawingRef = useRef(false);
+      const lastPosRef = useRef({ x: 0, y: 0 });
       const [selectedDateDetails, setSelectedDateDetails] = useState(null);
       const [monthDayPopup, setMonthDayPopup] = useState(null);
 
@@ -455,7 +454,6 @@
       const todayStr = formatDate(getJSTDate());
       const schoolYear = currentMonth.getMonth() < 3 ? currentMonth.getFullYear() - 1 : currentMonth.getFullYear();
 
-      // 文字数に応じてフォントサイズを動的に縮小するヘルパー関数
       const getDynamicFontSize = (text, isMobile) => {
         if (!text) return isMobile ? 'text-[8px]' : 'text-xs';
         const len = text.length;
@@ -475,7 +473,6 @@
         }
       };
 
-      // 行事用のさらに小さいフォントサイズ（はみ出し防止）
       const getEventFontSize = (text, isMobile) => {
         if (!text) return isMobile ? 'text-[8px]' : 'text-xs';
         const len = text.length;
@@ -492,7 +489,6 @@
         }
       };
 
-      // 📒 今週のメモデータの取得と過去データ(diary)の統合
       const weekMemoKey = `${formatDate(currentWeekStart)}-weekMemos`;
       const savedWeekMemos = (weeklyData[weekMemoKey] && weeklyData[weekMemoKey].memos) ? weeklyData[weekMemoKey].memos : [];
       
@@ -514,7 +510,7 @@
         return arr;
       }, [weeklyData, currentWeekStart]);
 
-      const displayWeekMemos = [...savedWeekMemos, ...oldMemos].sort((a, b) => b.timestamp - a.timestamp); // 新しい順
+      const displayWeekMemos = [...savedWeekMemos, ...oldMemos].sort((a, b) => b.timestamp - a.timestamp);
 
       const undoStack = useRef([]);
       const redoStack = useRef([]);
@@ -591,11 +587,25 @@
         const init = async () => {
           try {
             const { initializeApp } = await _importDynamic("https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js");
-            const { getAuth, onAuthStateChanged, setPersistence, browserLocalPersistence } = await _importDynamic("https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js");
-            const { getFirestore } = await _importDynamic("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
-            const app = initializeApp(FIREBASE_CONFIG); const auth = getAuth(app); const db = getFirestore(app);
-            try { const { enableMultiTabIndexedDbPersistence } = await _importDynamic("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js"); await enableMultiTabIndexedDbPersistence(db); } catch(e){}
-            window.__firebaseAuth = auth; window.__firebaseDb = db;
+            const { getAuth, onAuthStateChanged, setPersistence, browserLocalPersistence, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } = await _importDynamic("https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js");
+            const { getFirestore, doc, setDoc, onSnapshot, enableMultiTabIndexedDbPersistence } = await _importDynamic("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
+            
+            const app = initializeApp(FIREBASE_CONFIG);
+            const auth = getAuth(app);
+            const db = getFirestore(app);
+            
+            try {
+              await enableMultiTabIndexedDbPersistence(db);
+            } catch(e){}
+            
+            window.__firebaseAuth = auth;
+            window.__firebaseDb = db;
+            window.__firebaseSignIn = signInWithEmailAndPassword;
+            window.__firebaseCreateUser = createUserWithEmailAndPassword;
+            window.__firebaseSignOut = signOut;
+            window.__firebaseDoc = doc;
+            window.__firebaseSetDoc = setDoc;
+
             await setPersistence(auth, browserLocalPersistence);
             
             const savedE = localStorage.getItem('ep_mail');
@@ -613,7 +623,6 @@
                   if (savedE && savedP) {
                     setIsAutoLoggingIn(true);
                     try {
-                      const { signInWithEmailAndPassword } = await _importDynamic("https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js");
                       await signInWithEmailAndPassword(auth, savedE, atob(savedP));
                     } catch (err) {
                       localStorage.removeItem('ep_pass');
@@ -677,7 +686,13 @@
       }, [cloudUser]);
 
       const cleanData = (obj) => { if(obj===undefined) return null; if(obj===null||typeof obj!=='object') return obj; const n=Array.isArray(obj)?[]:{}; for(const k in obj) n[k]=cleanData(obj[k]); return n; };
-      const saveToFirestore = async (name, data) => { if(cloudUser&&window.__firebaseDb){ try{ const {doc,setDoc}=await _importDynamic("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js"); await setDoc(doc(window.__firebaseDb,'users',cloudUser.uid,'teacherPlanner',name), cleanData(data), {merge:true}); }catch(e){} } };
+      const saveToFirestore = async (name, data) => { 
+        if(cloudUser && window.__firebaseDb){ 
+          try { 
+            await window.__firebaseSetDoc(window.__firebaseDoc(window.__firebaseDb,'users',cloudUser.uid,'teacherPlanner',name), cleanData(data), {merge:true}); 
+          } catch(e){} 
+        } 
+      };
       
       const saveAll = (t,ts,w,ws) => { if (!isUndoRedo.current) pushUndo(getCurrentSnapshot()); setBaseTemplate(t); setTemplateSettings(ts); setWeeklyData(w); setWeeklySettings(ws); saveToFirestore('template',{baseTemplate:t,templateSettings:ts}); saveToFirestore('weekly',{weeklyData:w,weeklySettings:ws}); };
       const saveTodos = (nt) => { if (!isUndoRedo.current) pushUndo(getCurrentSnapshot()); setTodos(nt); saveToFirestore('todos',{todos:nt}); };
@@ -690,9 +705,8 @@
       const handleAuthSubmit = async (e) => { 
         e.preventDefault(); setAuthError(''); 
         try { 
-          const {signInWithEmailAndPassword,createUserWithEmailAndPassword} = await _importDynamic("https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js"); 
-          if(isRegistering) await createUserWithEmailAndPassword(window.__firebaseAuth, authEmail, authPassword); 
-          else await signInWithEmailAndPassword(window.__firebaseAuth, authEmail, authPassword); 
+          if(isRegistering) await window.__firebaseCreateUser(window.__firebaseAuth, authEmail, authPassword); 
+          else await window.__firebaseSignIn(window.__firebaseAuth, authEmail, authPassword); 
           
           if (rememberMe) {
             localStorage.setItem('ep_mail', authEmail);
@@ -706,10 +720,9 @@
       
       const handleLogout = async () => {
         try {
-          const { getAuth, signOut } = await _importDynamic("https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js");
           localStorage.removeItem('ep_mail');
           localStorage.removeItem('ep_pass');
-          await signOut(window.__firebaseAuth);
+          await window.__firebaseSignOut(window.__firebaseAuth);
           showToast('ログアウトしました');
         } catch (e) {
           showToast('ログアウトに失敗しました');
@@ -759,7 +772,7 @@
         reader.onload = (event) => {
           try {
             const data = JSON.parse(event.target.result);
-            if (confirm('現在のデータが上書きされます。よろしいですか？')) {
+            if (window.confirm('現在のデータが上書きされます。よろしいですか？')) {
               if (data.baseTemplate) setBaseTemplate(data.baseTemplate);
               if (data.templateSettings) setTemplateSettings(data.templateSettings);
               if (data.weeklyData) setWeeklyData(data.weeklyData);
@@ -825,13 +838,11 @@
           result = { ...ov };
         }
 
-        // 年間行事の紐付け処理を強化
         if (pid === 'event' && activeTab !== 'template') { 
           const [y,m,d] = ds.split('-').map(Number); 
           const sy = m < 4 ? y - 1 : y; 
           const ye = yearlyData[sy]?.[`${m}-${d}`]; 
           if (ye && ye.trim() !== '') {
-            // 週案側で手書きされた内容がある場合、重複しないように結合
             if (result.subject && result.subject.trim() !== '') {
                if (!result.subject.includes(ye.trim())) {
                   result = { ...result, subject: ye.trim() + "\n" + result.subject.trim() };
@@ -880,7 +891,6 @@
 
       const addTodo = (e) => { e.preventDefault(); if(!newTodoText.trim()) return; saveTodos([{id:Date.now(),text:newTodoText,completed:false,dueDate:newTodoDate,tag:newTodoTag,important:newTodoImportant}, ...todos]); setNewTodoText(''); };
       
-      // TODOドラッグ＆ドロップ機能
       const dragItemIdx = useRef(null);
       const dragOverItemIdx = useRef(null);
       const [dragHoverIdx, setDragHoverIdx] = useState(null);
@@ -925,7 +935,6 @@
         dragOverItemIdx.current = null;
       };
 
-      // 📒 今週のノートの選択範囲保存
       const saveSelection = useCallback(() => {
         try {
           const sel = window.getSelection();
@@ -969,7 +978,6 @@
         }
       }, []);
 
-      // 書式設定ツールバー関数
       const formatText = useCallback((command, value = null, editorId) => {
         try {
           const editor = document.getElementById(editorId);
@@ -986,7 +994,6 @@
           
           document.execCommand(command, false, value);
           
-          // 強制的に状態更新
           saveSelection();
           if (editorId === 'week-memo-editor') {
             setEditingWeekMemo(prev => ({...prev, htmlContent: editor.innerHTML}));
@@ -1231,16 +1238,15 @@
         </div>
       );
 
-      // --- 🌟 行をレンダリングする関数 ---
       const renderRow = (row) => {
         let rh=''; let fc=''; let rb='';
         let customStyle = {};
 
         if (activeTab === 'template') {
-          if(row.id==='lunch'){rh='min-h-[20px] h-5 sm:h-6';fc='shrink-0';rb='bg-amber-50/20 dark:bg-amber-900/10';}
-          else if(row.id==='morning'||row.id==='event'){rh='min-h-[24px] h-6 sm:h-8';fc='shrink-0';}
-          else if(row.id==='afterschool'){rh='min-h-[40px]';fc='flex-[1.5]';}
-          else {rh='min-h-[40px]';fc='flex-[2]';}
+          rh='h-[4rem] sm:h-[4.5rem] lg:h-[5rem]'; fc='flex-none'; rb='';
+          if(row.id==='lunch'){rh='h-8 sm:h-10';fc='flex-none';rb='bg-amber-50/20 dark:bg-amber-900/10';}
+          else if(row.id==='morning'||row.id==='event'){rh='h-10 sm:h-12';fc='flex-none';}
+          else if(row.id==='afterschool'){rh='h-20 sm:h-24 lg:h-28';fc='flex-none';}
         } else {
           if (isMobile && activeTab === 'weekly') {
             if (row.id === 'event') { rh = 'h-9 shrink-0'; fc = 'flex-none'; rb = ''; }
@@ -1271,7 +1277,6 @@
                 const data=getCellData(ds,row.id,i); const set=getDaySetting(ds,i); const isH=set.type==='holiday';
                 const cf=i>=5?'col-span-2':'col-span-3'; const isT=ds===todayStr;
                 
-                // 休日の場合、イベントや放課後以外の背景をシンプルで落ち着いた色に
                 const cellBg = (activeTab==='weekly' && isH) ? 'bg-slate-100/50 dark:bg-slate-800/40' : 'bg-transparent';
                 const overflowClass = activeTab === 'weekly' && row.id !== 'event' ? 'overflow-visible' : 'overflow-hidden';
 
@@ -1567,8 +1572,8 @@
 
             {/* 🌟 週案 または 基本設定 */}
             {(activeTab === 'weekly' || activeTab === 'template') && (
-              <div className={`flex flex-col md:flex-row h-full min-h-0 ${isMobile && (activeTab === 'weekly' || activeTab === 'template') ? 'p-1 gap-1' : 'p-1.5 sm:p-3 gap-1.5 sm:gap-3'}`}>
-                <div className="flex-1 bg-white rounded-2xl shadow-sm border border-slate-300 overflow-hidden flex flex-col min-w-0 min-h-0">
+              <div className={`flex flex-col ${activeTab === 'weekly' ? 'md:flex-row' : 'items-center overflow-y-auto pb-12'} h-full min-h-0 ${isMobile && (activeTab === 'weekly' || activeTab === 'template') ? 'p-1 gap-1' : 'p-1.5 sm:p-3 gap-1.5 sm:gap-3'}`}>
+                <div className={`${activeTab === 'template' ? 'w-full max-w-5xl shrink-0 h-auto' : 'flex-1'} bg-white rounded-2xl shadow-sm border border-slate-300 overflow-hidden flex flex-col min-w-0 ${activeTab === 'weekly' ? 'min-h-0' : ''}`}>
                   <div className={`flex bg-slate-50 border-b border-slate-300 sticky top-0 z-40 justify-between items-center shrink-0 ${isMobile && activeTab === 'weekly' ? 'px-1.5 py-1.5' : 'px-2 py-2 sm:px-3'}`}>
                     {activeTab === 'weekly' ? (
                       <div className="flex items-center gap-2 w-full overflow-hidden">
@@ -1594,7 +1599,7 @@
                     )}
                   </div>
                   
-                  <div className={`flex-1 flex flex-col relative min-h-0 hide-scrollbar ${isMobile && activeTab === 'weekly' ? 'overflow-hidden' : 'overflow-y-auto'}`}>
+                  <div className={`flex-1 flex flex-col relative ${activeTab === 'template' ? '' : 'min-h-0'} hide-scrollbar ${isMobile && activeTab === 'weekly' ? 'overflow-hidden' : (activeTab === 'weekly' ? 'overflow-y-auto' : '')}`}>
                     <div className={`flex bg-slate-100 border-b border-slate-300 sticky top-0 z-30 shadow-sm shrink-0 ${isMobile && activeTab === 'weekly' ? 'min-h-0 py-1' : 'min-h-[3rem]'}`}>
                       <div className="w-10 sm:w-14 lg:w-16 border-r border-slate-300 shrink-0 bg-slate-100 sticky left-0 z-40 flex flex-col items-center justify-center text-[10px] sm:text-[11px] font-black text-slate-600">
                         <span>時</span><span>間</span>
@@ -1645,12 +1650,12 @@
                       </div>
                     </div>
 
-                    <div className={`flex-1 flex flex-col relative min-h-0 ${isMobile && activeTab === 'weekly' ? 'overflow-hidden' : ''}`}>
+                    <div className={`flex-1 flex flex-col relative ${activeTab === 'template' ? '' : 'min-h-0'} ${isMobile && activeTab === 'weekly' ? 'overflow-hidden' : ''}`}>
                       {/* 1. 行事の行 */}
                       {ROWS.filter(r=>r.id==='event').map(row => renderRow(row))}
 
                       {/* 2. メインスケジュール (朝〜6限) のコンテナ */}
-                      <div className={`flex-1 flex flex-col relative min-h-0 border-b border-slate-400 dark:border-slate-700 ${isMobile && activeTab === 'weekly' ? 'overflow-hidden' : 'overflow-y-auto hide-scrollbar'}`}>
+                      <div className={`flex-1 flex flex-col relative ${activeTab === 'template' ? '' : 'min-h-0'} border-b border-slate-400 dark:border-slate-700 ${activeTab === 'template' ? '' : (isMobile && activeTab === 'weekly' ? 'overflow-hidden' : 'overflow-y-auto hide-scrollbar')}`}>
                          {ROWS.filter(r=>r.id!=='event' && r.id!=='afterschool' && r.id!=='diary').map(row => renderRow(row))}
                          {activeTab === 'weekly' && renderHolidayOverlays()}
                       </div>
@@ -1717,6 +1722,41 @@
                           const isOv=t.dueDate&&t.dueDate<todayStr;
                           return <div key={t.id} className={`flex items-start gap-2 p-2.5 border rounded-xl shadow-sm ${t.important?'bg-amber-50 border-amber-300':isOv?'bg-rose-50 border-rose-300':'bg-white border-slate-300'}`}><input type="checkbox" onChange={()=>saveTodos(todos.map(td=>td.id===t.id?{...td,completed:!td.completed}:td))} className="mt-0.5 w-4 h-4 cursor-pointer"/><div className="flex-1 min-w-0"><div className={`text-[10px] sm:text-xs font-black truncate ${isOv?'text-rose-600':'text-slate-800'}`}>{t.important&&<span className="text-amber-500 mr-1">★</span>}{t.text}</div>{t.dueDate&&<div className="text-[8px] sm:text-[9px] font-bold text-slate-600 mt-1 font-mono">期限: {t.dueDate}</div>}</div></div>
                         })}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 基本設定の追加設定項目 (templateのみ) */}
+                {activeTab === 'template' && (
+                  <div className="w-full max-w-5xl shrink-0 mt-4">
+                    <div className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-300 shadow-sm">
+                      <h2 className="text-xl font-black mb-4 text-slate-800 flex items-center gap-2">🌴 長期休業・休暇期間の設定</h2>
+                      <p className="text-xs text-slate-600 font-bold mb-4">期間を設定すると、月間や週案で自動的に「休日日課」になります。</p>
+                      <div className="space-y-3">
+                        {vacations.map((vac,idx) => (
+                           <div key={vac.id} className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 bg-slate-50 p-3 sm:p-4 rounded-xl border border-slate-200 shadow-sm">
+                             <div className="flex-1 font-black text-sm text-slate-800">{vac.name}</div>
+                             <div className="flex items-center gap-2">
+                               <input type="date" value={vac.start} onChange={e=>{const n=[...vacations];n[idx].start=e.target.value;saveExtraData(yearlyData,documents,n);}} className="text-[10px] sm:text-xs font-mono font-bold border border-slate-300 rounded-lg p-2 w-full bg-white outline-none focus:border-blue-400" />
+                               <span className="text-[10px] font-bold text-slate-500">〜</span>
+                               <input type="date" value={vac.end} onChange={e=>{const n=[...vacations];n[idx].end=e.target.value;saveExtraData(yearlyData,documents,n);}} className="text-[10px] sm:text-xs font-mono font-bold border border-slate-300 rounded-lg p-2 w-full bg-white outline-none focus:border-blue-400" />
+                             </div>
+                             <button onClick={()=>saveExtraData(yearlyData,documents,vacations.filter(v=>v.id!==vac.id))} className="text-rose-600 hover:bg-rose-100 text-[10px] font-bold px-4 py-2 border border-rose-300 bg-white rounded-lg shadow-sm transition-colors mt-2 sm:mt-0">削除</button>
+                           </div>
+                        ))}
+                      </div>
+                      <div className="bg-blue-50 p-5 rounded-xl border border-blue-200 mt-6 shadow-sm">
+                         <div className="text-sm font-black text-blue-800 mb-3">＋ 休業の新規追加</div>
+                         <div className="flex flex-col sm:flex-row gap-3">
+                           <input id="newVacName" type="text" placeholder="例: 夏季休業" className="text-xs font-bold p-2.5 rounded-lg border border-slate-300 bg-white flex-1 outline-none focus:border-blue-400 shadow-inner" />
+                           <div className="flex items-center gap-1.5 flex-1">
+                             <input id="newVacStart" type="date" className="text-[10px] sm:text-xs font-mono font-bold p-2.5 rounded-lg border border-slate-300 bg-white outline-none w-full focus:border-blue-400 shadow-inner" />
+                             <span className="text-[10px] text-slate-500">〜</span>
+                             <input id="newVacEnd" type="date" className="text-[10px] sm:text-xs font-mono font-bold p-2.5 rounded-lg border border-slate-300 bg-white outline-none w-full focus:border-blue-400 shadow-inner" />
+                           </div>
+                           <button onClick={() => { const n=document.getElementById('newVacName').value; const s=document.getElementById('newVacStart').value; const e=document.getElementById('newVacEnd').value; if(n&&s&&e){saveExtraData(yearlyData,documents,[...vacations,{id:Date.now().toString(),name:n,start:s,end:e}]);document.getElementById('newVacName').value='';document.getElementById('newVacStart').value='';document.getElementById('newVacEnd').value='';} }} className="bg-blue-600 text-white text-xs font-black px-6 py-2.5 rounded-lg shadow-md hover:bg-blue-700 transition-colors">追加</button>
+                         </div>
                       </div>
                     </div>
                   </div>
@@ -1919,37 +1959,6 @@
               <div className="p-4 flex-1 overflow-y-auto bg-[var(--paper)]">
                 <div className="max-w-3xl mx-auto space-y-6">
                   
-                  {/* 長期休業・休暇期間の設定 */}
-                  <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-300 shadow-md">
-                    <h2 className="text-xl font-black mb-4 text-slate-800 flex items-center gap-2">🌴 長期休業・休暇期間の設定</h2>
-                    <p className="text-xs text-slate-600 font-bold mb-4">期間を設定すると、月間や週案で自動的に「休日日課」になります。</p>
-                    <div className="space-y-3">
-                      {vacations.map((vac,idx) => (
-                         <div key={vac.id} className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 bg-slate-50 p-3 sm:p-4 rounded-xl border border-slate-200 shadow-sm">
-                           <div className="flex-1 font-black text-sm text-slate-800">{vac.name}</div>
-                           <div className="flex items-center gap-2">
-                             <input type="date" value={vac.start} onChange={e=>{const n=[...vacations];n[idx].start=e.target.value;saveExtraData(yearlyData,documents,n);}} className="text-[10px] sm:text-xs font-mono font-bold border border-slate-300 rounded-lg p-2 w-full bg-white outline-none focus:border-blue-400" />
-                             <span className="text-[10px] font-bold text-slate-500">〜</span>
-                             <input type="date" value={vac.end} onChange={e=>{const n=[...vacations];n[idx].end=e.target.value;saveExtraData(yearlyData,documents,n);}} className="text-[10px] sm:text-xs font-mono font-bold border border-slate-300 rounded-lg p-2 w-full bg-white outline-none focus:border-blue-400" />
-                           </div>
-                           <button onClick={()=>saveExtraData(yearlyData,documents,vacations.filter(v=>v.id!==vac.id))} className="text-rose-600 hover:bg-rose-100 text-[10px] font-bold px-4 py-2 border border-rose-300 bg-white rounded-lg shadow-sm transition-colors mt-2 sm:mt-0">削除</button>
-                         </div>
-                      ))}
-                    </div>
-                    <div className="bg-blue-50 p-5 rounded-2xl border border-blue-200 mt-6 shadow-sm">
-                       <div className="text-sm font-black text-blue-800 mb-3">＋ 休業の新規追加</div>
-                       <div className="flex flex-col sm:flex-row gap-3">
-                         <input id="newVacName" type="text" placeholder="例: 夏季休業" className="text-xs font-bold p-2.5 rounded-lg border border-slate-300 bg-white flex-1 outline-none focus:border-blue-400 shadow-inner" />
-                         <div className="flex items-center gap-1.5 flex-1">
-                           <input id="newVacStart" type="date" className="text-[10px] sm:text-xs font-mono font-bold p-2.5 rounded-lg border border-slate-300 bg-white outline-none w-full focus:border-blue-400 shadow-inner" />
-                           <span className="text-[10px] text-slate-500">〜</span>
-                           <input id="newVacEnd" type="date" className="text-[10px] sm:text-xs font-mono font-bold p-2.5 rounded-lg border border-slate-300 bg-white outline-none w-full focus:border-blue-400 shadow-inner" />
-                         </div>
-                         <button onClick={() => { const n=document.getElementById('newVacName').value; const s=document.getElementById('newVacStart').value; const e=document.getElementById('newVacEnd').value; if(n&&s&&e){saveExtraData(yearlyData,documents,[...vacations,{id:Date.now().toString(),name:n,start:s,end:e}]);document.getElementById('newVacName').value='';document.getElementById('newVacStart').value='';document.getElementById('newVacEnd').value='';} }} className="bg-blue-600 text-white text-xs font-black px-6 py-2.5 rounded-lg shadow-md hover:bg-blue-700 transition-colors">追加</button>
-                       </div>
-                    </div>
-                  </div>
-
                   <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-300 shadow-md">
                     <h2 className="text-xl font-black mb-6 text-slate-800 flex items-center gap-2">⚙️ アプリの設定・バックアップ</h2>
                     
