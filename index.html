@@ -1894,17 +1894,16 @@
                                 <span className={`text-[9px] font-black ${dt.getDay()===0||hol?'text-rose-700':dt.getDay()===6?'text-blue-700':'text-slate-700'}`}>{['日','月','火','水','木','金','土'][dt.getDay()]}</span>
                                 {hol&&<span className="text-[8px] font-black text-rose-700 leading-tight mt-0.5 truncate">{hol}</span>}
                               </div>
-                              <textarea 
-                                className={`w-full flex-1 text-[10px] font-bold bg-transparent outline-none resize-none leading-tight mt-1 break-all ${dt.getDay()===0||hol?'text-rose-900':dt.getDay()===6?'text-blue-900':'text-slate-800'}`} 
-                                value={ut} 
+                              <textarea
+                                className={`w-full flex-1 text-[10px] font-bold bg-transparent outline-none resize-none leading-tight mt-1 break-all ${dt.getDay()===0||hol?'text-rose-900':dt.getDay()===6?'text-blue-900':'text-slate-800'}`}
+                                value={ut}
                                 onChange={e=>{
                                   const val = e.target.value;
                                   const lines = val.split('\n');
-                                  if (lines.length > 3) return; // 3行を超えたら入力を反映しない
+                                  if (lines.length > 3) return;
                                   saveExtraData({...yearlyData,[schoolYear]:{...(yearlyData[schoolYear]||{}),[`${m}-${d}`]:val}},documents,vacations);
-                                }} 
-                                rows={1} 
-                                onInput={e=>{e.target.style.height='auto';e.target.style.height=e.target.scrollHeight+'px';}}
+                                }}
+                                rows={ut.split('\n').filter(s=>s.trim()!=='').length||1}
                               />
                             </div>}
                           </td>
@@ -2252,7 +2251,17 @@
                         <input type="time" value={tempEndTime} onChange={e=>setTempEndTime(e.target.value)} className="w-28 bg-white border border-slate-400 rounded-lg px-3 py-2 text-sm font-mono font-bold outline-none focus:border-blue-500 shadow-sm" />
                       </div>
                     )}
-                    <input value={tempSubject} onChange={e=>setTempSubject(e.target.value)} className="w-full text-2xl font-black p-3 border-b-[3px] border-slate-300 outline-none focus:border-blue-600 bg-transparent text-slate-800 placeholder-slate-400 transition-colors" placeholder="活動内容・教科名" autoFocus />
+                    {editingCell.periodId === 'event' ? (
+                      <div className="space-y-2">
+                        <div className="text-xs font-bold text-pink-700 flex items-center gap-1">🚩 行事（最大3件）</div>
+                        {[0,1,2].map(i => {
+                          const ls = tempSubject.split('\n'); while(ls.length < 3) ls.push('');
+                          return <input key={i} value={ls[i]||''} onChange={e=>{const a=tempSubject.split('\n');while(a.length<3)a.push('');a[i]=e.target.value;setTempSubject(a.join('\n'));}} className="w-full text-xl font-black p-3 border-b-[3px] border-slate-300 outline-none focus:border-blue-600 bg-transparent text-slate-800 placeholder-slate-400 transition-colors" placeholder={`行事 ${i+1}`} autoFocus={i===0} />;
+                        })}
+                      </div>
+                    ) : (
+                      <input value={tempSubject} onChange={e=>setTempSubject(e.target.value)} className="w-full text-2xl font-black p-3 border-b-[3px] border-slate-300 outline-none focus:border-blue-600 bg-transparent text-slate-800 placeholder-slate-400 transition-colors" placeholder="活動内容・教科名" autoFocus />
+                    )}
                     
                     {!editingCell.isTemplate && editingCell.periodId.startsWith('p') && syllabusData.length > 0 && (
                       <div className="bg-blue-50/50 p-3 rounded-xl border border-blue-200 max-h-40 overflow-y-auto hide-scrollbar space-y-2 shadow-inner">
@@ -2284,7 +2293,7 @@
                   <button onClick={()=>{handleSaveCell({subject:'',memo:'',startTime:'',endTime:'',events:[]}); showToast('🧹 クリアしました');}} className="px-5 py-3 bg-rose-50 border border-rose-200 text-rose-600 rounded-xl font-bold text-sm shadow-sm active:scale-95 transition-colors hover:bg-rose-100">クリア</button>
                   <div className="flex gap-3">
                     <button onClick={()=>setEditingCell(null)} className="px-6 py-3 bg-slate-100 text-slate-700 border border-slate-300 rounded-xl font-bold text-sm shadow-sm hover:bg-slate-200 transition-colors">キャンセル</button>
-                    <button onClick={()=>{const data={subject:tempSubject,memo:tempMemo,startTime:tempStartTime,endTime:tempEndTime,handwriting:tempHandwriting}; if(editingCell.periodId==='afterschool') data.events=tempEvents.filter(ev=>ev.subject.trim()!==''); handleSaveCell(data);}} className="px-8 py-3 bg-blue-600 text-white rounded-xl font-black text-base shadow-md active:scale-95 transition-transform hover:bg-blue-700">保存する</button>
+                    <button onClick={()=>{const subj=editingCell.periodId==='event'?tempSubject.split('\n').filter(s=>s.trim()!=='').join('\n'):tempSubject; const data={subject:subj,memo:tempMemo,startTime:tempStartTime,endTime:tempEndTime,handwriting:tempHandwriting}; if(editingCell.periodId==='afterschool') data.events=tempEvents.filter(ev=>ev.subject.trim()!==''); handleSaveCell(data);}} className="px-8 py-3 bg-blue-600 text-white rounded-xl font-black text-base shadow-md active:scale-95 transition-transform hover:bg-blue-700">保存する</button>
                   </div>
                 </div>
               </div>
