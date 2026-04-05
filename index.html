@@ -1304,26 +1304,24 @@
                 let blockClasses = 'relative w-full h-full';
                 
                 if (activeTab === 'weekly' && row.id !== 'event' && row.id !== 'afterschool') {
-                  let s = data.startTime;
-                  let e = data.endTime;
-                  const t = SCHEDULE_TIMES[set.type]?.[row.id];
-                  if (!s && t) s = t.start;
-                  if (!e && t) e = t.end;
+                  const s = data.startTime;
+                  const e = data.endTime;
 
                   if (s && e) {
+                    const t = SCHEDULE_TIMES[set.type]?.[row.id];
                     let dur = getDurationMinutes(s, e);
                     if (!dur || dur <= 0) dur = 45;
-                    
+
                     let baseDur = t ? getDurationMinutes(t.start, t.end) : 50;
                     if (!baseDur || baseDur <= 0) baseDur = 50;
-                    
+
                     let pct = (dur / baseDur) * 100;
-                    
+
                     if (pct > 110) {
                        blockStyle = { height: `calc(${pct}% - 4px)`, zIndex: 30 };
                        blockClasses = 'absolute left-0.5 right-0.5 top-0.5 w-auto shadow-md border-b-[3px] border-b-slate-300 dark:border-b-slate-600';
                     } else {
-                       pct = Math.max(60, Math.min(100, pct)); 
+                       pct = Math.max(30, Math.min(100, pct));
                        blockStyle = { height: `calc(${pct}% - 4px)` };
                        blockClasses = 'relative w-full h-full';
                     }
