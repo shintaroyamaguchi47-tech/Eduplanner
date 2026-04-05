@@ -1245,7 +1245,8 @@
         if (activeTab === 'template') {
           customStyle={flex:'4',minHeight:'2.5rem'}; rh=''; fc=''; rb='';
           if(row.id==='lunch'){customStyle={flex:'1.5',minHeight:'1.5rem'};rh='';fc='';rb='bg-amber-50/20 dark:bg-amber-900/10';}
-          else if(row.id==='morning'||row.id==='event'){customStyle={flex:'2',minHeight:'2rem'};rh='';fc='';}
+          else if(row.id==='event'){customStyle={flex:'3.5',minHeight:'3.5rem'};rh='';fc='';}
+          else if(row.id==='morning'){customStyle={flex:'2',minHeight:'2rem'};rh='';fc='';}
           else if(row.id==='afterschool'){customStyle={flex:'3.5',minHeight:'3rem'};rh='';fc='';}
         } else {
           if (isMobile && activeTab === 'weekly') {
@@ -1254,7 +1255,8 @@
             else if (row.id === 'afterschool') { rh = 'h-[4.5rem] shrink-0'; fc = 'flex-none'; rb = ''; }
             else { rh = 'h-[3rem] shrink-0'; fc = 'flex-none'; rb = ''; }
           } else {
-            if (row.id === 'event' || row.id === 'morning') { customStyle={flex:'2',minHeight:'2rem'}; rh=''; fc=''; rb=''; }
+            if (row.id === 'event') { customStyle={flex:'3.5',minHeight:'3.5rem'}; rh=''; fc=''; rb=''; }
+            else if (row.id === 'morning') { customStyle={flex:'2',minHeight:'2rem'}; rh=''; fc=''; rb=''; }
             else if (row.id === 'lunch') { customStyle={flex:'1.5',minHeight:'1.5rem'}; rh=''; fc=''; rb='bg-amber-50/20 dark:bg-amber-900/10'; }
             else if (row.id === 'afterschool') { customStyle={flex:'3.5',minHeight:'3rem'}; rh=''; fc=''; rb=''; }
             else { customStyle={flex:'4',minHeight:'2.5rem'}; rh=''; fc=''; rb=''; }
