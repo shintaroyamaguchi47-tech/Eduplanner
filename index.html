@@ -1254,10 +1254,10 @@
             else if (row.id === 'afterschool') { rh = 'h-[4.5rem] shrink-0'; fc = 'flex-none'; rb = ''; }
             else { rh = 'h-[3rem] shrink-0'; fc = 'flex-none'; rb = ''; }
           } else {
-            if (row.id === 'event' || row.id === 'morning') { rh = 'h-10 lg:h-11 shrink-0'; fc = 'flex-none'; rb = ''; }
-            else if (row.id === 'lunch') { rh = 'h-7 lg:h-8 shrink-0'; fc = 'flex-none'; rb = 'bg-amber-50/20 dark:bg-amber-900/10'; }
-            else if (row.id === 'afterschool') { rh = 'h-[4.5rem] lg:h-[5.5rem] shrink-0'; fc = 'flex-none'; rb = ''; }
-            else { rh = 'h-[3.5rem] lg:h-[3.75rem] shrink-0'; fc = 'flex-none'; rb = ''; }
+            if (row.id === 'event' || row.id === 'morning') { customStyle={flex:'2',minHeight:'2rem'}; rh=''; fc=''; rb=''; }
+            else if (row.id === 'lunch') { customStyle={flex:'1.5',minHeight:'1.5rem'}; rh=''; fc=''; rb='bg-amber-50/20 dark:bg-amber-900/10'; }
+            else if (row.id === 'afterschool') { customStyle={flex:'3.5',minHeight:'3rem'}; rh=''; fc=''; rb=''; }
+            else { customStyle={flex:'4',minHeight:'2.5rem'}; rh=''; fc=''; rb=''; }
           }
         }
         
@@ -1572,8 +1572,8 @@
 
             {/* 🌟 週案 または 基本設定 */}
             {(activeTab === 'weekly' || activeTab === 'template') && (
-              <div className={`flex flex-col ${activeTab === 'weekly' ? 'md:flex-row min-h-0' : 'lg:flex-row lg:justify-center lg:items-start overflow-y-auto pb-24 lg:overflow-hidden lg:pb-0'} h-full w-full ${isMobile && activeTab === 'weekly' ? 'p-1 gap-1' : 'p-2 sm:p-4 gap-4 sm:gap-6'}`}>
-                <div className={`${activeTab === 'template' ? 'w-full max-w-[1000px] lg:w-[60%] shrink-0 h-auto lg:h-full' : 'flex-1 min-h-0'} bg-white rounded-2xl shadow-sm border border-slate-300 overflow-hidden flex flex-col min-w-0`}>
+              <div className={`flex flex-col ${activeTab === 'weekly' ? 'md:flex-row min-h-0' : 'md:flex-row md:justify-center md:items-start overflow-y-auto pb-24 md:overflow-hidden md:pb-0'} h-full w-full ${isMobile && activeTab === 'weekly' ? 'p-1 gap-1' : 'p-2 sm:p-4 gap-4 sm:gap-6'}`}>
+                <div className={`${activeTab === 'template' ? 'w-full max-w-[1000px] md:w-[60%] shrink-0 h-auto md:h-full' : 'flex-1 min-h-0'} bg-white rounded-2xl shadow-sm border border-slate-300 overflow-hidden flex flex-col min-w-0`}>
                   <div className={`flex bg-slate-50 border-b border-slate-300 sticky top-0 z-40 justify-between items-center shrink-0 ${isMobile && activeTab === 'weekly' ? 'px-1.5 py-1.5' : 'px-2 py-2 sm:px-3'}`}>
                     {activeTab === 'weekly' ? (
                       <div className="flex items-center gap-2 w-full overflow-hidden">
@@ -1650,7 +1650,7 @@
                       </div>
                     </div>
 
-                    <div className={`flex flex-col relative ${activeTab === 'template' ? 'flex-1 min-h-0' : 'pb-4'}`}>
+                    <div className={`flex flex-col relative ${activeTab === 'template' || !isMobile ? 'flex-1 min-h-0' : 'pb-4'}`}>
                       {ROWS.filter(r=>r.id!=='diary').map(row => renderRow(row))}
                       {activeTab === 'weekly' && renderHolidayOverlays()}
                     </div>
@@ -1720,7 +1720,7 @@
 
                 {/* 基本設定の追加設定項目 (templateのみ) */}
                 {activeTab === 'template' && (
-                  <div className="w-full max-w-[1000px] lg:w-[40%] lg:max-w-md shrink-0 flex flex-col gap-4 lg:h-full lg:overflow-y-auto hide-scrollbar">
+                  <div className="w-full max-w-[1000px] md:w-[40%] md:max-w-md shrink-0 flex flex-col gap-4 md:h-full md:overflow-y-auto hide-scrollbar">
                     <div className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-300 shadow-sm">
                       <h2 className="text-xl font-black mb-4 text-slate-800 flex items-center gap-2">🌴 長期休業・休暇期間の設定</h2>
                       <p className="text-xs text-slate-600 font-bold mb-4">期間を設定すると、月間や週案で自動的に「休日日課」になります。</p>
