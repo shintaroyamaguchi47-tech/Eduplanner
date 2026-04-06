@@ -894,6 +894,8 @@
       const dragItemIdx = useRef(null);
       const dragOverItemIdx = useRef(null);
       const [dragHoverIdx, setDragHoverIdx] = useState(null);
+      const touchDragEl = useRef(null);
+      const touchOverIdx = useRef(null);
 
       const handleDragStart = (e, index) => {
         dragItemIdx.current = index;
@@ -921,19 +923,68 @@
         setDragHoverIdx(null);
         const srcIdx = dragItemIdx.current;
         const dstIdx = dragOverItemIdx.current;
-        
+
         if (srcIdx !== null && dstIdx !== null && srcIdx !== dstIdx) {
           const incomplete = todos.filter(t => !t.completed);
           const complete = todos.filter(t => t.completed);
-          
+
           const draggedItem = incomplete.splice(srcIdx, 1)[0];
           incomplete.splice(dstIdx, 0, draggedItem);
-          
+
           saveTodos([...incomplete, ...complete]);
         }
         dragItemIdx.current = null;
         dragOverItemIdx.current = null;
       };
+
+      const handleTouchStart = useCallback((e, index) => {
+        dragItemIdx.current = index;
+        touchOverIdx.current = index;
+        touchDragEl.current = e.currentTarget;
+        e.currentTarget.classList.add('opacity-50');
+      }, []);
+
+      const handleTouchEnd = useCallback(() => {
+        if (touchDragEl.current) {
+          touchDragEl.current.classList.remove('opacity-50');
+          touchDragEl.current = null;
+        }
+        setDragHoverIdx(null);
+        const srcIdx = dragItemIdx.current;
+        const dstIdx = touchOverIdx.current;
+        if (srcIdx !== null && dstIdx !== null && srcIdx !== dstIdx) {
+          setTodos(prev => {
+            const incomplete = prev.filter(t => !t.completed);
+            const complete = prev.filter(t => t.completed);
+            const draggedItem = incomplete.splice(srcIdx, 1)[0];
+            incomplete.splice(dstIdx, 0, draggedItem);
+            const nn = [...incomplete, ...complete];
+            saveToFirestore('todos', { todos: nn });
+            return nn;
+          });
+        }
+        dragItemIdx.current = null;
+        touchOverIdx.current = null;
+      }, []);
+
+      useEffect(() => {
+        const onTouchMove = (e) => {
+          if (dragItemIdx.current === null) return;
+          e.preventDefault();
+          const touch = e.touches[0];
+          const el = document.elementFromPoint(touch.clientX, touch.clientY);
+          const todoEl = el && el.closest('[data-todo-index]');
+          if (todoEl) {
+            const idx = parseInt(todoEl.dataset.todoIndex, 10);
+            if (!isNaN(idx) && idx !== touchOverIdx.current) {
+              touchOverIdx.current = idx;
+              setDragHoverIdx(idx);
+            }
+          }
+        };
+        document.addEventListener('touchmove', onTouchMove, { passive: false });
+        return () => document.removeEventListener('touchmove', onTouchMove);
+      }, []);
 
       const saveSelection = useCallback(() => {
         try {
@@ -2081,14 +2132,17 @@
                 const isOverdue = !t.completed && t.dueDate && t.dueDate < todayStr;
                 const isHovered = dragHoverIdx === index;
                 return (
-                <div 
-                  key={t.id} 
+                <div
+                  key={t.id}
+                  data-todo-index={index}
                   draggable
                   onDragStart={(e) => handleDragStart(e, index)}
                   onDragEnter={(e) => handleDragEnter(e, index)}
                   onDragOver={handleDragOver}
                   onDrop={(e) => handleDrop(e, index)}
                   onDragEnd={handleDragEnd}
+                  onTouchStart={(e) => handleTouchStart(e, index)}
+                  onTouchEnd={handleTouchEnd}
                   className={`flex gap-3 items-start p-4 rounded-2xl border shadow-sm group transition-all hover:shadow-md cursor-grab active:cursor-grabbing
                     ${t.important ? 'border-amber-300 bg-amber-50/50' : isOverdue ? 'border-rose-300 bg-rose-50/50' : 'border-slate-300 bg-white'}
                     ${isHovered ? 'border-blue-500 border-2 scale-[1.02] shadow-lg z-10' : ''}`}
