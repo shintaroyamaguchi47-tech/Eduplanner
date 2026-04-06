@@ -838,18 +838,16 @@
           result = { ...ov };
         }
 
-        if (pid === 'event' && activeTab !== 'template') { 
-          const [y,m,d] = ds.split('-').map(Number); 
-          const sy = m < 4 ? y - 1 : y; 
-          const ye = yearlyData[sy]?.[`${m}-${d}`]; 
+        if (pid === 'event' && activeTab !== 'template') {
+          const [y,m,d] = ds.split('-').map(Number);
+          const sy = m < 4 ? y - 1 : y;
+          const ye = yearlyData[sy]?.[`${m}-${d}`];
           if (ye && ye.trim() !== '') {
-            if (result.subject && result.subject.trim() !== '') {
-               if (!result.subject.includes(ye.trim())) {
-                  result = { ...result, subject: ye.trim() + "\n" + result.subject.trim() };
-               }
-            } else {
-               result = { ...result, subject: ye.trim() };
-            }
+            const yeLines = ye.trim().split('\n').filter(s => s.trim());
+            const weeklyLines = result.subject ? result.subject.trim().split('\n').filter(s => s.trim()) : [];
+            const newYeLines = yeLines.filter(yl => !weeklyLines.some(wl => wl.trim() === yl.trim()));
+            const allLines = [...newYeLines, ...weeklyLines];
+            result = { ...result, subject: allLines.join('\n') };
           }
         } 
 
@@ -878,7 +876,7 @@
         setWeeklyData(nd); setWeeklySettings(ns); saveAll(baseTemplate, templateSettings, nd, ns); showToast('振替をリセットしました');
       };
 
-      const openEditModal = (cd, ds, row, di, dn, ih) => { if(isMobile) return; if(row.id==='afterschool'){ let ie=cd.events?.length>0?[...cd.events]:[]; if(ie.length===0&&(cd.subject||cd.memo)) ie=[{startTime:cd.startTime||'',endTime:cd.endTime||'',subject:cd.subject||'',memo:cd.memo||''}]; while(ie.length<5) ie.push({startTime:'',endTime:'',subject:'',memo:''}); setTempEvents(ie); } else { setTempSubject(cd.subject||''); setTempMemo(cd.memo||''); setTempStartTime(cd.startTime||''); setTempEndTime(cd.endTime||''); } setTempHandwriting(cd.handwriting||null); setEditingCell({dateStr:ds, periodId:row.id, dayIndex:di, dayName:dn, periodName:row.name, isTemplate:activeTab==='template', ih}); };
+      const openEditModal = (cd, ds, row, di, dn, ih) => { if(isMobile) return; if(row.id==='afterschool'){ let ie=cd.events?.length>0?[...cd.events]:[]; if(ie.length===0&&(cd.subject||cd.memo)) ie=[{startTime:cd.startTime||'',endTime:cd.endTime||'',subject:cd.subject||'',memo:cd.memo||''}]; while(ie.length<5) ie.push({startTime:'',endTime:'',subject:'',memo:''}); setTempEvents(ie); } else if (row.id === 'event' && activeTab !== 'template') { const raw = weeklyData[`${ds}-event`]; setTempSubject(raw?.subject || ''); setTempMemo(cd.memo||''); setTempStartTime(cd.startTime||''); setTempEndTime(cd.endTime||''); } else { setTempSubject(cd.subject||''); setTempMemo(cd.memo||''); setTempStartTime(cd.startTime||''); setTempEndTime(cd.endTime||''); } setTempHandwriting(cd.handwriting||null); setEditingCell({dateStr:ds, periodId:row.id, dayIndex:di, dayName:dn, periodName:row.name, isTemplate:activeTab==='template', ih}); };
       const updateTempEvent = (i,f,v) => { const n=[...tempEvents]; n[i][f]=v; setTempEvents(n); };
       
       const handleSaveNote = () => { if(!editingNote.title.trim()&&!editingNote.content.trim()){ setEditingNote(null); return; } if(editingNote.type==='diary'){ const wk=`${editingNote.dateStr}-diary`; const nd={...weeklyData,[wk]:{...(weeklyData[wk]||{}),memo:editingNote.content,useTemplate:false}}; setWeeklyData(nd); saveAll(baseTemplate,templateSettings,nd,weeklySettings); showToast('メモを更新しました'); } else { const isN=!notesData.some(n=>n.id===editingNote.id); const ts=Date.now(); const nn=isN?[{...editingNote,type:'note',updatedAt:ts},...notesData]:notesData.map(n=>n.id===editingNote.id?{...editingNote,updatedAt:ts}:n); saveNotes(nn); showToast('ノートを保存しました'); } setEditingNote(null); };
@@ -2309,6 +2307,13 @@
                     {editingCell.periodId === 'event' ? (
                       <div className="space-y-2">
                         <div className="text-xs font-bold text-pink-700 flex items-center gap-1">🚩 行事（最大3件）</div>
+                        {(() => {
+                          const [ey,em,ed] = (editingCell.dateStr||'').split('-').map(Number);
+                          const esy = em < 4 ? ey - 1 : ey;
+                          const ye = yearlyData[esy]?.[`${em}-${ed}`];
+                          if (!ye || !ye.trim()) return null;
+                          return <div className="text-xs text-slate-500 bg-slate-100 px-3 py-2 rounded-lg">📅 年間カレンダー（編集不可）: {ye.trim().split('\n').filter(s=>s.trim()).join('　/　')}</div>;
+                        })()}
                         {[0,1,2].map(i => {
                           const ls = tempSubject.split('\n'); while(ls.length < 3) ls.push('');
                           return <input key={i} value={ls[i]||''} onChange={e=>{const a=tempSubject.split('\n');while(a.length<3)a.push('');a[i]=e.target.value;setTempSubject(a.join('\n'));}} className="w-full text-xl font-black p-3 border-b-[3px] border-slate-300 outline-none focus:border-blue-600 bg-transparent text-slate-800 placeholder-slate-400 transition-colors" placeholder={`行事 ${i+1}`} autoFocus={i===0} />;
