@@ -1785,31 +1785,33 @@
                         </div>
                       </div>
 
-                      <div 
-                        id="note-editor"
-                        className="flex-1 min-h-0 p-4 outline-none text-slate-800 dark:text-slate-200 font-medium text-sm leading-relaxed bg-slate-50 dark:bg-slate-900 shadow-inner border border-slate-300 dark:border-slate-700 overflow-y-auto editor-content rounded-xl"
-                        contentEditable
-                        suppressContentEditableWarning
-                        data-placeholder="ノートの内容..."
-                        onBlur={e => {
-                          const html = e.currentTarget.innerHTML;
-                          setEditingNote(prev => ({...prev, content: html}));
-                          saveSelection();
-                        }}
-                        onKeyUp={saveSelection}
-                        onMouseUp={saveSelection}
-                        onClick={(e) => handleEditorClick(e, 'note-editor')}
-                        ref={el => {
-                          if (el && !el.dataset.initialized) {
-                            let c = editingNote.content || '';
-                            if (!c.includes('<br') && !c.includes('<div') && !c.includes('<p') && !c.includes('<img') && c.includes('\n')) {
-                              c = c.replace(/\n/g, '<br>');
+                      <div className="flex-1 min-h-0 overflow-hidden rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 shadow-inner">
+                        <div
+                          id="note-editor"
+                          className="h-full p-4 outline-none text-slate-800 dark:text-slate-200 font-medium text-sm leading-relaxed overflow-y-auto editor-content"
+                          contentEditable
+                          suppressContentEditableWarning
+                          data-placeholder="ノートの内容..."
+                          onBlur={e => {
+                            const html = e.currentTarget.innerHTML;
+                            setEditingNote(prev => ({...prev, content: html}));
+                            saveSelection();
+                          }}
+                          onKeyUp={saveSelection}
+                          onMouseUp={saveSelection}
+                          onClick={(e) => handleEditorClick(e, 'note-editor')}
+                          ref={el => {
+                            if (el && !el.dataset.initialized) {
+                              let c = editingNote.content || '';
+                              if (!c.includes('<br') && !c.includes('<div') && !c.includes('<p') && !c.includes('<img') && c.includes('\n')) {
+                                c = c.replace(/\n/g, '<br>');
+                              }
+                              el.innerHTML = c;
+                              el.dataset.initialized = 'true';
                             }
-                            el.innerHTML = c;
-                            el.dataset.initialized = 'true';
-                          }
-                        }}
-                      ></div>
+                          }}
+                        ></div>
+                      </div>
                       
                       <div className="flex justify-between items-center pt-3 border-t border-slate-200 shrink-0">
                         <button onClick={()=>{
