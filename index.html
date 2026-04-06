@@ -1368,7 +1368,7 @@
                     if (!baseDur || baseDur <= 0) baseDur = 50;
 
                     let pct = (dur / baseDur) * 100;
-                    if (pct > 110) {
+                    if (pct > 110 && row.id.startsWith('p')) {
                       blockStyle = { height: `calc(${pct}% - 4px)`, zIndex: 30 };
                       blockClasses = 'absolute left-0.5 right-0.5 top-0.5 w-auto shadow-md border-b-[3px] border-b-slate-300 dark:border-b-slate-600';
                     } else {
