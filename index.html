@@ -1353,10 +1353,10 @@
                 else if (row.id === 'afterschool') { blockBg = 'bg-teal-50 hover:bg-teal-100'; blockBorder = 'border-teal-500'; blockText = 'text-teal-900'; }
                 else if (row.id === 'p5' || row.id === 'p6') { blockBg = 'bg-purple-50 hover:bg-purple-100'; blockBorder = 'border-purple-500'; blockText = 'text-purple-900'; }
 
-                let blockStyle = { height: 'calc(100% - 4px)' };
-                let blockClasses = 'relative w-full h-full';
-                
-                if (activeTab === 'weekly' && row.id !== 'event' && row.id !== 'afterschool') {
+                let blockStyle = row.id === 'morning' ? { minHeight: '100%' } : { height: 'calc(100% - 4px)' };
+                let blockClasses = row.id === 'morning' ? 'relative w-full' : 'relative w-full h-full';
+
+                if (activeTab === 'weekly' && row.id !== 'event' && row.id !== 'afterschool' && row.id !== 'morning') {
                   const s = data.startTime;
                   const e = data.endTime;
 
@@ -1385,7 +1385,7 @@
                 return (
                   <div key={i} onClick={()=>openEditModal(data,ds,row,i,day,isH,null)} className={`min-w-0 ${cf} border-r border-slate-300 dark:border-slate-700 last:border-r-0 p-0.5 cursor-pointer flex flex-col justify-start relative ${overflowClass} ${activeTab==='weekly'&&isT?'bg-blue-50/20':''} ${cellBg} hover:bg-slate-100/70 transition-colors h-full`}>
                     {hasData && (
-                      <div className={`${blockClasses} rounded sm:rounded-md shadow-[0_1px_2px_rgba(0,0,0,0.08)] flex flex-col px-1 py-0.5 sm:py-1 border-l-[3px] sm:border-l-[4px] transition-colors ${row.id === 'event' ? 'overflow-hidden' : 'overflow-y-auto hide-scrollbar'} ${blockBg} ${blockBorder}`} style={blockStyle}>
+                      <div className={`${blockClasses} rounded sm:rounded-md shadow-[0_1px_2px_rgba(0,0,0,0.08)] flex flex-col px-1 py-0.5 sm:py-1 border-l-[3px] sm:border-l-[4px] transition-colors ${row.id === 'event' ? 'overflow-hidden' : row.id === 'morning' ? 'overflow-visible' : 'overflow-y-auto hide-scrollbar'} ${blockBg} ${blockBorder}`} style={blockStyle}>
                         {row.id === 'event' ? (
                           <div className="flex flex-col justify-center h-full space-y-0.5">
                             {data.subject.split('\n').filter(s => s.trim() !== '').map((s, idx) => (
