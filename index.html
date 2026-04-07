@@ -1357,25 +1357,31 @@
                 let blockClasses = 'relative w-full h-full';
                 
                 if (activeTab === 'weekly' && row.id !== 'event' && row.id !== 'afterschool') {
-                  const s = data.startTime;
-                  const e = data.endTime;
+                  if (row.id === 'morning') {
+                    // 朝行は常に絶対配置で内容に応じて展開（固定高さに縛らない）
+                    blockStyle = { minHeight: 'calc(100% - 4px)', zIndex: 30 };
+                    blockClasses = 'absolute left-0.5 right-0.5 top-0.5 w-auto shadow-md border-b-[3px] border-b-slate-300 dark:border-b-slate-600';
+                  } else {
+                    const s = data.startTime;
+                    const e = data.endTime;
 
-                  if (s && e) {
-                    const t = SCHEDULE_TIMES[set.type]?.[row.id];
-                    let dur = getDurationMinutes(s, e);
-                    if (!dur || dur <= 0) dur = 45;
+                    if (s && e) {
+                      const t = SCHEDULE_TIMES[set.type]?.[row.id];
+                      let dur = getDurationMinutes(s, e);
+                      if (!dur || dur <= 0) dur = 45;
 
-                    let baseDur = t ? getDurationMinutes(t.start, t.end) : 50;
-                    if (!baseDur || baseDur <= 0) baseDur = 50;
+                      let baseDur = t ? getDurationMinutes(t.start, t.end) : 50;
+                      if (!baseDur || baseDur <= 0) baseDur = 50;
 
-                    let pct = (dur / baseDur) * 100;
-                    if (pct > 110 && (row.id.startsWith('p') || row.id === 'morning')) {
-                      blockStyle = { height: `calc(${pct}% - 4px)`, zIndex: 30 };
-                      blockClasses = 'absolute left-0.5 right-0.5 top-0.5 w-auto shadow-md border-b-[3px] border-b-slate-300 dark:border-b-slate-600';
-                    } else {
-                      pct = Math.max(60, Math.min(100, pct));
-                      blockStyle = { height: `calc(${pct}% - 4px)` };
-                      blockClasses = 'relative w-full h-full';
+                      let pct = (dur / baseDur) * 100;
+                      if (pct > 110 && row.id.startsWith('p')) {
+                        blockStyle = { height: `calc(${pct}% - 4px)`, zIndex: 30 };
+                        blockClasses = 'absolute left-0.5 right-0.5 top-0.5 w-auto shadow-md border-b-[3px] border-b-slate-300 dark:border-b-slate-600';
+                      } else {
+                        pct = Math.max(60, Math.min(100, pct));
+                        blockStyle = { height: `calc(${pct}% - 4px)` };
+                        blockClasses = 'relative w-full h-full';
+                      }
                     }
                   }
                 }
@@ -1385,7 +1391,7 @@
                 return (
                   <div key={i} onClick={()=>openEditModal(data,ds,row,i,day,isH,null)} className={`min-w-0 ${cf} border-r border-slate-300 dark:border-slate-700 last:border-r-0 p-0.5 cursor-pointer flex flex-col justify-start relative ${overflowClass} ${activeTab==='weekly'&&isT?'bg-blue-50/20':''} ${cellBg} hover:bg-slate-100/70 transition-colors h-full`}>
                     {hasData && (
-                      <div className={`${blockClasses} rounded sm:rounded-md shadow-[0_1px_2px_rgba(0,0,0,0.08)] flex flex-col px-1 py-0.5 sm:py-1 border-l-[3px] sm:border-l-[4px] transition-colors ${row.id === 'event' ? 'overflow-hidden' : 'overflow-y-auto hide-scrollbar'} ${blockBg} ${blockBorder}`} style={blockStyle}>
+                      <div className={`${blockClasses} rounded sm:rounded-md shadow-[0_1px_2px_rgba(0,0,0,0.08)] flex flex-col px-1 py-0.5 sm:py-1 border-l-[3px] sm:border-l-[4px] transition-colors ${row.id === 'event' ? 'overflow-hidden' : row.id === 'morning' ? 'overflow-visible' : 'overflow-y-auto hide-scrollbar'} ${blockBg} ${blockBorder}`} style={blockStyle}>
                         {row.id === 'event' ? (
                           <div className="flex flex-col justify-center h-full space-y-0.5">
                             {data.subject.split('\n').filter(s => s.trim() !== '').map((s, idx) => (
