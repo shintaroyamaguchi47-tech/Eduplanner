@@ -594,6 +594,18 @@
         let isM = true;
         const init = async () => {
           try {
+            // IndexedDBキャッシュが破損している場合、一度だけクリアして再読み込み
+            const CACHE_VERSION = 'v2';
+            if (localStorage.getItem('ep_cache_ver') !== CACHE_VERSION) {
+              const dbs = await (indexedDB.databases ? indexedDB.databases() : Promise.resolve([]));
+              for (const dbInfo of dbs) {
+                if (dbInfo.name && dbInfo.name.startsWith('firestore')) {
+                  indexedDB.deleteDatabase(dbInfo.name);
+                }
+              }
+              localStorage.setItem('ep_cache_ver', CACHE_VERSION);
+            }
+
             const { initializeApp } = await _importDynamic("https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js");
             const { getAuth, onAuthStateChanged, setPersistence, browserLocalPersistence, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } = await _importDynamic("https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js");
             const { getFirestore, doc, setDoc, onSnapshot, enableMultiTabIndexedDbPersistence } = await _importDynamic("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
