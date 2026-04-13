@@ -967,7 +967,7 @@
         setWeeklyData(nd); setWeeklySettings(ns); saveAll(baseTemplate, templateSettings, nd, ns); showToast('振替をリセットしました');
       };
 
-      const openEditModal = (cd, ds, row, di, dn, ih) => { if(isMobile) return; if(row.id==='afterschool'){ let ie=cd.events?.length>0?[...cd.events]:[]; if(ie.length===0&&(cd.subject||cd.memo)) ie=[{startTime:cd.startTime||'',endTime:cd.endTime||'',subject:cd.subject||'',memo:cd.memo||''}]; while(ie.length<5) ie.push({startTime:'',endTime:'',subject:'',memo:''}); setTempEvents(ie); } else if (row.id === 'event' && activeTab !== 'template') { const raw = weeklyData[`${ds}-event`]; setTempSubject(raw?.subject || ''); setTempMemo(cd.memo||''); setTempStartTime(cd.startTime||''); setTempEndTime(cd.endTime||''); } else { setTempSubject(cd.subject||''); setTempMemo(cd.memo||''); let sT=cd.startTime||''; let eT=cd.endTime||''; if(!ih && activeTab!=='template' && row.id!=='event' && row.id!=='diary') { const sc=SCHEDULE_TIMES[getDaySetting(ds,di).type]?.[row.id]; if(sc){ if(!sT) sT=sc.start||''; if(!eT) eT=sc.end||''; } } setTempStartTime(sT); setTempEndTime(eT); } setTempHandwriting(cd.handwriting||null); setEditingCell({dateStr:ds, periodId:row.id, dayIndex:di, dayName:dn, periodName:row.name, isTemplate:activeTab==='template', ih}); };
+      const openEditModal = (cd, ds, row, di, dn, ih) => { if(row.id==='afterschool'){ let ie=cd.events?.length>0?[...cd.events]:[]; if(ie.length===0&&(cd.subject||cd.memo)) ie=[{startTime:cd.startTime||'',endTime:cd.endTime||'',subject:cd.subject||'',memo:cd.memo||''}]; while(ie.length<5) ie.push({startTime:'',endTime:'',subject:'',memo:''}); setTempEvents(ie); } else if (row.id === 'event' && activeTab !== 'template') { const raw = weeklyData[`${ds}-event`]; setTempSubject(raw?.subject || ''); setTempMemo(cd.memo||''); setTempStartTime(cd.startTime||''); setTempEndTime(cd.endTime||''); } else { setTempSubject(cd.subject||''); setTempMemo(cd.memo||''); let sT=cd.startTime||''; let eT=cd.endTime||''; if(!ih && activeTab!=='template' && row.id!=='event' && row.id!=='diary') { const sc=SCHEDULE_TIMES[getDaySetting(ds,di).type]?.[row.id]; if(sc){ if(!sT) sT=sc.start||''; if(!eT) eT=sc.end||''; } } setTempStartTime(sT); setTempEndTime(eT); } setTempHandwriting(cd.handwriting||null); setEditingCell({dateStr:ds, periodId:row.id, dayIndex:di, dayName:dn, periodName:row.name, isTemplate:activeTab==='template', ih}); };
       const updateTempEvent = (i,f,v) => { const n=[...tempEvents]; n[i][f]=v; setTempEvents(n); };
       
       const handleSaveNote = () => { if(!editingNote.title.trim()&&!editingNote.content.trim()){ setEditingNote(null); return; } if(editingNote.type==='diary'){ const wk=`${editingNote.dateStr}-diary`; const nd={...weeklyData,[wk]:{...(weeklyData[wk]||{}),memo:editingNote.content,useTemplate:false}}; setWeeklyData(nd); saveAll(baseTemplate,templateSettings,nd,weeklySettings); showToast('メモを更新しました'); } else { const isN=!notesData.some(n=>n.id===editingNote.id); const ts=Date.now(); const nn=isN?[{...editingNote,type:'note',updatedAt:ts},...notesData]:notesData.map(n=>n.id===editingNote.id?{...editingNote,updatedAt:ts}:n); saveNotes(nn); showToast('ノートを保存しました'); } setEditingNote(null); };
@@ -2378,12 +2378,12 @@
           )}
 
           {editingCell && (
-            <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-              <div className="bg-white w-full max-w-lg rounded-[2rem] shadow-2xl p-6 sm:p-8 flex flex-col anim-scale-in">
-                <div className="flex justify-between items-center mb-6">
+            <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[100] flex items-end sm:items-center justify-center sm:p-4">
+              <div className="bg-white w-full sm:max-w-lg rounded-t-[2rem] sm:rounded-[2rem] shadow-2xl p-5 sm:p-8 flex flex-col anim-scale-in max-h-[90dvh] overflow-y-auto">
+                <div className="flex justify-between items-center mb-4 sm:mb-6">
                   <div>
-                    <div className="text-sm font-bold text-slate-500 mb-1">{editingCell.dateStr} ({editingCell.dayName}曜) {editingCell.isTemplate?'※基本設定':''}</div>
-                    <h2 className="text-2xl font-black text-slate-800">{editingCell.periodName}の編集</h2>
+                    <div className="text-xs sm:text-sm font-bold text-slate-500 mb-1">{editingCell.dateStr} ({editingCell.dayName}曜) {editingCell.isTemplate?'※基本設定':''}</div>
+                    <h2 className="text-xl sm:text-2xl font-black text-slate-800">{editingCell.periodName}の編集</h2>
                   </div>
                 </div>
                 
@@ -2454,11 +2454,11 @@
                   </div>
                 )}
                 
-                <div className="flex justify-between mt-8 pt-5 border-t border-slate-200">
-                  <button onClick={()=>{handleSaveCell({subject:'',memo:'',startTime:'',endTime:'',events:[]}); showToast('🧹 クリアしました');}} className="px-5 py-3 bg-rose-50 border border-rose-200 text-rose-600 rounded-xl font-bold text-sm shadow-sm active:scale-95 transition-colors hover:bg-rose-100">クリア</button>
-                  <div className="flex gap-3">
-                    <button onClick={()=>setEditingCell(null)} className="px-6 py-3 bg-slate-100 text-slate-700 border border-slate-300 rounded-xl font-bold text-sm shadow-sm hover:bg-slate-200 transition-colors">キャンセル</button>
-                    <button onClick={()=>{const subj=editingCell.periodId==='event'?tempSubject.split('\n').filter(s=>s.trim()!=='').join('\n'):tempSubject; const data={subject:subj,memo:tempMemo,startTime:tempStartTime,endTime:tempEndTime,handwriting:tempHandwriting}; if(editingCell.periodId==='afterschool') data.events=tempEvents.filter(ev=>ev.subject.trim()!==''); handleSaveCell(data);}} className="px-8 py-3 bg-blue-600 text-white rounded-xl font-black text-base shadow-md active:scale-95 transition-transform hover:bg-blue-700">保存する</button>
+                <div className="flex justify-between mt-6 sm:mt-8 pt-4 sm:pt-5 border-t border-slate-200 pb-[env(safe-area-inset-bottom)]">
+                  <button onClick={()=>{handleSaveCell({subject:'',memo:'',startTime:'',endTime:'',events:[]}); showToast('🧹 クリアしました');}} className="px-3 sm:px-5 py-3 bg-rose-50 border border-rose-200 text-rose-600 rounded-xl font-bold text-xs sm:text-sm shadow-sm active:scale-95 transition-colors hover:bg-rose-100">クリア</button>
+                  <div className="flex gap-2 sm:gap-3">
+                    <button onClick={()=>setEditingCell(null)} className="px-4 sm:px-6 py-3 bg-slate-100 text-slate-700 border border-slate-300 rounded-xl font-bold text-xs sm:text-sm shadow-sm hover:bg-slate-200 transition-colors">キャンセル</button>
+                    <button onClick={()=>{const subj=editingCell.periodId==='event'?tempSubject.split('\n').filter(s=>s.trim()!=='').join('\n'):tempSubject; const data={subject:subj,memo:tempMemo,startTime:tempStartTime,endTime:tempEndTime,handwriting:tempHandwriting}; if(editingCell.periodId==='afterschool') data.events=tempEvents.filter(ev=>ev.subject.trim()!==''); handleSaveCell(data);}} className="px-6 sm:px-8 py-3 bg-blue-600 text-white rounded-xl font-black text-sm sm:text-base shadow-md active:scale-95 transition-transform hover:bg-blue-700">保存</button>
                   </div>
                 </div>
               </div>
