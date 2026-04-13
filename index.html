@@ -588,19 +588,15 @@
           try {
             const { initializeApp } = await _importDynamic("https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js");
             const { getAuth, onAuthStateChanged, setPersistence, browserLocalPersistence, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } = await _importDynamic("https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js");
-            const { getFirestore, initializeFirestore, doc, setDoc, onSnapshot, persistentLocalCache, persistentMultipleTabManager } = await _importDynamic("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
+            const { getFirestore, doc, setDoc, onSnapshot, enableMultiTabIndexedDbPersistence } = await _importDynamic("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
 
             const app = initializeApp(FIREBASE_CONFIG);
             const auth = getAuth(app);
-            let db;
+            const db = getFirestore(app);
 
             try {
-              db = initializeFirestore(app, {
-                localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
-              });
-            } catch(e) {
-              db = getFirestore(app);
-            }
+              await enableMultiTabIndexedDbPersistence(db);
+            } catch(e){}
             
             window.__firebaseAuth = auth;
             window.__firebaseDb = db;
