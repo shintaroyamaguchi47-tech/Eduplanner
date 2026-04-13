@@ -386,6 +386,7 @@
       const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
       const [authLoading, setAuthLoading] = useState(true);
       const [isAutoLoggingIn, setIsAutoLoggingIn] = useState(false);
+      const [dataLoadStatus, setDataLoadStatus] = useState('idle');
       const [rememberMe, setRememberMe] = useState(true);
       const [cloudUser, setCloudUser] = useState(null);
       const [authEmail, setAuthEmail] = useState('');
@@ -664,18 +665,28 @@
       }, []);
 
       useEffect(() => {
-        if (!cloudUser) { cloudDataLoaded.current = false; return; }
+        if (!cloudUser) { cloudDataLoaded.current = false; setDataLoadStatus('idle'); return; }
+        setDataLoadStatus('loading');
         const { uid, db } = cloudUser; let unsubs = [];
+        let hasData = false;
         const loaded = { template: false, weekly: false, todos: false, notes: false, syllabus: false, quickMemos: false, extra: false };
-        const markLoaded = (key) => { loaded[key] = true; if (Object.values(loaded).every(Boolean)) cloudDataLoaded.current = true; };
+        const markLoaded = (key, docExists) => {
+          loaded[key] = true;
+          if (docExists) hasData = true;
+          if (Object.values(loaded).every(Boolean)) {
+            cloudDataLoaded.current = true;
+            setDataLoadStatus(hasData ? 'loaded' : 'empty');
+          }
+        };
+        const timeout = setTimeout(() => { if (!cloudDataLoaded.current) setDataLoadStatus('timeout'); }, 15000);
         const listen = async () => {
           const { doc, onSnapshot } = await _importDynamic("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
-          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','template'), s => { if(s.exists()){ const d=s.data(); if(d.baseTemplate) setBaseTemplate(d.baseTemplate); if(d.templateSettings) setTemplateSettings(d.templateSettings); } markLoaded('template'); }));
-          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','weekly'), s => { if(s.exists()){ const d=s.data(); if(d.weeklyData) setWeeklyData(d.weeklyData); if(d.weeklySettings) setWeeklySettings(d.weeklySettings); } markLoaded('weekly'); }));
-          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','todos'), s => { if(s.exists()&&Array.isArray(s.data().todos)) setTodos(s.data().todos); markLoaded('todos'); }));
-          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','notes'), s => { if(s.exists()&&Array.isArray(s.data().notes)) setNotesData(s.data().notes); markLoaded('notes'); }));
-          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','syllabus'), s => { if(s.exists()&&Array.isArray(s.data().syllabus)) setSyllabusData(s.data().syllabus); markLoaded('syllabus'); }));
-          unsubs.push(onSnapshot(doc(doc(db,'users',uid),'teacherPlanner','quickMemos'), s => { if(s.exists()&&Array.isArray(s.data().memos)) setQuickMemos(s.data().memos); markLoaded('quickMemos'); }));
+          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','template'), s => { if(s.exists()){ const d=s.data(); if(d.baseTemplate) setBaseTemplate(d.baseTemplate); if(d.templateSettings) setTemplateSettings(d.templateSettings); } markLoaded('template', s.exists()); }));
+          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','weekly'), s => { if(s.exists()){ const d=s.data(); if(d.weeklyData) setWeeklyData(d.weeklyData); if(d.weeklySettings) setWeeklySettings(d.weeklySettings); } markLoaded('weekly', s.exists()); }));
+          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','todos'), s => { if(s.exists()&&Array.isArray(s.data().todos)) setTodos(s.data().todos); markLoaded('todos', s.exists()); }));
+          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','notes'), s => { if(s.exists()&&Array.isArray(s.data().notes)) setNotesData(s.data().notes); markLoaded('notes', s.exists()); }));
+          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','syllabus'), s => { if(s.exists()&&Array.isArray(s.data().syllabus)) setSyllabusData(s.data().syllabus); markLoaded('syllabus', s.exists()); }));
+          unsubs.push(onSnapshot(doc(doc(db,'users',uid),'teacherPlanner','quickMemos'), s => { if(s.exists()&&Array.isArray(s.data().memos)) setQuickMemos(s.data().memos); markLoaded('quickMemos', s.exists()); }));
           unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','extra'), s => {
             if(s.exists()){
               const d=s.data();
@@ -703,10 +714,10 @@
                   setVacations(mergedVacations);
               }
             }
-            markLoaded('extra');
+            markLoaded('extra', s.exists());
           }));
         };
-        listen(); return () => { unsubs.forEach(u=>u()); cloudDataLoaded.current = false; };
+        listen(); return () => { clearTimeout(timeout); unsubs.forEach(u=>u()); cloudDataLoaded.current = false; };
       }, [cloudUser]);
 
       const cleanData = (obj) => { if(obj===undefined) return null; if(obj===null||typeof obj!=='object') return obj; const n=Array.isArray(obj)?[]:{}; for(const k in obj) n[k]=cleanData(obj[k]); return n; };
@@ -1551,6 +1562,15 @@
       return (
         <div className={`flex flex-col h-[100dvh] w-full relative overflow-hidden transition-colors ${theme === 'dark' ? 'dark bg-slate-900 text-slate-200' : ''}`}>
           {toastMessage && <div className="fixed top-[calc(4rem+env(safe-area-inset-top))] left-1/2 -translate-x-1/2 bg-slate-800 text-white px-4 py-2 rounded-full z-[300] shadow-lg anim-scale-in font-bold text-sm">{toastMessage}</div>}
+          {(dataLoadStatus === 'loading' || dataLoadStatus === 'timeout' || dataLoadStatus === 'empty') && (
+            <div className="fixed top-[calc(4rem+env(safe-area-inset-top))] left-1/2 -translate-x-1/2 z-[200] max-w-md w-[90%]">
+              <div className={`px-4 py-3 rounded-xl shadow-lg border text-xs font-bold text-center ${dataLoadStatus === 'loading' ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>
+                {dataLoadStatus === 'loading' && <span>データを読み込んでいます...</span>}
+                {dataLoadStatus === 'timeout' && <span>サーバーに接続できません。設定画面からバックアップファイルをインポートしてデータを復元できます。</span>}
+                {dataLoadStatus === 'empty' && <span>サーバーにデータがありません。設定画面からバックアップファイルをインポートしてデータを復元できます。</span>}
+              </div>
+            </div>
+          )}
           
           <header className="bg-white dark:bg-slate-800 border-b border-slate-400 dark:border-slate-700 flex items-center px-4 sm:px-6 justify-between no-print shrink-0 shadow-sm z-30 pt-[env(safe-area-inset-top)] h-[calc(3.5rem+env(safe-area-inset-top))] transition-colors">
             <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
