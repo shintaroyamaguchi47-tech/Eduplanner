@@ -1387,19 +1387,19 @@
           if(row.id==='lunch'){customStyle={flex:'1.5',minHeight:'1.5rem'};rh='';fc='';rb='bg-amber-50/20 dark:bg-amber-900/10';}
           else if(row.id==='event'){customStyle={flex:'3.5',minHeight:'3.5rem'};rh='';fc='';}
           else if(row.id==='morning'){customStyle={flex:'3',minHeight:'3rem'};rh='';fc='';}
-          else if(row.id==='afterschool'){customStyle={flex:'3.5',minHeight:'3rem'};rh='';fc='';}
+          else if(row.id==='afterschool'){customStyle={flex:'5',minHeight:'4.5rem'};rh='';fc='';}
         } else {
           if (isMobile && activeTab === 'weekly') {
             if (row.id === 'event') { rh = 'h-8 shrink-0'; fc = 'flex-none'; rb = ''; }
             else if (row.id === 'morning') { rh = 'h-12 shrink-0'; fc = 'flex-none'; rb = ''; }
             else if (row.id === 'lunch') { rh = 'h-6 shrink-0'; fc = 'flex-none'; rb = 'bg-amber-50/20 dark:bg-amber-900/10'; }
-            else if (row.id === 'afterschool') { rh = 'h-[4.5rem] shrink-0'; fc = 'flex-none'; rb = ''; }
+            else if (row.id === 'afterschool') { rh = 'min-h-[4.5rem]'; fc = ''; rb = ''; }
             else { rh = 'h-[3rem] shrink-0'; fc = 'flex-none'; rb = ''; }
           } else {
             if (row.id === 'event') { customStyle={flex:'3.5',minHeight:'3.5rem'}; rh=''; fc=''; rb=''; }
             else if (row.id === 'morning') { customStyle={flex:'3.5',minHeight:'3.5rem'}; rh=''; fc=''; rb=''; }
             else if (row.id === 'lunch') { customStyle={flex:'1.5',minHeight:'1.5rem'}; rh=''; fc=''; rb='bg-amber-50/20 dark:bg-amber-900/10'; }
-            else if (row.id === 'afterschool') { customStyle={flex:'3.5',minHeight:'3rem'}; rh=''; fc=''; rb=''; }
+            else if (row.id === 'afterschool') { customStyle={flex:'5',minHeight:'4.5rem'}; rh=''; fc=''; rb=''; }
             else { customStyle={flex:'4',minHeight:'2.5rem'}; rh=''; fc=''; rb=''; }
           }
         }
@@ -1409,7 +1409,7 @@
         const borderBottomClassRow = isLastInGroup ? '' : 'border-b border-slate-300 dark:border-slate-700';
 
         return (
-          <div key={row.id} className={`flex w-full ${fc} ${rh} ${rb} ${zClass} ${borderBottomClassRow}${customStyle.flex && !(activeTab === 'weekly' && (row.id.startsWith('p') || row.id === 'morning')) ? ' overflow-hidden' : ''}`} style={customStyle}>
+          <div key={row.id} className={`flex w-full ${fc} ${rh} ${rb} ${zClass} ${borderBottomClassRow}${customStyle.flex && !(activeTab === 'weekly' && (row.id.startsWith('p') || row.id === 'morning')) && row.id !== 'afterschool' ? ' overflow-hidden' : ''}`} style={customStyle}>
             <div className="w-10 sm:w-14 lg:w-16 border-r border-slate-300 dark:border-slate-700 flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-900 shrink-0 sticky left-0 z-20">
               <div className="text-xs sm:text-base">{row.id.startsWith('p')?<span className="text-[10px] sm:text-[12px] text-slate-500 font-black">{row.id.replace('p','')}</span>:row.icon}</div>
               <div className="text-[7px] sm:text-[9px] font-black text-slate-700 mt-0.5">{row.name}</div>
