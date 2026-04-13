@@ -588,15 +588,19 @@
           try {
             const { initializeApp } = await _importDynamic("https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js");
             const { getAuth, onAuthStateChanged, setPersistence, browserLocalPersistence, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } = await _importDynamic("https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js");
-            const { getFirestore, doc, setDoc, onSnapshot, enableMultiTabIndexedDbPersistence } = await _importDynamic("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
-            
+            const { getFirestore, initializeFirestore, doc, setDoc, onSnapshot, persistentLocalCache, persistentMultipleTabManager } = await _importDynamic("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
+
             const app = initializeApp(FIREBASE_CONFIG);
             const auth = getAuth(app);
-            const db = getFirestore(app);
-            
+            let db;
+
             try {
-              await enableMultiTabIndexedDbPersistence(db);
-            } catch(e){}
+              db = initializeFirestore(app, {
+                localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+              });
+            } catch(e) {
+              db = getFirestore(app);
+            }
             
             window.__firebaseAuth = auth;
             window.__firebaseDb = db;
@@ -686,12 +690,12 @@
       }, [cloudUser]);
 
       const cleanData = (obj) => { if(obj===undefined) return null; if(obj===null||typeof obj!=='object') return obj; const n=Array.isArray(obj)?[]:{}; for(const k in obj) n[k]=cleanData(obj[k]); return n; };
-      const saveToFirestore = async (name, data) => { 
-        if(cloudUser && window.__firebaseDb){ 
-          try { 
-            await window.__firebaseSetDoc(window.__firebaseDoc(window.__firebaseDb,'users',cloudUser.uid,'teacherPlanner',name), cleanData(data), {merge:true}); 
-          } catch(e){} 
-        } 
+      const saveToFirestore = async (name, data) => {
+        if(cloudUser && window.__firebaseDb){
+          try {
+            await window.__firebaseSetDoc(window.__firebaseDoc(window.__firebaseDb,'users',cloudUser.uid,'teacherPlanner',name), cleanData(data), {merge:true});
+          } catch(e){ console.error('保存エラー:', name, e); showToast('⚠️ 保存に失敗しました。ネットワークを確認してください。'); }
+        }
       };
       
       const saveAll = (t,ts,w,ws) => { if (!isUndoRedo.current) pushUndo(getCurrentSnapshot()); setBaseTemplate(t); setTemplateSettings(ts); setWeeklyData(w); setWeeklySettings(ws); saveToFirestore('template',{baseTemplate:t,templateSettings:ts}); saveToFirestore('weekly',{weeklyData:w,weeklySettings:ws}); };
