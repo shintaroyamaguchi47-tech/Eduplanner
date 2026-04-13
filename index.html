@@ -1803,7 +1803,7 @@
                       </div>
                     </div>
 
-                    <div className={`flex flex-col relative ${activeTab === 'template' || !isMobile ? 'flex-1 min-h-0' : 'pb-4'}`}>
+                    <div className={`flex flex-col relative ${activeTab === 'template' ? 'flex-1 min-h-0' : !isMobile ? 'flex-1' : 'pb-4'}`}>
                       {ROWS.filter(r=>r.id!=='diary').map(row => renderRow(row))}
                       {activeTab === 'weekly' && renderHolidayOverlays()}
                     </div>
