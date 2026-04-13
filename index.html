@@ -519,6 +519,8 @@
       const undoStack = useRef([]);
       const redoStack = useRef([]);
       const isUndoRedo = useRef(false);
+      const cloudDataLoaded = useRef(false);
+      const saveToFirestoreRef = useRef(null);
       const MAX_HISTORY = 30;
       
       const pushUndo = useCallback((snapshot) => {
@@ -542,9 +544,11 @@
         setTodos(snap.todos);
         setBaseTemplate(snap.baseTemplate);
         setTemplateSettings(snap.templateSettings);
-        saveToFirestore('weekly', { weeklyData: snap.weeklyData, weeklySettings: snap.weeklySettings });
-        saveToFirestore('template', { baseTemplate: snap.baseTemplate, templateSettings: snap.templateSettings });
-        saveToFirestore('todos', { todos: snap.todos });
+        if (saveToFirestoreRef.current) {
+          saveToFirestoreRef.current('weekly', { weeklyData: snap.weeklyData, weeklySettings: snap.weeklySettings });
+          saveToFirestoreRef.current('template', { baseTemplate: snap.baseTemplate, templateSettings: snap.templateSettings });
+          saveToFirestoreRef.current('todos', { todos: snap.todos });
+        }
         setTimeout(() => { isUndoRedo.current = false; }, 100);
       }, []);
 
@@ -620,7 +624,6 @@
             onAuthStateChanged(auth, async u => { 
               if(isM){ 
                 if(u){
-                  console.log('[診断] ログイン成功 UID:', u.uid, 'Email:', u.email);
                   setCloudUser({uid:u.uid,db});
                   setAuthLoading(false);
                   setIsAutoLoggingIn(false);
@@ -648,20 +651,22 @@
       }, []);
 
       useEffect(() => {
-        if (!cloudUser) return;
+        if (!cloudUser) { cloudDataLoaded.current = false; return; }
         const { uid, db } = cloudUser; let unsubs = [];
+        const loaded = { template: false, weekly: false, todos: false, notes: false, syllabus: false, quickMemos: false, extra: false };
+        const markLoaded = (key) => { loaded[key] = true; if (Object.values(loaded).every(Boolean)) cloudDataLoaded.current = true; };
         const listen = async () => {
           const { doc, onSnapshot } = await _importDynamic("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
-          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','template'), s => { console.log('[診断] template:', s.exists(), s.exists() ? Object.keys(s.data()) : 'なし'); if(s.exists()){ const d=s.data(); if(d.baseTemplate) setBaseTemplate(d.baseTemplate); if(d.templateSettings) setTemplateSettings(d.templateSettings); } }));
-          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','weekly'), s => { console.log('[診断] weekly:', s.exists(), s.exists() ? Object.keys(s.data()) : 'なし', s.exists() && s.data().weeklyData ? Object.keys(s.data().weeklyData).length + '日分' : '0日分'); if(s.exists()){ const d=s.data(); if(d.weeklyData) setWeeklyData(d.weeklyData); if(d.weeklySettings) setWeeklySettings(d.weeklySettings); } }));
-          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','todos'), s => { console.log('[診断] todos:', s.exists(), s.exists() && s.data().todos ? s.data().todos.length + '件' : '0件'); if(s.exists()&&s.data().todos) setTodos(s.data().todos); }));
-          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','notes'), s => { console.log('[診断] notes:', s.exists()); if(s.exists()&&s.data().notes) setNotesData(s.data().notes); }));
-          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','syllabus'), s => { if(s.exists()&&s.data().syllabus) setSyllabusData(s.data().syllabus); }));
-          unsubs.push(onSnapshot(doc(doc(db,'users',uid),'teacherPlanner','quickMemos'), s => { if(s.exists()&&s.data().memos) setQuickMemos(s.data().memos); }));
-          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','extra'), s => { 
-            if(s.exists()){ 
-              const d=s.data(); 
-              if(d.yearlyData){ 
+          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','template'), s => { if(s.exists()){ const d=s.data(); if(d.baseTemplate) setBaseTemplate(d.baseTemplate); if(d.templateSettings) setTemplateSettings(d.templateSettings); } markLoaded('template'); }));
+          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','weekly'), s => { if(s.exists()){ const d=s.data(); if(d.weeklyData) setWeeklyData(d.weeklyData); if(d.weeklySettings) setWeeklySettings(d.weeklySettings); } markLoaded('weekly'); }));
+          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','todos'), s => { if(s.exists()&&Array.isArray(s.data().todos)) setTodos(s.data().todos); markLoaded('todos'); }));
+          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','notes'), s => { if(s.exists()&&Array.isArray(s.data().notes)) setNotesData(s.data().notes); markLoaded('notes'); }));
+          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','syllabus'), s => { if(s.exists()&&Array.isArray(s.data().syllabus)) setSyllabusData(s.data().syllabus); markLoaded('syllabus'); }));
+          unsubs.push(onSnapshot(doc(doc(db,'users',uid),'teacherPlanner','quickMemos'), s => { if(s.exists()&&Array.isArray(s.data().memos)) setQuickMemos(s.data().memos); markLoaded('quickMemos'); }));
+          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','extra'), s => {
+            if(s.exists()){
+              const d=s.data();
+              if(d.yearlyData && typeof d.yearlyData === 'object'){
                 let mergedYearlyData = JSON.parse(JSON.stringify(NEW_INITIAL_YEARLY_DATA));
                 Object.keys(d.yearlyData).forEach(year => {
                    if (!mergedYearlyData[year]) mergedYearlyData[year] = {};
@@ -670,9 +675,9 @@
                    });
                 });
                 setYearlyData(mergedYearlyData);
-              } 
-              if(d.documents) setDocuments(d.documents); 
-              if(d.vacations) {
+              }
+              if(Array.isArray(d.documents)) setDocuments(d.documents);
+              if(Array.isArray(d.vacations)) {
                   const mergedVacations = [...INITIAL_VACATIONS];
                   d.vacations.forEach(v => {
                       if (!mergedVacations.find(mv => mv.id === v.id)) {
@@ -684,20 +689,23 @@
                   });
                   setVacations(mergedVacations);
               }
-            } 
+            }
+            markLoaded('extra');
           }));
         };
-        listen(); return () => unsubs.forEach(u=>u());
+        listen(); return () => { unsubs.forEach(u=>u()); cloudDataLoaded.current = false; };
       }, [cloudUser]);
 
       const cleanData = (obj) => { if(obj===undefined) return null; if(obj===null||typeof obj!=='object') return obj; const n=Array.isArray(obj)?[]:{}; for(const k in obj) n[k]=cleanData(obj[k]); return n; };
       const saveToFirestore = async (name, data) => {
+        if(!cloudDataLoaded.current){ console.warn('保存スキップ(データ未読込):', name); return; }
         if(cloudUser && window.__firebaseDb){
           try {
             await window.__firebaseSetDoc(window.__firebaseDoc(window.__firebaseDb,'users',cloudUser.uid,'teacherPlanner',name), cleanData(data), {merge:true});
           } catch(e){ console.error('保存エラー:', name, e); showToast('⚠️ 保存に失敗しました。ネットワークを確認してください。'); }
         }
       };
+      saveToFirestoreRef.current = saveToFirestore;
       
       const saveAll = (t,ts,w,ws) => { if (!isUndoRedo.current) pushUndo(getCurrentSnapshot()); setBaseTemplate(t); setTemplateSettings(ts); setWeeklyData(w); setWeeklySettings(ws); saveToFirestore('template',{baseTemplate:t,templateSettings:ts}); saveToFirestore('weekly',{weeklyData:w,weeklySettings:ws}); };
       const saveTodos = (nt) => { if (!isUndoRedo.current) pushUndo(getCurrentSnapshot()); setTodos(nt); saveToFirestore('todos',{todos:nt}); };
