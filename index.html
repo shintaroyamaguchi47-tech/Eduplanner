@@ -664,30 +664,64 @@
         init(); return () => { isM = false; };
       }, []);
 
+      const applyLocalData = (d) => {
+        if (d.baseTemplate) setBaseTemplate(d.baseTemplate);
+        if (d.templateSettings) setTemplateSettings(d.templateSettings);
+        if (d.weeklyData) setWeeklyData(d.weeklyData);
+        if (d.weeklySettings) setWeeklySettings(d.weeklySettings);
+        if (Array.isArray(d.todos)) setTodos(d.todos);
+        if (Array.isArray(d.notesData)) setNotesData(d.notesData);
+        if (Array.isArray(d.syllabusData)) setSyllabusData(d.syllabusData);
+        if (Array.isArray(d.quickMemos)) setQuickMemos(d.quickMemos);
+        if (d.yearlyData && typeof d.yearlyData === 'object') setYearlyData(d.yearlyData);
+        if (Array.isArray(d.documents)) setDocuments(d.documents);
+        if (Array.isArray(d.vacations)) setVacations(d.vacations);
+      };
+
       useEffect(() => {
         if (!cloudUser) { cloudDataLoaded.current = false; setDataLoadStatus('idle'); return; }
         setDataLoadStatus('loading');
         const { uid, db } = cloudUser; let unsubs = [];
-        let hasData = false;
+        let hasData = false; let localFallbackUsed = false;
         const loaded = { template: false, weekly: false, todos: false, notes: false, syllabus: false, quickMemos: false, extra: false };
+        const cacheToLocal = () => {
+          try {
+            const snap = { baseTemplate, templateSettings, weeklyData, weeklySettings, todos, notesData, syllabusData, quickMemos, yearlyData, documents, vacations };
+            localStorage.setItem('ep_local_data', JSON.stringify(snap));
+          } catch(e){}
+        };
         const markLoaded = (key, docExists) => {
           loaded[key] = true;
           if (docExists) hasData = true;
           if (Object.values(loaded).every(Boolean)) {
             cloudDataLoaded.current = true;
             setDataLoadStatus(hasData ? 'loaded' : 'empty');
+            if (hasData) setTimeout(cacheToLocal, 500);
           }
         };
-        const timeout = setTimeout(() => { if (!cloudDataLoaded.current) setDataLoadStatus('timeout'); }, 15000);
+        const timeout = setTimeout(() => {
+          if (!cloudDataLoaded.current) {
+            const local = loadFromLocal();
+            if (local) {
+              applyLocalData(local);
+              cloudDataLoaded.current = true;
+              localFallbackUsed = true;
+              setDataLoadStatus('local');
+            } else {
+              setDataLoadStatus('timeout');
+            }
+          }
+        }, 10000);
         const listen = async () => {
           const { doc, onSnapshot } = await _importDynamic("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
-          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','template'), s => { if(s.exists()){ const d=s.data(); if(d.baseTemplate) setBaseTemplate(d.baseTemplate); if(d.templateSettings) setTemplateSettings(d.templateSettings); } markLoaded('template', s.exists()); }));
-          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','weekly'), s => { if(s.exists()){ const d=s.data(); if(d.weeklyData) setWeeklyData(d.weeklyData); if(d.weeklySettings) setWeeklySettings(d.weeklySettings); } markLoaded('weekly', s.exists()); }));
-          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','todos'), s => { if(s.exists()&&Array.isArray(s.data().todos)) setTodos(s.data().todos); markLoaded('todos', s.exists()); }));
-          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','notes'), s => { if(s.exists()&&Array.isArray(s.data().notes)) setNotesData(s.data().notes); markLoaded('notes', s.exists()); }));
-          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','syllabus'), s => { if(s.exists()&&Array.isArray(s.data().syllabus)) setSyllabusData(s.data().syllabus); markLoaded('syllabus', s.exists()); }));
-          unsubs.push(onSnapshot(doc(doc(db,'users',uid),'teacherPlanner','quickMemos'), s => { if(s.exists()&&Array.isArray(s.data().memos)) setQuickMemos(s.data().memos); markLoaded('quickMemos', s.exists()); }));
+          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','template'), s => { if (localFallbackUsed) return; if(s.exists()){ const d=s.data(); if(d.baseTemplate) setBaseTemplate(d.baseTemplate); if(d.templateSettings) setTemplateSettings(d.templateSettings); } markLoaded('template', s.exists()); }));
+          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','weekly'), s => { if (localFallbackUsed) return; if(s.exists()){ const d=s.data(); if(d.weeklyData) setWeeklyData(d.weeklyData); if(d.weeklySettings) setWeeklySettings(d.weeklySettings); } markLoaded('weekly', s.exists()); }));
+          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','todos'), s => { if (localFallbackUsed) return; if(s.exists()&&Array.isArray(s.data().todos)) setTodos(s.data().todos); markLoaded('todos', s.exists()); }));
+          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','notes'), s => { if (localFallbackUsed) return; if(s.exists()&&Array.isArray(s.data().notes)) setNotesData(s.data().notes); markLoaded('notes', s.exists()); }));
+          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','syllabus'), s => { if (localFallbackUsed) return; if(s.exists()&&Array.isArray(s.data().syllabus)) setSyllabusData(s.data().syllabus); markLoaded('syllabus', s.exists()); }));
+          unsubs.push(onSnapshot(doc(doc(db,'users',uid),'teacherPlanner','quickMemos'), s => { if (localFallbackUsed) return; if(s.exists()&&Array.isArray(s.data().memos)) setQuickMemos(s.data().memos); markLoaded('quickMemos', s.exists()); }));
           unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','extra'), s => {
+            if (localFallbackUsed) return;
             if(s.exists()){
               const d=s.data();
               if(d.yearlyData && typeof d.yearlyData === 'object'){
@@ -721,6 +755,18 @@
       }, [cloudUser]);
 
       const cleanData = (obj) => { if(obj===undefined) return null; if(obj===null||typeof obj!=='object') return obj; const n=Array.isArray(obj)?[]:{}; for(const k in obj) n[k]=cleanData(obj[k]); return n; };
+
+      const saveToLocal = (updates) => {
+        try {
+          const cur = JSON.parse(localStorage.getItem('ep_local_data') || '{}');
+          Object.assign(cur, updates);
+          localStorage.setItem('ep_local_data', JSON.stringify(cur));
+        } catch(e){}
+      };
+      const loadFromLocal = () => {
+        try { const d = JSON.parse(localStorage.getItem('ep_local_data') || '{}'); return Object.keys(d).length > 0 ? d : null; } catch(e){ return null; }
+      };
+
       const saveToFirestore = async (name, data) => {
         if(!cloudDataLoaded.current){ return; }
         if(cloudUser && window.__firebaseDb){
@@ -735,13 +781,13 @@
         }
       };
       saveToFirestoreRef.current = saveToFirestore;
-      
-      const saveAll = (t,ts,w,ws) => { if (!isUndoRedo.current) pushUndo(getCurrentSnapshot()); setBaseTemplate(t); setTemplateSettings(ts); setWeeklyData(w); setWeeklySettings(ws); saveToFirestore('template',{baseTemplate:t,templateSettings:ts}); saveToFirestore('weekly',{weeklyData:w,weeklySettings:ws}); };
-      const saveTodos = (nt) => { if (!isUndoRedo.current) pushUndo(getCurrentSnapshot()); setTodos(nt); saveToFirestore('todos',{todos:nt}); };
-      const saveNotes = (nn) => { setNotesData(nn); saveToFirestore('notes',{notes:nn}); };
-      const saveSyllabus = (ns) => { setSyllabusData(ns); saveToFirestore('syllabus',{syllabus:ns}); };
-      const saveExtraData = (ny,nd,nv) => { setYearlyData(ny); setDocuments(nd); setVacations(nv); saveToFirestore('extra',{yearlyData:ny,documents:nd,vacations:nv}); };
-      const saveQuickMemos = (nm) => { setQuickMemos(nm); saveToFirestore('quickMemos',{memos:nm}); };
+
+      const saveAll = (t,ts,w,ws) => { if (!isUndoRedo.current) pushUndo(getCurrentSnapshot()); setBaseTemplate(t); setTemplateSettings(ts); setWeeklyData(w); setWeeklySettings(ws); saveToFirestore('template',{baseTemplate:t,templateSettings:ts}); saveToFirestore('weekly',{weeklyData:w,weeklySettings:ws}); saveToLocal({baseTemplate:t,templateSettings:ts,weeklyData:w,weeklySettings:ws}); };
+      const saveTodos = (nt) => { if (!isUndoRedo.current) pushUndo(getCurrentSnapshot()); setTodos(nt); saveToFirestore('todos',{todos:nt}); saveToLocal({todos:nt}); };
+      const saveNotes = (nn) => { setNotesData(nn); saveToFirestore('notes',{notes:nn}); saveToLocal({notesData:nn}); };
+      const saveSyllabus = (ns) => { setSyllabusData(ns); saveToFirestore('syllabus',{syllabus:ns}); saveToLocal({syllabusData:ns}); };
+      const saveExtraData = (ny,nd,nv) => { setYearlyData(ny); setDocuments(nd); setVacations(nv); saveToFirestore('extra',{yearlyData:ny,documents:nd,vacations:nv}); saveToLocal({yearlyData:ny,documents:nd,vacations:nv}); };
+      const saveQuickMemos = (nm) => { setQuickMemos(nm); saveToFirestore('quickMemos',{memos:nm}); saveToLocal({quickMemos:nm}); };
 
       const showToast = (msg) => { setToastMessage(msg); setTimeout(() => setToastMessage(''), 3000); };
       const handleAuthSubmit = async (e) => { 
@@ -834,6 +880,9 @@
               saveToFirestore('syllabus', { syllabus: data.syllabusData });
               saveToFirestore('extra', { yearlyData: data.yearlyData, documents: data.documents, vacations: data.vacations });
               saveToFirestore('quickMemos', { memos: data.quickMemos });
+              saveToLocal(data);
+              cloudDataLoaded.current = true;
+              setDataLoadStatus('loaded');
 
               showToast('データを復元しました');
             }
@@ -1562,10 +1611,11 @@
       return (
         <div className={`flex flex-col h-[100dvh] w-full relative overflow-hidden transition-colors ${theme === 'dark' ? 'dark bg-slate-900 text-slate-200' : ''}`}>
           {toastMessage && <div className="fixed top-[calc(4rem+env(safe-area-inset-top))] left-1/2 -translate-x-1/2 bg-slate-800 text-white px-4 py-2 rounded-full z-[300] shadow-lg anim-scale-in font-bold text-sm">{toastMessage}</div>}
-          {(dataLoadStatus === 'loading' || dataLoadStatus === 'timeout' || dataLoadStatus === 'empty') && (
+          {(dataLoadStatus === 'loading' || dataLoadStatus === 'timeout' || dataLoadStatus === 'empty' || dataLoadStatus === 'local') && (
             <div className="fixed top-[calc(4rem+env(safe-area-inset-top))] left-1/2 -translate-x-1/2 z-[200] max-w-md w-[90%]">
-              <div className={`px-4 py-3 rounded-xl shadow-lg border text-xs font-bold text-center ${dataLoadStatus === 'loading' ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>
+              <div className={`px-4 py-3 rounded-xl shadow-lg border text-xs font-bold text-center ${dataLoadStatus === 'loading' ? 'bg-blue-50 border-blue-200 text-blue-700' : dataLoadStatus === 'local' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>
                 {dataLoadStatus === 'loading' && <span>データを読み込んでいます...</span>}
+                {dataLoadStatus === 'local' && <span>ローカルデータを使用中（オフラインモード）<button onClick={()=>setDataLoadStatus('loaded')} className="ml-2 underline">閉じる</button></span>}
                 {dataLoadStatus === 'timeout' && <span>サーバーに接続できません。設定画面からバックアップファイルをインポートしてデータを復元できます。</span>}
                 {dataLoadStatus === 'empty' && <span>サーバーにデータがありません。設定画面からバックアップファイルをインポートしてデータを復元できます。</span>}
               </div>
