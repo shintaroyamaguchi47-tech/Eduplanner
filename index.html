@@ -616,8 +616,9 @@
             onAuthStateChanged(auth, async u => { 
               if(isM){ 
                 if(u){
+                  console.log('[診断] ログイン成功 UID:', u.uid, 'Email:', u.email);
                   setCloudUser({uid:u.uid,db});
-                  setAuthLoading(false); 
+                  setAuthLoading(false);
                   setIsAutoLoggingIn(false);
                 } else {
                   if (savedE && savedP) {
@@ -647,10 +648,10 @@
         const { uid, db } = cloudUser; let unsubs = [];
         const listen = async () => {
           const { doc, onSnapshot } = await _importDynamic("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
-          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','template'), s => { if(s.exists()){ const d=s.data(); if(d.baseTemplate) setBaseTemplate(d.baseTemplate); if(d.templateSettings) setTemplateSettings(d.templateSettings); } }));
-          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','weekly'), s => { if(s.exists()){ const d=s.data(); if(d.weeklyData) setWeeklyData(d.weeklyData); if(d.weeklySettings) setWeeklySettings(d.weeklySettings); } }));
-          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','todos'), s => { if(s.exists()&&s.data().todos) setTodos(s.data().todos); }));
-          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','notes'), s => { if(s.exists()&&s.data().notes) setNotesData(s.data().notes); }));
+          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','template'), s => { console.log('[診断] template:', s.exists(), s.exists() ? Object.keys(s.data()) : 'なし'); if(s.exists()){ const d=s.data(); if(d.baseTemplate) setBaseTemplate(d.baseTemplate); if(d.templateSettings) setTemplateSettings(d.templateSettings); } }));
+          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','weekly'), s => { console.log('[診断] weekly:', s.exists(), s.exists() ? Object.keys(s.data()) : 'なし', s.exists() && s.data().weeklyData ? Object.keys(s.data().weeklyData).length + '日分' : '0日分'); if(s.exists()){ const d=s.data(); if(d.weeklyData) setWeeklyData(d.weeklyData); if(d.weeklySettings) setWeeklySettings(d.weeklySettings); } }));
+          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','todos'), s => { console.log('[診断] todos:', s.exists(), s.exists() && s.data().todos ? s.data().todos.length + '件' : '0件'); if(s.exists()&&s.data().todos) setTodos(s.data().todos); }));
+          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','notes'), s => { console.log('[診断] notes:', s.exists()); if(s.exists()&&s.data().notes) setNotesData(s.data().notes); }));
           unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','syllabus'), s => { if(s.exists()&&s.data().syllabus) setSyllabusData(s.data().syllabus); }));
           unsubs.push(onSnapshot(doc(doc(db,'users',uid),'teacherPlanner','quickMemos'), s => { if(s.exists()&&s.data().memos) setQuickMemos(s.data().memos); }));
           unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','extra'), s => { 
