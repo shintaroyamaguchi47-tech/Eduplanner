@@ -595,7 +595,7 @@
         const init = async () => {
           try {
             // IndexedDBキャッシュが破損している場合、一度だけクリアしてリロード
-            const CACHE_VERSION = 'v2';
+            const CACHE_VERSION = 'v3';
             if (localStorage.getItem('ep_cache_ver') !== CACHE_VERSION) {
               localStorage.setItem('ep_cache_ver', CACHE_VERSION);
               const dbs = await (indexedDB.databases ? indexedDB.databases() : Promise.resolve([]));
@@ -607,7 +607,7 @@
 
             const { initializeApp } = await _importDynamic("https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js");
             const { getAuth, onAuthStateChanged, setPersistence, browserLocalPersistence, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } = await _importDynamic("https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js");
-            const { getFirestore, doc, setDoc, onSnapshot, enableMultiTabIndexedDbPersistence } = await _importDynamic("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
+            const { getFirestore, doc, setDoc, onSnapshot, enableMultiTabIndexedDbPersistence, enableIndexedDbPersistence } = await _importDynamic("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
 
             const app = initializeApp(FIREBASE_CONFIG);
             const auth = getAuth(app);
@@ -615,7 +615,9 @@
 
             try {
               await enableMultiTabIndexedDbPersistence(db);
-            } catch(e){}
+            } catch(e){
+              try { await enableIndexedDbPersistence(db); } catch(e2){}
+            }
             
             window.__firebaseAuth = auth;
             window.__firebaseDb = db;
@@ -709,11 +711,16 @@
 
       const cleanData = (obj) => { if(obj===undefined) return null; if(obj===null||typeof obj!=='object') return obj; const n=Array.isArray(obj)?[]:{}; for(const k in obj) n[k]=cleanData(obj[k]); return n; };
       const saveToFirestore = async (name, data) => {
-        if(!cloudDataLoaded.current){ console.warn('保存スキップ(データ未読込):', name); return; }
+        if(!cloudDataLoaded.current){ return; }
         if(cloudUser && window.__firebaseDb){
           try {
             await window.__firebaseSetDoc(window.__firebaseDoc(window.__firebaseDb,'users',cloudUser.uid,'teacherPlanner',name), cleanData(data), {merge:true});
-          } catch(e){ console.error('保存エラー:', name, e); showToast('⚠️ 保存に失敗しました。ネットワークを確認してください。'); }
+          } catch(e){
+            const code = e?.code || '';
+            if (code === 'unavailable' || code === 'deadline-exceeded' || !navigator.onLine) { return; }
+            console.error('保存エラー:', name, e);
+            showToast('⚠️ 保存に失敗しました。ネットワークを確認してください。');
+          }
         }
       };
       saveToFirestoreRef.current = saveToFirestore;
