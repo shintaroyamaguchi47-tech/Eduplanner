@@ -167,6 +167,39 @@
     const parseUnits = (text) => { if(!text) return []; return text.split('\n').filter(l=>l.trim()!=='').map(l => { const p=l.split(','); return {name:p[0]?.trim()||'',hours:parseInt(p[1])||1}; }); };
     const formatUnits = (units) => { if(!units) return ''; return units.map(u=>`${u.name},${u.hours}`).join('\n'); };
 
+    // 内容に基づく色分け（授業/会議/特別活動/テスト等）
+    const CONTENT_COLORS = {
+      lesson:  { bg: 'bg-blue-50 hover:bg-blue-100', border: 'border-blue-500', text: 'text-blue-900',
+                 tlBg: 'bg-blue-100 border-blue-400', tlText: 'text-blue-900', tlBar: 'bg-blue-500' },
+      practical: { bg: 'bg-violet-50 hover:bg-violet-100', border: 'border-violet-500', text: 'text-violet-900',
+                   tlBg: 'bg-violet-100 border-violet-400', tlText: 'text-violet-900', tlBar: 'bg-violet-500' },
+      meeting: { bg: 'bg-orange-50 hover:bg-orange-100', border: 'border-orange-500', text: 'text-orange-900',
+                 tlBg: 'bg-orange-100 border-orange-400', tlText: 'text-orange-900', tlBar: 'bg-orange-500' },
+      special: { bg: 'bg-emerald-50 hover:bg-emerald-100', border: 'border-emerald-500', text: 'text-emerald-900',
+                 tlBg: 'bg-emerald-100 border-emerald-400', tlText: 'text-emerald-900', tlBar: 'bg-emerald-500' },
+      test:    { bg: 'bg-rose-50 hover:bg-rose-100', border: 'border-rose-500', text: 'text-rose-900',
+                 tlBg: 'bg-rose-100 border-rose-400', tlText: 'text-rose-900', tlBar: 'bg-rose-500' },
+      event:   { bg: 'bg-pink-50 hover:bg-pink-100', border: 'border-pink-500', text: 'text-pink-900',
+                 tlBg: 'bg-pink-100 border-pink-400', tlText: 'text-pink-900', tlBar: 'bg-pink-500' },
+      lunch:   { bg: 'bg-amber-50 hover:bg-amber-100', border: 'border-amber-500', text: 'text-amber-900',
+                 tlBg: 'bg-amber-100 border-amber-400', tlText: 'text-amber-900', tlBar: 'bg-amber-500' },
+      morning: { bg: 'bg-yellow-50 hover:bg-yellow-100', border: 'border-yellow-500', text: 'text-yellow-900',
+                 tlBg: 'bg-yellow-100 border-yellow-400', tlText: 'text-yellow-900', tlBar: 'bg-yellow-500' },
+      afterschool: { bg: 'bg-teal-50 hover:bg-teal-100', border: 'border-teal-500', text: 'text-teal-900',
+                     tlBg: 'bg-teal-100 border-teal-400', tlText: 'text-teal-900', tlBar: 'bg-teal-500' },
+    };
+    const getContentType = (subject, rowId) => {
+      if (rowId === 'event') return 'event';
+      if (rowId === 'lunch') return 'lunch';
+      if (!subject || !subject.trim()) return 'lesson';
+      const s = subject.trim();
+      if (/会議|研修|打合|打ち合わせ|職員会|面談|懇談|相談|保護者会/.test(s)) return 'meeting';
+      if (/テスト|試験|考査|模試|学調/.test(s)) return 'test';
+      if (/学活|道徳|総合|学級|ホームルーム|HR|LHR|集会|朝会|帰りの会|朝の会|清掃|掃除/.test(s)) return 'special';
+      if (/体育|音楽|美術|技術|家庭|図工|図画|保健体育|書写|書道/.test(s)) return 'practical';
+      return 'lesson';
+    };
+
     // ============================
     // Sub Components
     // ============================
@@ -177,16 +210,16 @@
       const HOUR_HEIGHT = 60; const START_HOUR = 8; const END_HOUR = 18; const TOTAL_HEIGHT = (END_HOUR - START_HOUR) * HOUR_HEIGHT;
 
       const timeToY = (timeStr) => { if (!timeStr) return null; const [h, m] = timeStr.split(':').map(Number); return ((h - START_HOUR) * 60 + m) / 60 * HOUR_HEIGHT; };
-      const BLOCK_COLORS = { event: { bg: 'bg-pink-100 border-pink-400', text: 'text-pink-900', bar: 'bg-pink-500' }, morning: { bg: 'bg-yellow-100 border-yellow-400', text: 'text-yellow-900', bar: 'bg-yellow-500' }, p1: { bg: 'bg-blue-100 border-blue-400', text: 'text-blue-900', bar: 'bg-blue-500' }, p2: { bg: 'bg-blue-100 border-blue-400', text: 'text-blue-900', bar: 'bg-blue-500' }, p3: { bg: 'bg-sky-100 border-sky-400', text: 'text-sky-900', bar: 'bg-sky-500' }, p4: { bg: 'bg-sky-100 border-sky-400', text: 'text-sky-900', bar: 'bg-sky-500' }, lunch: { bg: 'bg-amber-100 border-amber-400', text: 'text-amber-900', bar: 'bg-amber-500' }, p5: { bg: 'bg-purple-100 border-purple-400', text: 'text-purple-900', bar: 'bg-purple-500' }, p6: { bg: 'bg-purple-100 border-purple-400', text: 'text-purple-900', bar: 'bg-purple-500' }, afterschool: { bg: 'bg-teal-100 border-teal-400', text: 'text-teal-900', bar: 'bg-teal-500' } };
+      const getTimelineColor = (subject, rowId) => { const ct = getContentType(subject, rowId); const cc = CONTENT_COLORS[ct] || CONTENT_COLORS.lesson; return { bg: cc.tlBg, text: cc.tlText, bar: cc.tlBar }; };
 
       const blocks = []; const times = SCHEDULE_TIMES[setting.type];
       ROWS.filter(r => r.id !== 'diary').forEach(row => {
         const data = getCellData(dateStr, row.id, dayIdx);
         if (row.id === 'afterschool' && data.events?.length > 0) {
-          data.events.forEach((ev, idx) => { if (ev.subject) { const st = ev.startTime || (times?.afterschool?.start) || ''; if (st) blocks.push({ id: `${row.id}-${idx}`, periodId: row.id, subject: ev.subject, memo: ev.memo || '', startTime: st, endTime: ev.endTime || '', color: BLOCK_COLORS.afterschool }); } });
+          data.events.forEach((ev, idx) => { if (ev.subject) { const st = ev.startTime || (times?.afterschool?.start) || ''; if (st) blocks.push({ id: `${row.id}-${idx}`, periodId: row.id, subject: ev.subject, memo: ev.memo || '', startTime: st, endTime: ev.endTime || '', color: getTimelineColor(ev.subject, row.id) }); } });
         } else if (data.subject) {
           let st = data.startTime || (times?.[row.id]?.start) || ''; let et = data.endTime || (times?.[row.id]?.end) || '';
-          if (st) { if (!et) { const [h, m] = st.split(':').map(Number); et = `${String(h).padStart(2,'0')}:${String(m+45).padStart(2,'0')}`; } blocks.push({ id: row.id, periodId: row.id, subject: data.subject, memo: data.memo || '', startTime: st, endTime: et, color: BLOCK_COLORS[row.id] || BLOCK_COLORS.p1 }); }
+          if (st) { if (!et) { const [h, m] = st.split(':').map(Number); et = `${String(h).padStart(2,'0')}:${String(m+45).padStart(2,'0')}`; } blocks.push({ id: row.id, periodId: row.id, subject: data.subject, memo: data.memo || '', startTime: st, endTime: et, color: getTimelineColor(data.subject, row.id) }); }
         }
       });
 
@@ -460,37 +493,37 @@
       const schoolYear = currentMonth.getMonth() < 3 ? currentMonth.getFullYear() - 1 : currentMonth.getFullYear();
 
       const getDynamicFontSize = (text, isMobile) => {
-        if (!text) return isMobile ? 'text-[8px]' : 'text-xs';
+        if (!text) return isMobile ? 'text-[11px]' : 'text-sm';
         const len = text.length;
         if (isMobile) {
-          if (len < 6) return 'text-[10px]';
-          if (len < 12) return 'text-[9px]';
-          if (len < 20) return 'text-[8px]';
-          if (len < 30) return 'text-[7px] leading-tight';
-          return 'text-[6px] leading-tight';
+          if (len < 6) return 'text-[13px]';
+          if (len < 12) return 'text-[12px]';
+          if (len < 20) return 'text-[11px]';
+          if (len < 30) return 'text-[10px] leading-tight';
+          return 'text-[9px] leading-tight';
         } else {
-          if (len < 8) return 'text-xs';
-          if (len < 16) return 'text-[11px]';
-          if (len < 25) return 'text-[10px] leading-tight';
-          if (len < 35) return 'text-[9px] leading-tight';
-          if (len < 50) return 'text-[8px] leading-tight';
-          return 'text-[7px] leading-tight';
+          if (len < 8) return 'text-sm';
+          if (len < 16) return 'text-[13px]';
+          if (len < 25) return 'text-xs';
+          if (len < 35) return 'text-[11px] leading-tight';
+          if (len < 50) return 'text-[10px] leading-tight';
+          return 'text-[9px] leading-tight';
         }
       };
 
       const getEventFontSize = (text, isMobile) => {
-        if (!text) return isMobile ? 'text-[8px]' : 'text-xs';
+        if (!text) return isMobile ? 'text-[10px]' : 'text-xs';
         const len = text.length;
         if (isMobile) {
-          if (len < 6) return 'text-[9px] leading-tight';
-          if (len < 12) return 'text-[8px] leading-tight';
-          if (len < 20) return 'text-[7px] leading-tight line-clamp-2';
-          return 'text-[6px] leading-tight line-clamp-3';
+          if (len < 6) return 'text-[12px] leading-tight';
+          if (len < 12) return 'text-[11px] leading-tight';
+          if (len < 20) return 'text-[10px] leading-tight line-clamp-2';
+          return 'text-[9px] leading-tight line-clamp-3';
         } else {
-          if (len < 8) return 'text-[10px] leading-tight';
-          if (len < 16) return 'text-[9px] leading-tight line-clamp-2';
-          if (len < 25) return 'text-[8px] leading-tight line-clamp-3';
-          return 'text-[7px] leading-tight line-clamp-4';
+          if (len < 8) return 'text-xs leading-tight';
+          if (len < 16) return 'text-[11px] leading-tight line-clamp-2';
+          if (len < 25) return 'text-[10px] leading-tight line-clamp-3';
+          return 'text-[9px] leading-tight line-clamp-4';
         }
       };
 
@@ -1434,15 +1467,11 @@
 
                 const hasData = (data.subject?.trim()) || (row.id === 'afterschool' && data.events?.some(e => e.subject?.trim()));
 
-                let blockBg = 'bg-blue-50 hover:bg-blue-100';
-                let blockBorder = 'border-blue-500';
-                let blockText = 'text-blue-900';
-                
-                if (row.id === 'event') { blockBg = 'bg-pink-50 hover:bg-pink-100'; blockBorder = 'border-pink-500'; blockText = 'text-pink-900'; }
-                else if (row.id === 'morning') { blockBg = 'bg-yellow-50 hover:bg-yellow-100'; blockBorder = 'border-yellow-500'; blockText = 'text-yellow-900'; }
-                else if (row.id === 'lunch') { blockBg = 'bg-amber-50 hover:bg-amber-100'; blockBorder = 'border-amber-500'; blockText = 'text-amber-900'; }
-                else if (row.id === 'afterschool') { blockBg = 'bg-teal-50 hover:bg-teal-100'; blockBorder = 'border-teal-500'; blockText = 'text-teal-900'; }
-                else if (row.id === 'p5' || row.id === 'p6') { blockBg = 'bg-purple-50 hover:bg-purple-100'; blockBorder = 'border-purple-500'; blockText = 'text-purple-900'; }
+                const contentType = getContentType(data.subject, row.id);
+                const cc = CONTENT_COLORS[contentType] || CONTENT_COLORS.lesson;
+                let blockBg = cc.bg;
+                let blockBorder = cc.border;
+                let blockText = cc.text;
 
                 let blockStyle = row.id === 'morning' ? {} : { height: 'calc(100% - 4px)' };
                 let blockClasses = row.id === 'morning' ? 'relative w-full' : 'relative w-full h-full';
