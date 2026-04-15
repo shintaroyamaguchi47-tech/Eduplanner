@@ -486,8 +486,109 @@
       const [selectedDateDetails, setSelectedDateDetails] = useState(null);
       const [monthDayPopup, setMonthDayPopup] = useState(null);
 
+      const downloadICSFile = (content, filename) => {
+        const blob = new Blob([content], { type: 'text/calendar;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = filename;
+        document.body.appendChild(a); a.click();
+        document.body.removeChild(a); URL.revokeObjectURL(url);
+      };
+
       const exportICS = (type) => {
-        showToast('ICSエクスポート機能は現在準備中です。');
+        const esc = (s) => (s||'').replace(/[\\;,]/g, m => '\\'+m).replace(/\n/g, '\\n');
+        let ics = 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//EduPlanner//JP\r\nCALSCALE:GREGORIAN\r\nX-WR-TIMEZONE:Asia/Tokyo\r\n';
+        ics += 'BEGIN:VTIMEZONE\r\nTZID:Asia/Tokyo\r\nBEGIN:STANDARD\r\nDTSTART:19700101T000000\r\nTZOFFSETFROM:+0900\r\nTZOFFSETTO:+0900\r\nTZNAME:JST\r\nEND:STANDARD\r\nEND:VTIMEZONE\r\n';
+
+        if (type === 'todos') {
+          const incomplete = todos.filter(t => !t.completed);
+          if (!incomplete.length) { showToast('未完了のTODOがありません'); return; }
+          incomplete.forEach(t => {
+            ics += 'BEGIN:VEVENT\r\n';
+            ics += `UID:todo-${t.id}@eduplanner\r\n`;
+            ics += `SUMMARY:${esc(t.text)}\r\n`;
+            if (t.dueDate) {
+              const dd = t.dueDate.replace(/-/g, '');
+              ics += `DTSTART;VALUE=DATE:${dd}\r\n`;
+              ics += `DTEND;VALUE=DATE:${dd}\r\n`;
+            } else {
+              const now = new Date();
+              const dd = formatDate(now).replace(/-/g, '');
+              ics += `DTSTART;VALUE=DATE:${dd}\r\n`;
+              ics += `DTEND;VALUE=DATE:${dd}\r\n`;
+            }
+            if (t.tag) ics += `CATEGORIES:${esc(t.tag)}\r\n`;
+            if (t.important) ics += 'PRIORITY:1\r\n';
+            ics += 'END:VEVENT\r\n';
+          });
+          ics += 'END:VCALENDAR\r\n';
+          downloadICSFile(ics, 'eduplanner-todos.ics');
+          showToast('📤 TODOをICSファイルとしてダウンロードしました');
+        } else {
+          const days = [];
+          for (let i = 0; i < 7; i++) {
+            const d = new Date(currentWeekStart);
+            d.setDate(d.getDate() + i);
+            days.push(d);
+          }
+          let evCount = 0;
+          days.forEach((dayDate, di) => {
+            const ds = formatDate(dayDate);
+            const set = getDaySetting(ds, di);
+            if (set.type === 'holiday') return;
+            const pids = ['morning','p1','p2','p3','p4','p5','p6','afterschool'];
+            pids.forEach(pid => {
+              const data = getCellData(ds, pid, di);
+              if (pid === 'afterschool' && data.events?.length > 0) {
+                data.events.filter(e => e.subject?.trim()).forEach((ev, idx) => {
+                  const sc = SCHEDULE_TIMES[set.type]?.afterschool;
+                  const sT = (ev.startTime || sc?.start || '16:00').replace(':', '');
+                  const eT = (ev.endTime || sc?.end || '17:00').replace(':', '');
+                  ics += 'BEGIN:VEVENT\r\n';
+                  ics += `UID:${ds}-afterschool-${idx}@eduplanner\r\n`;
+                  ics += `DTSTART;TZID=Asia/Tokyo:${ds.replace(/-/g, '')}T${sT}00\r\n`;
+                  ics += `DTEND;TZID=Asia/Tokyo:${ds.replace(/-/g, '')}T${eT || sT}00\r\n`;
+                  ics += `SUMMARY:${esc(ev.subject)}\r\n`;
+                  if (ev.memo) ics += `DESCRIPTION:${esc(ev.memo)}\r\n`;
+                  ics += 'END:VEVENT\r\n';
+                  evCount++;
+                });
+                return;
+              }
+              if (!data.subject?.trim()) return;
+              if (pid === 'event') {
+                data.subject.split('\n').filter(s => s.trim()).forEach((s, idx) => {
+                  const dd = ds.replace(/-/g, '');
+                  ics += 'BEGIN:VEVENT\r\n';
+                  ics += `UID:${ds}-event-${idx}@eduplanner\r\n`;
+                  ics += `DTSTART;VALUE=DATE:${dd}\r\n`;
+                  ics += `DTEND;VALUE=DATE:${dd}\r\n`;
+                  ics += `SUMMARY:${esc(s.trim())}\r\n`;
+                  ics += 'END:VEVENT\r\n';
+                  evCount++;
+                });
+                return;
+              }
+              const sc = SCHEDULE_TIMES[set.type]?.[pid];
+              if (!sc?.start) return;
+              const sT = (data.startTime || sc.start).replace(':', '');
+              const eT = (data.endTime || sc.end || sc.start).replace(':', '');
+              const dd = ds.replace(/-/g, '');
+              ics += 'BEGIN:VEVENT\r\n';
+              ics += `UID:${ds}-${pid}@eduplanner\r\n`;
+              ics += `DTSTART;TZID=Asia/Tokyo:${dd}T${sT}00\r\n`;
+              ics += `DTEND;TZID=Asia/Tokyo:${dd}T${eT}00\r\n`;
+              ics += `SUMMARY:${esc(data.subject.replace(/\n/g, ' '))}\r\n`;
+              if (data.memo) ics += `DESCRIPTION:${esc(data.memo)}\r\n`;
+              ics += 'END:VEVENT\r\n';
+              evCount++;
+            });
+          });
+          ics += 'END:VCALENDAR\r\n';
+          if (evCount === 0) { showToast('この週には予定がありません'); return; }
+          downloadICSFile(ics, `eduplanner-week-${formatDate(currentWeekStart)}.ics`);
+          showToast('📅 週案をICSファイルとしてダウンロードしました（Googleカレンダーにインポート可能）');
+        }
       };
 
       const todayStr = formatDate(getJSTDate());
@@ -992,7 +1093,48 @@
       const handleSettingChange = (ds, di, ns) => { if(activeTab==='template'){ const n={...templateSettings,[di]:ns}; setTemplateSettings(n); saveAll(baseTemplate,n,weeklyData,weeklySettings); } else { const n={...weeklySettings,[ds]:ns}; setWeeklySettings(n); saveAll(baseTemplate,templateSettings,weeklyData,n); } };
       
       const handleSaveCell = (d) => { if(!editingCell.isTemplate && d.subject){ let up=[...syllabusData]; let ch=false; for(let i=0;i<up.length;i++){ let s=up[i]; if(s.type==='auto'&&s.units?.[s.currentUnitIdx]){ const exp=`${s.name}（${s.units[s.currentUnitIdx].name} ${s.currentHour}/${s.units[s.currentUnitIdx].hours}）`; if(d.subject===exp){ let nh=s.currentHour+1; let nu=s.currentUnitIdx; if(nh>s.units[s.currentUnitIdx].hours){nh=1;nu++;} up[i]={...s,currentHour:nh,currentUnitIdx:nu}; ch=true; break; } }else if(s.type==='history'){ const m=d.subject.match(new RegExp(`^${s.name}（(.+)）$`)); if(m){ let h=s.history||[]; if(!h.includes(m[1])){ up[i]={...s,history:[m[1],...h].slice(0,15)}; ch=true; } } } } if(ch) saveSyllabus(up); } if(editingCell.isTemplate){ const n={...baseTemplate,[`${editingCell.dayIndex}-${editingCell.periodId}`]:d}; saveAll(n,templateSettings,weeklyData,weeklySettings); } else { const n={...weeklyData,[`${editingCell.dateStr}-${editingCell.periodId}`]:{...d,useTemplate:false}}; saveAll(baseTemplate,templateSettings,n,weeklySettings); } setEditingCell(null); };
-      
+
+      const handleAutoFillSubject = (subjIdx) => {
+        const subj = syllabusData[subjIdx];
+        if (!subj || subj.type !== 'auto' || !subj.units?.[subj.currentUnitIdx]) return;
+        const periodOrder = ['p1','p2','p3','p4','p5','p6'];
+        const currentPeriodIdx = periodOrder.indexOf(editingCell.periodId);
+        if (currentPeriodIdx === -1) return;
+        const ds = editingCell.dateStr;
+        const di = editingCell.dayIndex;
+        const set = getDaySetting(ds, di);
+        let nd = {...weeklyData};
+        let curHour = subj.currentHour;
+        let curUnit = subj.currentUnitIdx;
+        let filledCount = 0;
+        for (let pi = currentPeriodIdx; pi < periodOrder.length; pi++) {
+          const pid = periodOrder[pi];
+          const unit = subj.units[curUnit];
+          if (!unit) break;
+          if (pi !== currentPeriodIdx) {
+            const wk = `${ds}-${pid}`;
+            const tk = `${di}-${pid}`;
+            const existing = nd[wk];
+            const tplData = baseTemplate[tk] || { subject:'', memo:'' };
+            const cellData = (existing && !existing.useTemplate) ? existing : tplData;
+            if (cellData.subject && cellData.subject.trim()) continue;
+          }
+          const text = `${subj.name}（${unit.name} ${curHour}/${unit.hours}）`;
+          const sc = SCHEDULE_TIMES[set.type]?.[pid];
+          nd[`${ds}-${pid}`] = { subject: text, memo: '', startTime: sc?.start||'', endTime: sc?.end||'', useTemplate: false, color: '' };
+          filledCount++;
+          curHour++;
+          if (curHour > unit.hours) { curHour = 1; curUnit++; }
+        }
+        if (filledCount === 0) return;
+        let up = [...syllabusData];
+        up[subjIdx] = { ...up[subjIdx], currentHour: curHour, currentUnitIdx: curUnit };
+        saveSyllabus(up);
+        saveAll(baseTemplate, templateSettings, nd, weeklySettings);
+        setEditingCell(null);
+        showToast(`📚 ${subj.name}を${filledCount}コマ連続入力しました`);
+      };
+
       const handleCopyDay = (target,source) => { if(source==='') return; const sIdx=parseInt(source); const ns={...weeklySettings,[target]:templateSettings[sIdx]||DEFAULT_TEMPLATE_SETTINGS[sIdx]}; const nd={...weeklyData}; ROWS.forEach(r=>{ nd[`${target}-${r.id}`]={...(baseTemplate[`${sIdx}-${r.id}`]||{}),useTemplate:false}; }); setWeeklySettings(ns); setWeeklyData(nd); saveAll(baseTemplate,templateSettings,nd,ns); };
       const handleRevertDay = (target) => {
         const nd = {...weeklyData}; const ns = {...weeklySettings};
@@ -1674,6 +1816,11 @@
                   <span className="text-sm leading-none">📝</span><span className="hidden lg:inline">TODO</span>
                   {todos.filter(t=>!t.completed).length > 0 && <span className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center shadow-md border border-white dark:border-slate-800">{todos.filter(t=>!t.completed).length}</span>}
                 </button>
+                {(activeTab === 'weekly') && (
+                  <button onClick={() => exportICS('weekly')} className="bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-600 px-2 sm:px-3 py-1.5 h-8 rounded-lg text-[11px] font-bold text-slate-700 dark:text-slate-300 transition-all flex items-center gap-1 sm:gap-1.5 shadow-sm active:scale-95" title="Googleカレンダーにエクスポート">
+                    <span className="text-sm leading-none">📅</span><span className="hidden lg:inline">カレンダー</span>
+                  </button>
+                )}
               </div>
             </div>
 
@@ -1843,7 +1990,7 @@
                 {/* 右サイド (PC/iPad) 幅を固定 */}
                 {!isMobile && activeTab === 'weekly' && (
                   <div className="hidden md:flex w-[280px] lg:w-[320px] shrink-0 flex-col gap-3 min-h-0">
-                    <div className="flex-1 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-300 dark:border-slate-700 flex flex-col overflow-hidden min-h-0 transition-colors">
+                    <div className="flex-[2] bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-300 dark:border-slate-700 flex flex-col overflow-hidden min-h-0 transition-colors">
                       <div className="bg-slate-50 dark:bg-slate-900 border-b border-slate-300 dark:border-slate-700 p-3 flex justify-between items-center shrink-0">
                         <div className="text-xs font-black flex items-center gap-1.5 text-slate-800 dark:text-slate-200">📒 今週のメモ</div>
                         <button onClick={() => { setEditingWeekMemo({id: Date.now(), htmlContent: '', timestamp: Date.now()}); setShowWeekMemoPad(true); }} className="text-[10px] font-bold bg-blue-600 text-white px-3 py-1 rounded-lg shadow-sm hover:bg-blue-700 transition-colors active:scale-95">＋ 追加</button>
@@ -1889,10 +2036,10 @@
                         )}
                       </div>
                     </div>
-                    <div className="h-[40%] bg-white rounded-2xl shadow-sm border border-slate-300 flex flex-col shrink-0">
-                      <div className="bg-slate-50 border-b border-slate-300 p-3 flex justify-between items-center"><div className="text-xs font-black flex items-center gap-1.5 text-slate-800">📝 TODO</div><button onClick={()=>setShowTodo(true)} className="text-[10px] font-bold bg-white border border-slate-300 px-3 py-1 rounded-lg shadow-sm hover:bg-slate-100 transition-colors text-slate-700">詳細</button></div>
-                      <div className="flex-1 p-2 space-y-2 overflow-y-auto hide-scrollbar bg-slate-50/50">
-                        {incompleteTodos.slice(0, 5).map(t=>{
+                    <div className="flex-[3] bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-300 dark:border-slate-700 flex flex-col overflow-hidden min-h-0 transition-colors">
+                      <div className="bg-slate-50 dark:bg-slate-900 border-b border-slate-300 dark:border-slate-700 p-3 flex justify-between items-center shrink-0"><div className="text-xs font-black flex items-center gap-1.5 text-slate-800 dark:text-slate-200">📝 TODO</div><button onClick={()=>setShowTodo(true)} className="text-[10px] font-bold bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 px-3 py-1 rounded-lg shadow-sm hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors text-slate-700 dark:text-slate-300">詳細</button></div>
+                      <div className="flex-1 p-2 space-y-2 overflow-y-auto hide-scrollbar bg-slate-50/50 dark:bg-slate-900/50 min-h-0">
+                        {incompleteTodos.slice(0, 8).map(t=>{
                           const isOv=t.dueDate&&t.dueDate<todayStr;
                           return <div key={t.id} className={`flex items-start gap-2 p-2.5 border rounded-xl shadow-sm ${t.important?'bg-amber-50 border-amber-300':isOv?'bg-rose-50 border-rose-300':'bg-white border-slate-300'}`}><input type="checkbox" onChange={()=>saveTodos(todos.map(td=>td.id===t.id?{...td,completed:!td.completed}:td))} className="mt-0.5 w-4 h-4 cursor-pointer"/><div className="flex-1 min-w-0"><div className={`text-[10px] sm:text-xs font-black truncate ${isOv?'text-rose-600':'text-slate-800'}`}>{t.important&&<span className="text-amber-500 mr-1">★</span>}{t.text}</div>{t.dueDate&&<div className="text-[8px] sm:text-[9px] font-bold text-slate-600 mt-1 font-mono">期限: {t.dueDate}</div>}</div></div>
                         })}
@@ -2511,13 +2658,14 @@
                     {!editingCell.isTemplate && editingCell.periodId.startsWith('p') && syllabusData.length > 0 && (
                       <div className="bg-blue-50/50 p-3 rounded-xl border border-blue-200 max-h-40 overflow-y-auto hide-scrollbar space-y-2 shadow-inner">
                         <div className="text-[11px] font-black text-blue-800 mb-2">💡 進度からワンタップ入力</div>
-                        {syllabusData.map(subj => {
+                        {syllabusData.map((subj, subjIdx) => {
                           if(subj.type==='auto') {
                             const unit=subj.units?.[subj.currentUnitIdx]; const isFinished=subj.units?.length>0&&!unit;
                             const text=isFinished?`${subj.name}（終了）`:(unit?`${subj.name}（${unit.name} ${subj.currentHour}/${unit.hours}）`:subj.name);
                             return (
                               <div key={subj.id} className="flex gap-2">
                                 <button type="button" onClick={()=>setTempSubject(text)} className="flex-1 bg-white text-blue-900 text-sm font-bold py-2 px-3 rounded-lg border border-blue-300 shadow-sm text-left truncate active:scale-95">{text}</button>
+                                {!isFinished && unit && <button type="button" onClick={()=>handleAutoFillSubject(subjIdx)} className="bg-blue-600 text-white text-[11px] font-black px-3 py-2 rounded-lg shadow-sm active:scale-95 shrink-0 hover:bg-blue-700 transition-colors" title="この教科を残りの空きコマに連続入力">連続</button>}
                               </div>
                             );
                           } else {
