@@ -1418,7 +1418,7 @@
 
         if (activeTab === 'template') {
           customStyle={flex:'4',minHeight:'2.5rem'}; rh=''; fc=''; rb='';
-          if(row.id==='lunch'){customStyle={flex:'1.5',minHeight:'1.5rem'};rh='';fc='';rb='bg-amber-50/20 dark:bg-amber-900/10';}
+          if(row.id==='lunch'){customStyle={flex:'2.5',minHeight:'2.5rem'};rh='';fc='';rb='bg-amber-50/20 dark:bg-amber-900/10';}
           else if(row.id==='event'){customStyle={flex:'3.5',minHeight:'3.5rem'};rh='';fc='';}
           else if(row.id==='morning'){customStyle={flex:'3',minHeight:'3rem'};rh='';fc='';}
           else if(row.id==='afterschool'){customStyle={flex:'3.5',minHeight:'3rem'};rh='';fc='';}
@@ -1426,14 +1426,14 @@
           if (isMobile && activeTab === 'weekly') {
             if (row.id === 'event') { rh = 'h-8 shrink-0'; fc = 'flex-none'; rb = ''; }
             else if (row.id === 'morning') { rh = 'h-12 shrink-0'; fc = 'flex-none'; rb = ''; }
-            else if (row.id === 'lunch') { rh = 'h-6 shrink-0'; fc = 'flex-none'; rb = 'bg-amber-50/20 dark:bg-amber-900/10'; }
-            else if (row.id === 'afterschool') { rh = 'h-[4.5rem] shrink-0'; fc = 'flex-none'; rb = ''; }
+            else if (row.id === 'lunch') { rh = 'h-10 shrink-0'; fc = 'flex-none'; rb = 'bg-amber-50/20 dark:bg-amber-900/10'; }
+            else if (row.id === 'afterschool') { rh = 'h-[5.5rem] shrink-0'; fc = 'flex-none'; rb = ''; }
             else { rh = 'h-[3rem] shrink-0'; fc = 'flex-none'; rb = ''; }
           } else {
             if (row.id === 'event') { customStyle={flex:'3.5',minHeight:'3.5rem'}; rh=''; fc=''; rb=''; }
             else if (row.id === 'morning') { customStyle={flex:'3.5',minHeight:'3.5rem'}; rh=''; fc=''; rb=''; }
-            else if (row.id === 'lunch') { customStyle={flex:'1.5',minHeight:'1.5rem'}; rh=''; fc=''; rb='bg-amber-50/20 dark:bg-amber-900/10'; }
-            else if (row.id === 'afterschool') { customStyle={flex:'3.5',minHeight:'3rem'}; rh=''; fc=''; rb=''; }
+            else if (row.id === 'lunch') { customStyle={flex:'2.5',minHeight:'2.5rem'}; rh=''; fc=''; rb='bg-amber-50/20 dark:bg-amber-900/10'; }
+            else if (row.id === 'afterschool') { customStyle={flex:'4',minHeight:'3.5rem'}; rh=''; fc=''; rb=''; }
             else { customStyle={flex:'4',minHeight:'2.5rem'}; rh=''; fc=''; rb=''; }
           }
         }
@@ -1455,7 +1455,7 @@
                 const cf=i>=5?'col-span-2':'col-span-3'; const isT=ds===todayStr;
                 
                 const cellBg = (activeTab==='weekly' && isH) ? 'bg-slate-100/50 dark:bg-slate-800/40' : 'bg-transparent';
-                const overflowClass = activeTab === 'weekly' && row.id !== 'event' ? 'overflow-visible' : 'overflow-hidden';
+                const overflowClass = activeTab === 'weekly' && row.id !== 'event' && row.id !== 'afterschool' ? 'overflow-visible' : 'overflow-hidden';
 
                 if (activeTab === 'weekly' && isH && row.id !== 'event' && row.id !== 'afterschool') {
                   if (!data.subject?.trim()) {
@@ -1506,7 +1506,7 @@
                 return (
                   <div key={i} onClick={()=>openEditModal(data,ds,row,i,day,isH,null)} className={`min-w-0 ${cf} border-r border-slate-300 dark:border-slate-700 last:border-r-0 p-0.5 cursor-pointer flex flex-col justify-start relative ${overflowClass} ${activeTab==='weekly'&&isT?'bg-blue-50/20':''} ${cellBg} hover:bg-slate-100/70 transition-colors h-full`}>
                     {hasData && (
-                      <div className={`${blockClasses} rounded sm:rounded-md shadow-[0_1px_2px_rgba(0,0,0,0.08)] flex flex-col px-1 py-0.5 sm:py-1 border-l-[3px] sm:border-l-[4px] transition-colors ${row.id === 'event' ? 'overflow-hidden' : row.id === 'morning' ? 'overflow-visible' : 'overflow-y-auto hide-scrollbar'} ${blockBg} ${blockBorder}`} style={blockStyle}>
+                      <div className={`${blockClasses} rounded sm:rounded-md shadow-[0_1px_2px_rgba(0,0,0,0.08)] flex flex-col px-1 py-0.5 sm:py-1 border-l-[3px] sm:border-l-[4px] transition-colors ${row.id === 'event' ? 'overflow-hidden' : row.id === 'morning' ? 'overflow-visible' : 'overflow-y-auto'} ${row.id !== 'afterschool' ? 'hide-scrollbar' : ''} ${blockBg} ${blockBorder}`} style={blockStyle}>
                         {row.id === 'event' ? (
                           <div className="flex flex-col justify-center h-full space-y-0.5">
                             {data.subject.split('\n').filter(s => s.trim() !== '').map((s, idx) => (
@@ -2104,13 +2104,57 @@
               <div className="p-4 flex-1 overflow-y-auto bg-[var(--paper)]">
                 <div className="max-w-3xl mx-auto bg-white p-6 sm:p-8 rounded-3xl border border-slate-300 shadow-md">
                   <h2 className="text-2xl font-black mb-6 text-slate-800 flex items-center gap-2">📚 教科・進度</h2>
-                  {syllabusData.map((s,i)=>(
+                  {syllabusData.map((s,i)=>{
+                    const totalHours = s.type==='auto' && s.units ? s.units.reduce((sum,u)=>sum+u.hours,0) : 0;
+                    const doneHours = s.type==='auto' && s.units ? s.units.slice(0,s.currentUnitIdx).reduce((sum,u)=>sum+u.hours,0) + (s.currentHour-1) : 0;
+                    const progressPct = totalHours > 0 ? Math.min(100, Math.round(doneHours/totalHours*100)) : 0;
+                    return (
                     <div key={s.id} className="border border-slate-300 rounded-2xl mb-5 overflow-hidden shadow-sm"><div className="bg-slate-50 p-4 border-b border-slate-300 flex justify-between items-center font-black"><span className="flex items-center gap-3 text-slate-800 text-lg">{s.name}<span className="text-[10px] bg-white border border-blue-300 text-blue-700 px-2 py-0.5 rounded-lg shadow-sm">{s.type==='auto'?'自動':'履歴'}</span></span><button onClick={()=>saveSyllabus(syllabusData.filter(x=>x.id!==s.id))} className="text-xs text-rose-600 font-bold border border-rose-300 bg-white px-3 py-1 rounded-lg hover:bg-rose-50 shadow-sm">削除</button></div>
                     <div className="p-4 bg-slate-50/50">
-                      {s.type==='auto'?(<><textarea value={s.rawText!==undefined?s.rawText:formatUnits(s.units)} onChange={e=>{const u=[...syllabusData];u[i]={...u[i],rawText:e.target.value};setSyllabusData(u);}} onBlur={e=>{const u=[...syllabusData];u[i]={...u[i],rawText:e.target.value,units:parseUnits(e.target.value)};saveSyllabus(u);}} className="w-full text-sm font-bold p-3 border border-slate-300 rounded-xl outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 shadow-inner" rows={3} placeholder="単元名,時数 (例: 走れメロス,5)"/><div className="mt-3 text-sm font-black text-blue-900 bg-blue-50 border border-blue-200 p-3 rounded-xl flex items-center justify-between shadow-sm"><span>現在: {s.units?.[s.currentUnitIdx]?`${s.units[s.currentUnitIdx].name} (${s.currentHour}/${s.units[s.currentUnitIdx].hours})`:'終了'}</span> <button onClick={()=>{const u=[...syllabusData];u[i].currentUnitIdx=0;u[i].currentHour=1;saveSyllabus(u);}} className="bg-white px-3 py-1.5 border border-blue-300 rounded-lg shadow-sm text-xs hover:bg-blue-100">リセット</button></div></>):(
+                      {s.type==='auto'?(<>
+                        <textarea value={s.rawText!==undefined?s.rawText:formatUnits(s.units)} onChange={e=>{const u=[...syllabusData];u[i]={...u[i],rawText:e.target.value};setSyllabusData(u);}} onBlur={e=>{const u=[...syllabusData];u[i]={...u[i],rawText:e.target.value,units:parseUnits(e.target.value)};saveSyllabus(u);}} className="w-full text-sm font-bold p-3 border border-slate-300 rounded-xl outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 shadow-inner" rows={3} placeholder="1行に1つ: 単元名,時数&#10;例:&#10;走れメロス,5&#10;古典文法,3"/>
+                        {s.units && s.units.length > 0 && (
+                          <div className="mt-3 space-y-2">
+                            <div className="flex items-center justify-between text-xs font-black text-slate-600">
+                              <span>全体進捗: {doneHours}/{totalHours}時間 ({progressPct}%)</span>
+                              <button onClick={()=>{const u=[...syllabusData];u[i].currentUnitIdx=0;u[i].currentHour=1;saveSyllabus(u);}} className="bg-white px-2.5 py-1 border border-slate-300 rounded-lg shadow-sm text-[10px] hover:bg-slate-100">リセット</button>
+                            </div>
+                            <div className="w-full bg-slate-200 rounded-full h-2.5 overflow-hidden">
+                              <div className="bg-blue-500 h-full rounded-full transition-all" style={{width:`${progressPct}%`}}></div>
+                            </div>
+                            <div className="space-y-1.5 mt-3">
+                              {s.units.map((unit,ui)=>{
+                                const isCurrent = ui === s.currentUnitIdx;
+                                const isDone = ui < s.currentUnitIdx;
+                                const currentH = isCurrent ? s.currentHour : (isDone ? unit.hours : 0);
+                                return (
+                                  <div key={ui} className={`flex items-center gap-2 p-2.5 rounded-xl border transition-colors ${isCurrent?'bg-blue-50 border-blue-300 shadow-sm':isDone?'bg-slate-50 border-slate-200':'bg-white border-slate-200'}`}>
+                                    <span className={`text-base w-6 text-center ${isDone?'opacity-60':''}  `}>{isDone?'✅':isCurrent?'📖':'◻️'}</span>
+                                    <div className="flex-1 min-w-0">
+                                      <div className={`text-sm font-black truncate ${isCurrent?'text-blue-900':isDone?'text-slate-400 line-through':'text-slate-700'}`}>{unit.name}</div>
+                                      <div className="text-[10px] font-bold text-slate-500">{currentH}/{unit.hours}時間</div>
+                                    </div>
+                                    {isCurrent && (
+                                      <div className="flex items-center gap-1.5 shrink-0">
+                                        <button onClick={()=>{const u=[...syllabusData]; let nh=u[i].currentHour-1; let nu=u[i].currentUnitIdx; if(nh<1){if(nu>0){nu--;nh=u[i].units[nu].hours;}else{nh=1;}} u[i]={...u[i],currentHour:nh,currentUnitIdx:nu}; saveSyllabus(u);}} className="w-8 h-8 flex items-center justify-center bg-white border border-slate-300 rounded-lg text-slate-600 font-black text-lg shadow-sm hover:bg-slate-100 active:scale-95">-</button>
+                                        <span className="text-sm font-black text-blue-700 w-10 text-center">{s.currentHour}/{unit.hours}</span>
+                                        <button onClick={()=>{const u=[...syllabusData]; let nh=u[i].currentHour+1; let nu=u[i].currentUnitIdx; if(nh>u[i].units[nu].hours){nh=1;nu++;} u[i]={...u[i],currentHour:nh,currentUnitIdx:nu}; saveSyllabus(u);}} className="w-8 h-8 flex items-center justify-center bg-blue-500 border border-blue-600 rounded-lg text-white font-black text-lg shadow-sm hover:bg-blue-600 active:scale-95">+</button>
+                                      </div>
+                                    )}
+                                    {!isCurrent && !isDone && (
+                                      <button onClick={()=>{const u=[...syllabusData]; u[i]={...u[i],currentUnitIdx:ui,currentHour:1}; saveSyllabus(u);}} className="text-[10px] font-bold text-blue-600 bg-white border border-blue-300 px-2 py-1 rounded-lg hover:bg-blue-50 shadow-sm shrink-0">ここから</button>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </>):(
                       <div className="flex flex-wrap gap-2">{s.history?.map((h,hi)=><span key={hi} className="text-sm font-bold bg-white text-teal-800 px-3 py-1.5 rounded-xl border border-teal-300 shadow-sm flex items-center gap-1">{h}<button onClick={()=>{const u=[...syllabusData];u[i].history=s.history.filter((_,x)=>x!==hi);saveSyllabus(u);}} className="ml-1 text-teal-500 hover:text-teal-700 font-black">×</button></span>)}</div>)}
                     </div></div>
-                  ))}
+                    );
+                  })}
                   <div className="bg-blue-50 border border-blue-200 p-5 rounded-2xl flex flex-col sm:flex-row gap-3 shadow-sm mt-8"><input id="nsn" placeholder="教科名" className="text-sm font-bold p-3 rounded-xl border border-slate-300 flex-1 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 shadow-inner"/><select id="nst" className="text-sm font-bold p-3 rounded-xl border border-slate-300 outline-none w-full sm:w-1/3 bg-white shadow-sm"><option value="auto">自動カウント</option><option value="history">履歴選択</option></select><button onClick={()=>{const n=document.getElementById('nsn').value;const t=document.getElementById('nst').value;if(n)saveSyllabus([...syllabusData,{id:Date.now().toString(),name:n,type:t,...(t==='auto'?{units:[],currentUnitIdx:0,currentHour:1,rawText:''}:{history:[]})}])}} className="bg-blue-600 text-white px-6 py-3 rounded-xl font-black shadow-md hover:bg-blue-700 w-full sm:w-auto">追加</button></div>
                 </div>
               </div>
