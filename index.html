@@ -2112,6 +2112,67 @@
                     <div key={s.id} className="border border-slate-300 rounded-2xl mb-5 overflow-hidden shadow-sm"><div className="bg-slate-50 p-4 border-b border-slate-300 flex justify-between items-center font-black"><span className="flex items-center gap-3 text-slate-800 text-lg">{s.name}<span className="text-[10px] bg-white border border-blue-300 text-blue-700 px-2 py-0.5 rounded-lg shadow-sm">{s.type==='auto'?'自動':'履歴'}</span></span><button onClick={()=>saveSyllabus(syllabusData.filter(x=>x.id!==s.id))} className="text-xs text-rose-600 font-bold border border-rose-300 bg-white px-3 py-1 rounded-lg hover:bg-rose-50 shadow-sm">削除</button></div>
                     <div className="p-4 bg-slate-50/50">
                       {s.type==='auto'?(<>
+                        {s.classes && s.classes.length > 0 ? (<>
+                          {/* クラス別進度モード */}
+                          <div className="space-y-2 mb-4">
+                            <div className="text-xs font-black text-slate-500 mb-1.5">クラス別進度</div>
+                            {s.classes.map((cls,ci)=>{
+                              const clsUnit=s.units?.[cls.currentUnitIdx];
+                              const clsFinished=s.units?.length>0&&!clsUnit;
+                              const clsTotal=s.units?s.units.reduce((sum,u)=>sum+u.hours,0):0;
+                              const clsDone=s.units?s.units.slice(0,cls.currentUnitIdx).reduce((sum,u)=>sum+u.hours,0)+(cls.currentHour-1):0;
+                              const clsPct=clsTotal>0?Math.min(100,Math.round(clsDone/clsTotal*100)):0;
+                              return (
+                                <div key={ci} className="bg-white border border-slate-200 rounded-xl p-2.5 flex items-center gap-2 shadow-sm">
+                                  <span className="font-black text-slate-700 text-sm w-10 shrink-0 text-center">{cls.name}</span>
+                                  <div className="flex-1 min-w-0">
+                                    {clsFinished?(<span className="text-xs text-emerald-600 font-bold">✅ 終了</span>):clsUnit?(<><div className="text-xs font-bold text-slate-700 truncate">{clsUnit.name}</div><div className="w-full bg-slate-200 rounded-full h-1.5 mt-1"><div className="bg-blue-500 h-full rounded-full transition-all" style={{width:`${clsPct}%`}}></div></div></>):(<span className="text-xs text-slate-400">単元なし</span>)}
+                                  </div>
+                                  {!clsFinished&&clsUnit&&(
+                                    <div className="flex items-center gap-1 shrink-0">
+                                      <button onClick={()=>{const u=[...syllabusData];const c={...u[i].classes[ci]};let nh=c.currentHour-1;let nu=c.currentUnitIdx;if(nh<1){if(nu>0){nu--;nh=u[i].units[nu].hours;}else{nh=1;}}u[i].classes[ci]={...c,currentHour:nh,currentUnitIdx:nu};saveSyllabus(u);}} className="w-7 h-7 flex items-center justify-center bg-white border border-slate-300 rounded-lg text-slate-600 font-black shadow-sm hover:bg-slate-100 active:scale-95">-</button>
+                                      <span className="text-xs font-black text-blue-700 w-10 text-center">{cls.currentHour}/{clsUnit.hours}</span>
+                                      <button onClick={()=>{const u=[...syllabusData];const c={...u[i].classes[ci]};let nh=c.currentHour+1;let nu=c.currentUnitIdx;if(nh>u[i].units[nu].hours){nh=1;nu++;}if(nu<u[i].units.length){u[i].classes[ci]={...c,currentHour:nh,currentUnitIdx:nu};}saveSyllabus(u);}} className="w-7 h-7 flex items-center justify-center bg-blue-500 border border-blue-600 rounded-lg text-white font-black shadow-sm hover:bg-blue-600 active:scale-95">+</button>
+                                    </div>
+                                  )}
+                                  <span className="text-[10px] font-bold text-slate-400 w-8 text-right shrink-0">{clsPct}%</span>
+                                  <button onClick={()=>{const u=[...syllabusData];u[i].classes[ci]={...u[i].classes[ci],currentUnitIdx:0,currentHour:1};saveSyllabus(u);}} title="リセット" className="text-[11px] text-slate-400 hover:text-slate-600 border border-slate-200 rounded-lg px-1.5 py-1 bg-white shrink-0">↺</button>
+                                  <button onClick={()=>{const u=[...syllabusData];u[i].classes=u[i].classes.filter((_,x)=>x!==ci);saveSyllabus(u);}} className="text-slate-300 hover:text-rose-500 text-xs font-black shrink-0">✕</button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                          <div className="flex gap-2 items-center bg-green-50 p-2.5 rounded-xl border border-green-200 mb-4">
+                            <input id={`cls-name-${s.id}`} placeholder="クラス名（例: 3組）" className="flex-1 text-sm font-bold p-2 border border-slate-300 rounded-lg outline-none focus:border-green-500 bg-white" />
+                            <button onClick={()=>{const el=document.getElementById(`cls-name-${s.id}`);const nm=el.value.trim();if(nm){const u=[...syllabusData];u[i].classes=[...u[i].classes,{name:nm,currentUnitIdx:0,currentHour:1}];saveSyllabus(u);el.value=''}}} className="bg-green-600 text-white px-3 py-2 rounded-lg font-black text-sm shadow-sm hover:bg-green-700 active:scale-95 shrink-0 whitespace-nowrap">＋クラス</button>
+                          </div>
+                          <details className="rounded-xl border border-slate-200 overflow-hidden">
+                            <summary className="text-xs font-black text-slate-600 cursor-pointer px-3 py-2.5 bg-slate-50 hover:bg-slate-100 flex items-center gap-1.5">📋 単元リストを編集（{s.units?.length||0}単元）</summary>
+                            <div className="p-3 bg-white">
+                              {s.units&&s.units.length>0&&(
+                                <div className="space-y-1.5 mb-3">
+                                  {s.units.map((unit,ui)=>(
+                                    <div key={ui} className="flex items-center gap-2 p-2 rounded-xl border border-slate-200 bg-slate-50">
+                                      <span className="text-xs text-slate-400 w-5 text-center shrink-0">{ui+1}</span>
+                                      <input value={unit.name} onChange={e=>{const u=[...syllabusData];u[i].units[ui]={...unit,name:e.target.value};setSyllabusData(u);}} onBlur={()=>saveSyllabus(syllabusData)} className="flex-1 min-w-0 text-sm font-black bg-transparent outline-none border-b border-transparent focus:border-blue-400 text-slate-700" />
+                                      <div className="flex items-center gap-1 shrink-0">
+                                        <input type="number" value={unit.hours} min="1" onChange={e=>{const u=[...syllabusData];u[i].units[ui]={...unit,hours:Math.max(1,parseInt(e.target.value)||1)};u[i].rawText=formatUnits(u[i].units);saveSyllabus(u);}} className="w-10 text-center text-xs font-black border border-slate-300 rounded-lg py-1 bg-white outline-none focus:border-blue-400" />
+                                        <span className="text-[10px] font-bold text-slate-500">時間</span>
+                                      </div>
+                                      <button onClick={()=>{const u=[...syllabusData];u[i].units=s.units.filter((_,x)=>x!==ui);u[i].rawText=formatUnits(u[i].units);if(u[i].classes)u[i].classes=u[i].classes.map(c=>c.currentUnitIdx>=u[i].units.length?{...c,currentUnitIdx:Math.max(0,u[i].units.length-1),currentHour:1}:c);saveSyllabus(u);}} className="text-slate-400 hover:text-rose-500 text-xs font-black shrink-0">✕</button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              <div className="flex gap-2 items-center bg-blue-50 p-2.5 rounded-xl border border-blue-200">
+                                <input id={`unit-name-${s.id}`} placeholder="単元名" className="flex-1 text-sm font-bold p-2 border border-slate-300 rounded-lg outline-none focus:border-blue-500 bg-white" />
+                                <input id={`unit-hours-${s.id}`} type="number" min="1" defaultValue="1" placeholder="時数" className="w-16 text-sm font-bold p-2 border border-slate-300 rounded-lg outline-none focus:border-blue-500 bg-white text-center" />
+                                <button onClick={()=>{const nameEl=document.getElementById(`unit-name-${s.id}`);const hoursEl=document.getElementById(`unit-hours-${s.id}`);const nm=nameEl.value.trim();const hr=Math.max(1,parseInt(hoursEl.value)||1);if(nm){const u=[...syllabusData];const newUnits=[...(u[i].units||[]),{name:nm,hours:hr}];u[i]={...u[i],units:newUnits,rawText:formatUnits(newUnits)};saveSyllabus(u);nameEl.value='';hoursEl.value='1';}}} className="bg-blue-600 text-white px-4 py-2 rounded-lg font-black text-sm shadow-sm hover:bg-blue-700 active:scale-95 shrink-0">追加</button>
+                              </div>
+                            </div>
+                          </details>
+                        </>) : (<>
+                        {/* 単一進度モード（既存） */}
                         {s.units && s.units.length > 0 && (
                           <div className="space-y-2 mb-3">
                             <div className="flex items-center justify-between text-xs font-black text-slate-600">
@@ -2125,7 +2186,6 @@
                               {s.units.map((unit,ui)=>{
                                 const isCurrent = ui === s.currentUnitIdx;
                                 const isDone = ui < s.currentUnitIdx;
-                                const currentH = isCurrent ? s.currentHour : (isDone ? unit.hours : 0);
                                 return (
                                   <div key={ui} className={`flex items-center gap-2 p-2 rounded-xl border transition-colors ${isCurrent?'bg-blue-50 border-blue-300 shadow-sm':isDone?'bg-slate-50 border-slate-200':'bg-white border-slate-200'}`}>
                                     <span className={`text-base w-5 text-center shrink-0 ${isDone?'opacity-60':''}`}>{isDone?'✅':isCurrent?'📖':'◻️'}</span>
@@ -2151,11 +2211,16 @@
                             </div>
                           </div>
                         )}
-                        <div className="flex gap-2 items-center bg-blue-50 p-3 rounded-xl border border-blue-200">
+                        <div className="flex gap-2 items-center bg-blue-50 p-3 rounded-xl border border-blue-200 mb-3">
                           <input id={`unit-name-${s.id}`} placeholder="単元名" className="flex-1 text-sm font-bold p-2 border border-slate-300 rounded-lg outline-none focus:border-blue-500 bg-white" />
                           <input id={`unit-hours-${s.id}`} type="number" min="1" defaultValue="1" placeholder="時数" className="w-16 text-sm font-bold p-2 border border-slate-300 rounded-lg outline-none focus:border-blue-500 bg-white text-center" />
                           <button onClick={()=>{const nameEl=document.getElementById(`unit-name-${s.id}`);const hoursEl=document.getElementById(`unit-hours-${s.id}`);const nm=nameEl.value.trim();const hr=Math.max(1,parseInt(hoursEl.value)||1);if(nm){const u=[...syllabusData];const newUnits=[...(u[i].units||[]),{name:nm,hours:hr}];u[i]={...u[i],units:newUnits,rawText:formatUnits(newUnits)};saveSyllabus(u);nameEl.value='';hoursEl.value='1';}}} className="bg-blue-600 text-white px-4 py-2 rounded-lg font-black text-sm shadow-sm hover:bg-blue-700 active:scale-95 shrink-0">追加</button>
                         </div>
+                        <div className="flex gap-2 items-center bg-green-50 p-2.5 rounded-xl border border-green-200">
+                          <input id={`cls-name-${s.id}`} placeholder="クラス名を入力してクラス別管理（例: 2組）" className="flex-1 text-sm font-bold p-2 border border-slate-300 rounded-lg outline-none focus:border-green-500 bg-white" />
+                          <button onClick={()=>{const el=document.getElementById(`cls-name-${s.id}`);const nm=el.value.trim();if(nm){const u=[...syllabusData];u[i].classes=[{name:nm,currentUnitIdx:u[i].currentUnitIdx||0,currentHour:u[i].currentHour||1}];saveSyllabus(u);el.value='';}}} className="bg-green-600 text-white px-3 py-2 rounded-lg font-black text-sm shadow-sm hover:bg-green-700 active:scale-95 shrink-0 whitespace-nowrap">＋クラス追加</button>
+                        </div>
+                        </>)}
                       </>):(
                       <div className="flex flex-wrap gap-2">{s.history?.map((h,hi)=><span key={hi} className="text-sm font-bold bg-white text-teal-800 px-3 py-1.5 rounded-xl border border-teal-300 shadow-sm flex items-center gap-1">{h}<button onClick={()=>{const u=[...syllabusData];u[i].history=s.history.filter((_,x)=>x!==hi);saveSyllabus(u);}} className="ml-1 text-teal-500 hover:text-teal-700 font-black">×</button></span>)}</div>)}
                     </div></div>
@@ -2513,13 +2578,29 @@
                         <div className="text-[11px] font-black text-blue-800 mb-2">💡 進度からワンタップ入力</div>
                         {syllabusData.map(subj => {
                           if(subj.type==='auto') {
-                            const unit=subj.units?.[subj.currentUnitIdx]; const isFinished=subj.units?.length>0&&!unit;
-                            const text=isFinished?`${subj.name}（終了）`:(unit?`${subj.name}（${unit.name} ${subj.currentHour}/${unit.hours}）`:subj.name);
-                            return (
-                              <div key={subj.id} className="flex gap-2">
-                                <button type="button" onClick={()=>setTempSubject(text)} className="flex-1 bg-white text-blue-900 text-sm font-bold py-2 px-3 rounded-lg border border-blue-300 shadow-sm text-left truncate active:scale-95">{text}</button>
-                              </div>
-                            );
+                            if(subj.classes && subj.classes.length > 0) {
+                              return (
+                                <div key={subj.id} className="space-y-1">
+                                  {subj.classes.map((cls,ci)=>{
+                                    const unit=subj.units?.[cls.currentUnitIdx]; const isFinished=subj.units?.length>0&&!unit;
+                                    const text=isFinished?`${subj.name}（${cls.name}・終了）`:(unit?`${subj.name}（${cls.name}・${unit.name} ${cls.currentHour}/${unit.hours}）`:subj.name);
+                                    return (
+                                      <div key={ci} className="flex gap-2">
+                                        <button type="button" onClick={()=>setTempSubject(text)} className="flex-1 bg-white text-blue-900 text-sm font-bold py-2 px-3 rounded-lg border border-blue-300 shadow-sm text-left truncate active:scale-95">{text}</button>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              );
+                            } else {
+                              const unit=subj.units?.[subj.currentUnitIdx]; const isFinished=subj.units?.length>0&&!unit;
+                              const text=isFinished?`${subj.name}（終了）`:(unit?`${subj.name}（${unit.name} ${subj.currentHour}/${unit.hours}）`:subj.name);
+                              return (
+                                <div key={subj.id} className="flex gap-2">
+                                  <button type="button" onClick={()=>setTempSubject(text)} className="flex-1 bg-white text-blue-900 text-sm font-bold py-2 px-3 rounded-lg border border-blue-300 shadow-sm text-left truncate active:scale-95">{text}</button>
+                                </div>
+                              );
+                            }
                           } else {
                             return (
                               <div key={subj.id}>
