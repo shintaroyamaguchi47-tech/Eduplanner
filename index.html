@@ -486,8 +486,101 @@
       const [selectedDateDetails, setSelectedDateDetails] = useState(null);
       const [monthDayPopup, setMonthDayPopup] = useState(null);
 
-      const exportICS = (type) => {
-        showToast('ICSエクスポート機能は現在準備中です。');
+      // Googleカレンダー連携: 週案の予定をGoogleカレンダーに追加
+      const exportToGoogleCalendar = () => {
+        const events = [];
+        const periodIds = ['p1','p2','p3','p4','p5','p6','morning','afterschool'];
+        for (let i = 0; i < 7; i++) {
+          const cd = new Date(currentWeekStart);
+          cd.setDate(cd.getDate() + i);
+          const ds = formatDate(cd);
+          const setting = getDaySetting(ds, i);
+          if (setting.type === 'holiday') continue;
+
+          for (const pid of periodIds) {
+            const data = getCellData(ds, pid, i);
+            if (!data.subject?.trim()) {
+              if (pid === 'afterschool' && data.events?.length > 0) {
+                data.events.forEach(ev => {
+                  if (ev.subject?.trim()) {
+                    events.push({ date: ds, subject: ev.subject.trim(), memo: '', startTime: ev.startTime, endTime: ev.endTime });
+                  }
+                });
+              }
+              continue;
+            }
+            const subjects = pid === 'event' ? data.subject.split('\n').filter(s => s.trim()) : [data.subject.trim()];
+            subjects.forEach(subj => {
+              events.push({ date: ds, subject: subj, memo: data.memo || '', startTime: data.startTime, endTime: data.endTime });
+            });
+          }
+        }
+
+        if (events.length === 0) { showToast('エクスポートする予定がありません'); return; }
+
+        // .ics ファイルを生成してダウンロード
+        const pad2 = n => String(n).padStart(2, '0');
+        const toICSDate = (dateStr, time) => {
+          const [y, m, d] = dateStr.split('-').map(Number);
+          if (time) {
+            const [h, min] = time.split(':').map(Number);
+            return `${y}${pad2(m)}${pad2(d)}T${pad2(h)}${pad2(min)}00`;
+          }
+          return `${y}${pad2(m)}${pad2(d)}`;
+        };
+
+        let ics = 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//EduPlanner//JP\r\nCALSCALE:GREGORIAN\r\nMETHOD:PUBLISH\r\n';
+        events.forEach((ev, idx) => {
+          ics += 'BEGIN:VEVENT\r\n';
+          ics += `UID:eduplanner-${ev.date}-${idx}@eduplanner\r\n`;
+          ics += `SUMMARY:${ev.subject.replace(/[,;\\]/g, ' ')}\r\n`;
+          if (ev.memo) ics += `DESCRIPTION:${ev.memo.replace(/\n/g, '\\n').replace(/[,;\\]/g, ' ')}\r\n`;
+          if (ev.startTime && ev.endTime) {
+            ics += `DTSTART;TZID=Asia/Tokyo:${toICSDate(ev.date, ev.startTime)}\r\n`;
+            ics += `DTEND;TZID=Asia/Tokyo:${toICSDate(ev.date, ev.endTime)}\r\n`;
+          } else if (ev.startTime) {
+            ics += `DTSTART;TZID=Asia/Tokyo:${toICSDate(ev.date, ev.startTime)}\r\n`;
+            const [h, m] = ev.startTime.split(':').map(Number);
+            const endMin = h * 60 + m + 50;
+            ics += `DTEND;TZID=Asia/Tokyo:${toICSDate(ev.date, `${pad2(Math.floor(endMin/60))}:${pad2(endMin%60)}`)}\r\n`;
+          } else {
+            ics += `DTSTART;VALUE=DATE:${toICSDate(ev.date)}\r\n`;
+            ics += `DTEND;VALUE=DATE:${toICSDate(ev.date)}\r\n`;
+          }
+          ics += 'END:VEVENT\r\n';
+        });
+        ics += 'END:VCALENDAR\r\n';
+
+        const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const weekLabel = `${currentWeekStart.getMonth()+1}月${currentWeekStart.getDate()}日`;
+        a.download = `EduPlanner_${weekLabel}.ics`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showToast(`${events.length}件の予定を .ics ファイルで出力しました。Googleカレンダーにインポートできます`);
+      };
+
+      const openGoogleCalendarSingle = (ev) => {
+        const pad2 = n => String(n).padStart(2, '0');
+        const [y, m, d] = ev.date.split('-').map(Number);
+        let dates = '';
+        if (ev.startTime && ev.endTime) {
+          dates = `${y}${pad2(m)}${pad2(d)}T${ev.startTime.replace(':','')}00/${y}${pad2(m)}${pad2(d)}T${ev.endTime.replace(':','')}00`;
+        } else {
+          dates = `${y}${pad2(m)}${pad2(d)}/${y}${pad2(m)}${pad2(d)}`;
+        }
+        const params = new URLSearchParams({
+          action: 'TEMPLATE',
+          text: ev.subject,
+          dates: dates,
+          details: ev.memo || '',
+          ctz: 'Asia/Tokyo'
+        });
+        window.open(`https://calendar.google.com/calendar/render?${params.toString()}`, '_blank');
       };
 
       const todayStr = formatDate(getJSTDate());
@@ -992,7 +1085,53 @@
       const handleSettingChange = (ds, di, ns) => { if(activeTab==='template'){ const n={...templateSettings,[di]:ns}; setTemplateSettings(n); saveAll(baseTemplate,n,weeklyData,weeklySettings); } else { const n={...weeklySettings,[ds]:ns}; setWeeklySettings(n); saveAll(baseTemplate,templateSettings,weeklyData,n); } };
       
       const handleSaveCell = (d) => { if(!editingCell.isTemplate && d.subject){ let up=[...syllabusData]; let ch=false; for(let i=0;i<up.length;i++){ let s=up[i]; if(s.type==='auto'&&s.units?.[s.currentUnitIdx]){ const exp=`${s.name}（${s.units[s.currentUnitIdx].name} ${s.currentHour}/${s.units[s.currentUnitIdx].hours}）`; if(d.subject===exp){ let nh=s.currentHour+1; let nu=s.currentUnitIdx; if(nh>s.units[s.currentUnitIdx].hours){nh=1;nu++;} up[i]={...s,currentHour:nh,currentUnitIdx:nu}; ch=true; break; } }else if(s.type==='history'){ const m=d.subject.match(new RegExp(`^${s.name}（(.+)）$`)); if(m){ let h=s.history||[]; if(!h.includes(m[1])){ up[i]={...s,history:[m[1],...h].slice(0,15)}; ch=true; } } } } if(ch) saveSyllabus(up); } if(editingCell.isTemplate){ const n={...baseTemplate,[`${editingCell.dayIndex}-${editingCell.periodId}`]:d}; saveAll(n,templateSettings,weeklyData,weeklySettings); } else { const n={...weeklyData,[`${editingCell.dateStr}-${editingCell.periodId}`]:{...d,useTemplate:false}}; saveAll(baseTemplate,templateSettings,n,weeklySettings); } setEditingCell(null); };
-      
+
+      // 連続入力：進度データの教科を現在コマ以降に自動で連続入力する
+      const handleAutoFillLessons = (subjIdx, numHours) => {
+        if (!editingCell || editingCell.isTemplate) return;
+        const subj = syllabusData[subjIdx];
+        if (!subj || subj.type !== 'auto') return;
+
+        const periodIds = ['p1','p2','p3','p4','p5','p6'];
+        const currentPIdx = periodIds.indexOf(editingCell.periodId);
+        if (currentPIdx === -1) return;
+
+        const ds = editingCell.dateStr;
+        const di = editingCell.dayIndex;
+        const setting = getDaySetting(ds, di);
+        let nd = {...weeklyData};
+        let up = [...syllabusData];
+        let s = {...up[subjIdx]};
+        let curHour = s.currentHour;
+        let curUnitIdx = s.currentUnitIdx;
+        let filled = 0;
+
+        for (let p = currentPIdx; p < periodIds.length && filled < numHours; p++) {
+          const pid = periodIds[p];
+          const unit = s.units?.[curUnitIdx];
+          if (!unit) break; // 全単元完了
+
+          const text = `${s.name}（${unit.name} ${curHour}/${unit.hours}）`;
+          const times = SCHEDULE_TIMES[setting.type]?.[pid];
+          nd[`${ds}-${pid}`] = {
+            subject: text, memo: '', useTemplate: false,
+            startTime: times?.start || '', endTime: times?.end || '',
+            color: tempColor || ''
+          };
+          filled++;
+
+          // 進度を進める
+          curHour++;
+          if (curHour > unit.hours) { curHour = 1; curUnitIdx++; }
+        }
+
+        up[subjIdx] = {...s, currentHour: curHour, currentUnitIdx: curUnitIdx};
+        saveSyllabus(up);
+        saveAll(baseTemplate, templateSettings, nd, weeklySettings);
+        setEditingCell(null);
+        showToast(`${filled}コマ連続入力しました`);
+      };
+
       const handleCopyDay = (target,source) => { if(source==='') return; const sIdx=parseInt(source); const ns={...weeklySettings,[target]:templateSettings[sIdx]||DEFAULT_TEMPLATE_SETTINGS[sIdx]}; const nd={...weeklyData}; ROWS.forEach(r=>{ nd[`${target}-${r.id}`]={...(baseTemplate[`${sIdx}-${r.id}`]||{}),useTemplate:false}; }); setWeeklySettings(ns); setWeeklyData(nd); saveAll(baseTemplate,templateSettings,nd,ns); };
       const handleRevertDay = (target) => {
         const nd = {...weeklyData}; const ns = {...weeklySettings};
@@ -1772,6 +1911,9 @@
                             <button onClick={copyFromPreviousWeek} className="text-[10px] font-bold text-slate-700 bg-white border border-slate-400 px-2.5 py-1.5 rounded-lg hover:bg-slate-100 shadow-sm transition-colors flex items-center gap-1 whitespace-nowrap" title="先週の週案をコピーして今週に貼り付け">
                               📋 前週コピー
                             </button>
+                            <button onClick={exportToGoogleCalendar} className="text-[10px] font-bold text-green-700 bg-green-50 border border-green-400 px-2.5 py-1.5 rounded-lg hover:bg-green-100 shadow-sm transition-colors flex items-center gap-1 whitespace-nowrap" title="週案をGoogleカレンダーにエクスポート (.icsファイル)">
+                              📅 カレンダー出力
+                            </button>
                           </div>
                         )}
                       </div>
@@ -1889,10 +2031,10 @@
                         )}
                       </div>
                     </div>
-                    <div className="h-[40%] bg-white rounded-2xl shadow-sm border border-slate-300 flex flex-col shrink-0">
-                      <div className="bg-slate-50 border-b border-slate-300 p-3 flex justify-between items-center"><div className="text-xs font-black flex items-center gap-1.5 text-slate-800">📝 TODO</div><button onClick={()=>setShowTodo(true)} className="text-[10px] font-bold bg-white border border-slate-300 px-3 py-1 rounded-lg shadow-sm hover:bg-slate-100 transition-colors text-slate-700">詳細</button></div>
-                      <div className="flex-1 p-2 space-y-2 overflow-y-auto hide-scrollbar bg-slate-50/50">
-                        {incompleteTodos.slice(0, 5).map(t=>{
+                    <div className="flex-1 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-300 dark:border-slate-700 flex flex-col overflow-hidden min-h-0 transition-colors">
+                      <div className="bg-slate-50 dark:bg-slate-900 border-b border-slate-300 dark:border-slate-700 p-3 flex justify-between items-center shrink-0"><div className="text-xs font-black flex items-center gap-1.5 text-slate-800 dark:text-slate-200">📝 TODO</div><button onClick={()=>setShowTodo(true)} className="text-[10px] font-bold bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 px-3 py-1 rounded-lg shadow-sm hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors text-slate-700 dark:text-slate-300">詳細</button></div>
+                      <div className="flex-1 p-2 space-y-2 overflow-y-auto min-h-0 hide-scrollbar bg-slate-50/50 dark:bg-slate-900/50">
+                        {incompleteTodos.slice(0, 8).map(t=>{
                           const isOv=t.dueDate&&t.dueDate<todayStr;
                           return <div key={t.id} className={`flex items-start gap-2 p-2.5 border rounded-xl shadow-sm ${t.important?'bg-amber-50 border-amber-300':isOv?'bg-rose-50 border-rose-300':'bg-white border-slate-300'}`}><input type="checkbox" onChange={()=>saveTodos(todos.map(td=>td.id===t.id?{...td,completed:!td.completed}:td))} className="mt-0.5 w-4 h-4 cursor-pointer"/><div className="flex-1 min-w-0"><div className={`text-[10px] sm:text-xs font-black truncate ${isOv?'text-rose-600':'text-slate-800'}`}>{t.important&&<span className="text-amber-500 mr-1">★</span>}{t.text}</div>{t.dueDate&&<div className="text-[8px] sm:text-[9px] font-bold text-slate-600 mt-1 font-mono">期限: {t.dueDate}</div>}</div></div>
                         })}
@@ -2306,7 +2448,7 @@
               <span className="font-black text-slate-800 flex items-center gap-2 text-lg"><span className="text-xl">📝</span> TODOリスト</span>
               <div className="flex items-center gap-2">
                 <button onClick={copyTodosToClipboard} className="text-[10px] font-bold bg-white text-slate-700 border border-slate-300 px-3 py-1.5 rounded-lg shadow-sm hover:bg-slate-50">📋 コピー</button>
-                <button onClick={() => exportICS('todos')} className="text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200 px-3 py-1.5 rounded-lg shadow-sm hover:bg-blue-100">📤 出力</button>
+                <button onClick={exportToGoogleCalendar} className="text-[10px] font-bold bg-green-50 text-green-700 border border-green-200 px-3 py-1.5 rounded-lg shadow-sm hover:bg-green-100">📅 カレンダー出力</button>
                 <button onClick={() => setShowTodo(false)} className="text-slate-400 hover:text-slate-600 text-2xl font-bold ml-2 transition-colors">&times;</button>
               </div>
             </div>
@@ -2509,15 +2651,38 @@
                     )}
                     
                     {!editingCell.isTemplate && editingCell.periodId.startsWith('p') && syllabusData.length > 0 && (
-                      <div className="bg-blue-50/50 p-3 rounded-xl border border-blue-200 max-h-40 overflow-y-auto hide-scrollbar space-y-2 shadow-inner">
+                      <div className="bg-blue-50/50 p-3 rounded-xl border border-blue-200 max-h-52 overflow-y-auto hide-scrollbar space-y-2 shadow-inner">
                         <div className="text-[11px] font-black text-blue-800 mb-2">💡 進度からワンタップ入力</div>
-                        {syllabusData.map(subj => {
+                        {syllabusData.map((subj, subjIdx) => {
                           if(subj.type==='auto') {
                             const unit=subj.units?.[subj.currentUnitIdx]; const isFinished=subj.units?.length>0&&!unit;
                             const text=isFinished?`${subj.name}（終了）`:(unit?`${subj.name}（${unit.name} ${subj.currentHour}/${unit.hours}）`:subj.name);
+                            const periodIds = ['p1','p2','p3','p4','p5','p6'];
+                            const curPIdx = periodIds.indexOf(editingCell.periodId);
+                            const remainingSlots = curPIdx >= 0 ? periodIds.length - curPIdx : 0;
+                            let remainingHours = 0;
+                            if (unit) {
+                              remainingHours = unit.hours - subj.currentHour + 1;
+                              for (let ui = subj.currentUnitIdx + 1; ui < (subj.units?.length || 0); ui++) {
+                                remainingHours += subj.units[ui].hours;
+                              }
+                            }
+                            const maxFill = Math.min(remainingSlots, remainingHours);
                             return (
-                              <div key={subj.id} className="flex gap-2">
+                              <div key={subj.id} className="flex gap-1.5 items-center">
                                 <button type="button" onClick={()=>setTempSubject(text)} className="flex-1 bg-white text-blue-900 text-sm font-bold py-2 px-3 rounded-lg border border-blue-300 shadow-sm text-left truncate active:scale-95">{text}</button>
+                                {!isFinished && maxFill >= 2 && (
+                                  <select
+                                    onChange={(e) => { if(e.target.value) handleAutoFillLessons(subjIdx, parseInt(e.target.value)); e.target.value=''; }}
+                                    defaultValue=""
+                                    className="bg-green-50 text-green-800 text-[10px] font-black border border-green-400 rounded-lg px-1.5 py-2 shadow-sm cursor-pointer hover:bg-green-100 transition-colors shrink-0"
+                                  >
+                                    <option value="" disabled>連続</option>
+                                    {Array.from({length: maxFill - 1}, (_, k) => k + 2).map(n => (
+                                      <option key={n} value={n}>{n}コマ</option>
+                                    ))}
+                                  </select>
+                                )}
                               </div>
                             );
                           } else {
