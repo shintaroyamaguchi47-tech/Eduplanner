@@ -1156,16 +1156,15 @@
             if (!tmpl || !tmpl.subject || !tmpl.subject.trim()) continue;
             const tSubj = tmpl.subject.trim();
 
-            // テンプレートの教科名と進度データを照合（「202社会」→「社会」のような部分一致にも対応）
-            const subjIdx = up.findIndex(s => tSubj === s.name || tSubj.endsWith(s.name) || tSubj.includes(s.name));
+            // テンプレートの教科名と進度データを完全一致で照合（クラスごとに別管理）
+            const subjIdx = up.findIndex(s => s.name === tSubj);
             if (subjIdx === -1) continue;
             const s = up[subjIdx];
 
             if (s.type === 'auto') {
               const unit = s.units?.[s.currentUnitIdx];
               if (!unit) continue; // 全単元完了済み
-              const prefix = tSubj !== s.name ? tSubj.replace(s.name, '') : '';
-              const text = `${prefix}${s.name}（${unit.name} ${s.currentHour}/${unit.hours}）`;
+              const text = `${s.name}（${unit.name} ${s.currentHour}/${unit.hours}）`;
               const times = SCHEDULE_TIMES[setting.type]?.[pid];
               nd[wk] = {
                 subject: text, memo: tmpl.memo || '', useTemplate: false,
@@ -2337,7 +2336,7 @@
                     const doneHours = s.type==='auto' && s.units ? s.units.slice(0,s.currentUnitIdx).reduce((sum,u)=>sum+u.hours,0) + (s.currentHour-1) : 0;
                     const progressPct = totalHours > 0 ? Math.min(100, Math.round(doneHours/totalHours*100)) : 0;
                     return (
-                    <div key={s.id} className="border border-slate-300 rounded-2xl mb-5 overflow-hidden shadow-sm"><div className="bg-slate-50 p-4 border-b border-slate-300 flex justify-between items-center font-black"><span className="flex items-center gap-3 text-slate-800 text-lg">{s.name}<span className="text-[10px] bg-white border border-blue-300 text-blue-700 px-2 py-0.5 rounded-lg shadow-sm">{s.type==='auto'?'自動':'履歴'}</span></span><button onClick={()=>saveSyllabus(syllabusData.filter(x=>x.id!==s.id))} className="text-xs text-rose-600 font-bold border border-rose-300 bg-white px-3 py-1 rounded-lg hover:bg-rose-50 shadow-sm">削除</button></div>
+                    <div key={s.id} className="border border-slate-300 rounded-2xl mb-5 overflow-hidden shadow-sm"><div className="bg-slate-50 p-4 border-b border-slate-300 flex justify-between items-center font-black"><span className="flex items-center gap-3 text-slate-800 text-lg">{s.name}<span className="text-[10px] bg-white border border-blue-300 text-blue-700 px-2 py-0.5 rounded-lg shadow-sm">{s.type==='auto'?'自動':'履歴'}</span></span><div className="flex gap-2">{s.type==='auto'&&<button onClick={()=>{const newName=prompt('複製先の教科名（例: 203社会）',s.name);if(newName&&newName.trim()){saveSyllabus([...syllabusData,{id:Date.now().toString(),name:newName.trim(),type:'auto',units:s.units?s.units.map(u=>({...u})):[],currentUnitIdx:0,currentHour:1,rawText:s.rawText||''}]);}}} className="text-xs text-blue-600 font-bold border border-blue-300 bg-white px-3 py-1 rounded-lg hover:bg-blue-50 shadow-sm">複製</button>}<button onClick={()=>saveSyllabus(syllabusData.filter(x=>x.id!==s.id))} className="text-xs text-rose-600 font-bold border border-rose-300 bg-white px-3 py-1 rounded-lg hover:bg-rose-50 shadow-sm">削除</button></div></div>
                     <div className="p-4 bg-slate-50/50">
                       {s.type==='auto'?(<>
                         {s.units && s.units.length > 0 && (
