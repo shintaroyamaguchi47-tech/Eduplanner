@@ -1156,15 +1156,16 @@
             if (!tmpl || !tmpl.subject || !tmpl.subject.trim()) continue;
             const tSubj = tmpl.subject.trim();
 
-            // テンプレートの教科名と進度データを照合
-            const subjIdx = up.findIndex(s => s.name === tSubj);
+            // テンプレートの教科名と進度データを照合（「202社会」→「社会」のような部分一致にも対応）
+            const subjIdx = up.findIndex(s => tSubj === s.name || tSubj.endsWith(s.name) || tSubj.includes(s.name));
             if (subjIdx === -1) continue;
             const s = up[subjIdx];
 
             if (s.type === 'auto') {
               const unit = s.units?.[s.currentUnitIdx];
               if (!unit) continue; // 全単元完了済み
-              const text = `${s.name}（${unit.name} ${s.currentHour}/${unit.hours}）`;
+              const prefix = tSubj !== s.name ? tSubj.replace(s.name, '') : '';
+              const text = `${prefix}${s.name}（${unit.name} ${s.currentHour}/${unit.hours}）`;
               const times = SCHEDULE_TIMES[setting.type]?.[pid];
               nd[wk] = {
                 subject: text, memo: tmpl.memo || '', useTemplate: false,
