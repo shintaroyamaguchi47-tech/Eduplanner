@@ -1132,6 +1132,60 @@
         showToast(`${filled}コマ連続入力しました`);
       };
 
+      // 週の自動入力：テンプレートの教科と進度データを照合し、自動的に週案を埋める
+      const handleAutoFillWeek = () => {
+        if (syllabusData.length === 0) { showToast('進度データがありません'); return; }
+        const periodIds = ['p1','p2','p3','p4','p5','p6'];
+        let nd = {...weeklyData};
+        let up = syllabusData.map(s => ({...s}));
+        let filled = 0;
+
+        for (let i = 0; i < 7; i++) {
+          const cd = new Date(currentWeekStart); cd.setDate(cd.getDate() + i);
+          const ds = formatDate(cd);
+          const setting = getDaySetting(ds, i);
+          if (setting.type === 'holiday') continue;
+
+          for (const pid of periodIds) {
+            const wk = `${ds}-${pid}`;
+            const ov = nd[wk];
+            if (ov && !ov.useTemplate) continue; // 既に手動入力済み
+
+            const tk = `${i}-${pid}`;
+            const tmpl = baseTemplate[tk];
+            if (!tmpl || !tmpl.subject || !tmpl.subject.trim()) continue;
+            const tSubj = tmpl.subject.trim();
+
+            // テンプレートの教科名と進度データを照合
+            const subjIdx = up.findIndex(s => s.name === tSubj);
+            if (subjIdx === -1) continue;
+            const s = up[subjIdx];
+
+            if (s.type === 'auto') {
+              const unit = s.units?.[s.currentUnitIdx];
+              if (!unit) continue; // 全単元完了済み
+              const text = `${s.name}（${unit.name} ${s.currentHour}/${unit.hours}）`;
+              const times = SCHEDULE_TIMES[setting.type]?.[pid];
+              nd[wk] = {
+                subject: text, memo: tmpl.memo || '', useTemplate: false,
+                startTime: times?.start || '', endTime: times?.end || '', color: ''
+              };
+              filled++;
+              // 進度を進める
+              let nh = s.currentHour + 1;
+              let nu = s.currentUnitIdx;
+              if (nh > unit.hours) { nh = 1; nu++; }
+              up[subjIdx] = {...s, currentHour: nh, currentUnitIdx: nu};
+            }
+          }
+        }
+
+        if (filled === 0) { showToast('自動入力できる授業がありません'); return; }
+        saveSyllabus(up);
+        saveAll(baseTemplate, templateSettings, nd, weeklySettings);
+        showToast(`📚 ${filled}コマ自動入力しました`);
+      };
+
       const handleCopyDay = (target,source) => { if(source==='') return; const sIdx=parseInt(source); const ns={...weeklySettings,[target]:templateSettings[sIdx]||DEFAULT_TEMPLATE_SETTINGS[sIdx]}; const nd={...weeklyData}; ROWS.forEach(r=>{ nd[`${target}-${r.id}`]={...(baseTemplate[`${sIdx}-${r.id}`]||{}),useTemplate:false}; }); setWeeklySettings(ns); setWeeklyData(nd); saveAll(baseTemplate,templateSettings,nd,ns); };
       const handleRevertDay = (target) => {
         const nd = {...weeklyData}; const ns = {...weeklySettings};
@@ -1144,7 +1198,29 @@
       const updateTempEvent = (i,f,v) => { const n=[...tempEvents]; n[i][f]=v; setTempEvents(n); };
       
       const handleSaveNote = () => { if(!editingNote.title.trim()&&!editingNote.content.trim()){ setEditingNote(null); return; } if(editingNote.type==='diary'){ const wk=`${editingNote.dateStr}-diary`; const nd={...weeklyData,[wk]:{...(weeklyData[wk]||{}),memo:editingNote.content,useTemplate:false}}; setWeeklyData(nd); saveAll(baseTemplate,templateSettings,nd,weeklySettings); showToast('メモを更新しました'); } else { const isN=!notesData.some(n=>n.id===editingNote.id); const ts=Date.now(); const nn=isN?[{...editingNote,type:'note',updatedAt:ts},...notesData]:notesData.map(n=>n.id===editingNote.id?{...editingNote,updatedAt:ts}:n); saveNotes(nn); showToast('ノートを保存しました'); } setEditingNote(null); };
-      const shareNoteText = async(n) => { const dStr = new Date(n.updatedAt || Date.now()).toLocaleDateString('ja-JP'); const t = `■ ${n.title||'無題'}\n(${dStr})\n\n${n.content||''}`; try{ if(navigator.share){await navigator.share({title:n.title||'EduPlanner',text:t});showToast('共有しました');return;}}catch(e){if(e.name!=='AbortError')console.error(e);} try{await navigator.clipboard.writeText(t);showToast('📋 コピーしました');}catch(e){showToast('コピーに失敗しました');} };
+      const htmlToFormattedText = (html) => {
+        if (!html) return '';
+        const div = document.createElement('div');
+        div.innerHTML = html;
+        const walk = (node) => {
+          if (node.nodeType === 3) return node.textContent;
+          if (node.nodeType !== 1) return '';
+          const tag = node.tagName;
+          if (tag === 'INPUT' && node.type === 'checkbox') return node.checked ? '☑ ' : '☐ ';
+          if (tag === 'IMG') return '[画像]\n';
+          if (tag === 'BR') return '\n';
+          const inner = Array.from(node.childNodes).map(walk).join('');
+          if (tag === 'H1') return `\n■ ${inner.trim()}\n`;
+          if (tag === 'H2') return `\n▸ ${inner.trim()}\n`;
+          if (tag === 'LI') return `・${inner.trim()}\n`;
+          if (tag === 'UL' || tag === 'OL') return `\n${inner}`;
+          if (tag === 'B' || tag === 'STRONG') return `【${inner}】`;
+          if (tag === 'DIV' || tag === 'P') { const t = inner.trim(); return t ? t + '\n' : ''; }
+          return inner;
+        };
+        return walk(div).replace(/\n{3,}/g, '\n\n').trim();
+      };
+      const shareNoteText = async(n) => { const dStr = new Date(n.updatedAt || Date.now()).toLocaleDateString('ja-JP'); const formatted = typeof n.content === 'string' && (n.content.includes('<') ? htmlToFormattedText(n.content) : n.content); const t = `■ ${n.title||'無題'}\n(${dStr})\n\n${formatted||''}`; try{ if(navigator.share){await navigator.share({title:n.title||'EduPlanner',text:t});showToast('共有しました');return;}}catch(e){if(e.name!=='AbortError')console.error(e);} try{await navigator.clipboard.writeText(t);showToast('📋 コピーしました');}catch(e){showToast('コピーに失敗しました');} };
       const copyTodosToClipboard = () => { const pending = todos.filter(t => !t.completed); if (!pending.length) { showToast('未完了のタスクがありません'); return; } const text = pending.map(t => { let line = t.important ? `⭐ ${t.text}` : t.text; if (t.dueDate) line += ` (期限: ${t.dueDate})`; return line; }).join('\n'); const textArea = document.createElement("textarea"); textArea.value = text; document.body.appendChild(textArea); textArea.select(); try { document.execCommand('copy'); showToast('📋 TODOをコピーしました！'); } catch (err) { showToast('コピーに失敗しました。'); } document.body.removeChild(textArea); };
 
       const incompleteTodos = useMemo(() => todos.filter(t => !t.completed), [todos]);
@@ -1908,6 +1984,11 @@
                         
                         {!isMobile && (
                           <div className="flex gap-1.5 ml-auto">
+                            {syllabusData.some(s => s.type === 'auto' && s.units?.length > 0) && (
+                              <button onClick={handleAutoFillWeek} className="text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-400 px-2.5 py-1.5 rounded-lg hover:bg-blue-100 shadow-sm transition-colors flex items-center gap-1 whitespace-nowrap" title="基本設定の教科と進度データを照合し、今週の授業を自動入力">
+                                📚 進度から自動入力
+                              </button>
+                            )}
                             <button onClick={copyFromPreviousWeek} className="text-[10px] font-bold text-slate-700 bg-white border border-slate-400 px-2.5 py-1.5 rounded-lg hover:bg-slate-100 shadow-sm transition-colors flex items-center gap-1 whitespace-nowrap" title="先週の週案をコピーして今週に貼り付け">
                               📋 前週コピー
                             </button>
@@ -1915,6 +1996,11 @@
                               📅 カレンダー出力
                             </button>
                           </div>
+                        )}
+                        {isMobile && syllabusData.some(s => s.type === 'auto' && s.units?.length > 0) && (
+                          <button onClick={handleAutoFillWeek} className="text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-400 px-2 py-1.5 rounded-lg hover:bg-blue-100 shadow-sm transition-colors shrink-0 whitespace-nowrap" title="進度から自動入力">
+                            📚 自動
+                          </button>
                         )}
                       </div>
                     ) : (
@@ -2141,10 +2227,9 @@
                       
                       <div className="flex justify-between items-center pt-3 border-t border-slate-200 shrink-0">
                         <button onClick={()=>{
-                          const tempDiv = document.createElement('div');
-                          tempDiv.innerHTML = editingNote.content || '';
-                          const plainText = tempDiv.innerText || tempDiv.textContent || '';
-                          shareNoteText({...editingNote, content: plainText});
+                          const editor = document.getElementById('note-editor');
+                          const html = editor ? editor.innerHTML : editingNote.content || '';
+                          shareNoteText({...editingNote, content: html});
                         }} className="px-4 py-2 bg-slate-50 hover:bg-blue-50 text-slate-600 hover:text-blue-700 border border-slate-300 rounded-lg font-bold text-xs transition-colors shadow-sm">📤 共有・コピー</button>
                         <div className="flex gap-3"><button onClick={()=>setEditingNote(null)} className="px-5 py-2 bg-slate-100 border border-slate-300 rounded-lg font-bold text-xs text-slate-700 shadow-sm">戻る</button><button onClick={handleSaveNote} className="px-8 py-2 bg-blue-600 text-white rounded-lg font-bold text-xs shadow-md active:scale-95">保存</button></div>
                       </div>
@@ -2176,7 +2261,7 @@
                             <div className="text-[10px] text-slate-400 font-bold flex justify-between items-center mt-3 border-t border-slate-200/60 pt-3 h-8 shrink-0">
                               <span>{new Date(n.updatedAt).toLocaleDateString('ja-JP')}</span>
                               <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button onClick={(e) => { e.stopPropagation(); shareNoteText({...n, content: textPreview}); }} className="bg-white text-blue-600 border border-blue-200 hover:bg-blue-50 px-2.5 py-1 rounded-md font-bold transition-colors shadow-sm text-[10px]">共有・コピー</button>
+                                <button onClick={(e) => { e.stopPropagation(); shareNoteText(n); }} className="bg-white text-blue-600 border border-blue-200 hover:bg-blue-50 px-2.5 py-1 rounded-md font-bold transition-colors shadow-sm text-[10px]">共有・コピー</button>
                                 {n.type !== 'diary' && (
                                   <button onClick={(e) => { e.stopPropagation(); if(confirm('本当に削除しますか？')) saveNotes(notesData.filter(nd=>nd.id!==n.id)); }} className="bg-white text-rose-500 border border-rose-200 hover:bg-rose-50 px-2.5 py-1 rounded-md font-bold transition-colors shadow-sm text-[10px]">削除</button>
                                 )}
