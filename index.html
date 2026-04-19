@@ -1855,7 +1855,7 @@
                           </div>
                         ) : row.id === 'afterschool' ? (
                           <div className={`space-y-1.5 flex flex-col ${activeTab === 'weekly' ? '' : 'h-full justify-start'}`}>
-                            {(data.events?.length?data.events:[{subject:data.subject,start:data.startTime}]).filter(e=>e.subject).map((e,idx)=>(
+                            {(data.events?.length?data.events:[{subject:data.subject,start:data.startTime}]).filter(e=>e.subject).slice().sort((a,b)=>(a.startTime||'99:99').localeCompare(b.startTime||'99:99')).map((e,idx)=>(
                               <div key={idx} className="flex flex-col">
                                 {e.startTime && <div className={`text-[6px] sm:text-[7px] font-mono font-bold leading-none opacity-90 ${blockText} mb-0.5`}>{e.startTime}{e.endTime?`-${e.endTime}`:''}</div>}
                                 <div className={`${fontSizeClass} font-black mt-0.5 break-words ${activeTab === 'weekly' && row.id !== 'event' ? 'whitespace-pre-wrap' : ''} ${blockText}`} title={e.subject}>{e.subject}</div>
