@@ -2204,8 +2204,12 @@
                     </div>
 
                     <div className={`flex flex-col relative ${activeTab === 'template' || !isMobile ? 'flex-1 min-h-0' : 'pb-4'}`}>
-                      {ROWS.filter(r=>r.id!=='diary').map(row => renderRow(row))}
-                      {activeTab === 'weekly' && renderHolidayOverlays()}
+                      {renderRow(ROWS.find(r => r.id === 'event'))}
+                      <div className="flex flex-col relative min-h-0" style={(activeTab === 'template' || !isMobile) ? {flex: '33.5 1 0%'} : undefined}>
+                        {ROWS.filter(r => r.id !== 'diary' && r.id !== 'event' && r.id !== 'afterschool').map(row => renderRow(row))}
+                        {activeTab === 'weekly' && renderHolidayOverlays()}
+                      </div>
+                      {renderRow(ROWS.find(r => r.id === 'afterschool'))}
                     </div>
                   </div>
                 </div>
