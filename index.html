@@ -1110,39 +1110,71 @@
       
       const handleSaveCell = (d) => { if(!editingCell.isTemplate && d.subject){ let up=[...syllabusData]; let ch=false; for(let i=0;i<up.length;i++){ let s=up[i]; if(s.type==='auto') { const tryMatch = (prefix, cls) => { const prog = getClassProgress(s, cls); const unit = s.units?.[prog.currentUnitIdx]; if(!unit) return false; const exp=`${prefix}${s.name}（${unit.name} ${prog.currentHour}/${unit.hours}）`; if(d.subject===exp){ let nh=prog.currentHour+1; let nu=prog.currentUnitIdx; if(nh>unit.hours){nh=1;nu++;} up[i]=setClassProgress(up[i],cls,nu,nh); return true; } return false; }; if(s.classes&&s.classes.length>0){ for(const cls of s.classes){ if(tryMatch(cls,cls)){ch=true;break;} } }else{ if(tryMatch('',null)) ch=true; } if(ch) break; }else if(s.type==='history'){ const pat=s.classes&&s.classes.length>0 ? `^(?:${s.classes.join('|')})?${s.name}（(.+)）$` : `^${s.name}（(.+)）$`; const m=d.subject.match(new RegExp(pat)); if(m){ let h=s.history||[]; if(!h.includes(m[1])){ up[i]={...s,history:[m[1],...h].slice(0,15)}; ch=true; } } } } if(ch) saveSyllabus(up); } if(editingCell.isTemplate){ const n={...baseTemplate,[`${editingCell.dayIndex}-${editingCell.periodId}`]:d}; saveAll(n,templateSettings,weeklyData,weeklySettings); } else { const n={...weeklyData,[`${editingCell.dateStr}-${editingCell.periodId}`]:{...d,useTemplate:false}}; saveAll(baseTemplate,templateSettings,n,weeklySettings); } setEditingCell(null); };
 
-      // 連続入力：進度データの教科を現在コマ以降に自動で連続入力する
-      const handleAutoFillLessons = (subjIdx, numHours, cls = null) => {
+      // 週全体スマート自動入力：現在コマを含め今週のテンプレート一致する空きコマに連続入力
+      const handleSmartAutoFill = (subjIdx, cls = null) => {
         if (!editingCell || editingCell.isTemplate) return;
         const subj = syllabusData[subjIdx];
         if (!subj || subj.type !== 'auto') return;
 
-        const periodIds = ['p1','p2','p3','p4','p5','p6'];
-        const currentPIdx = periodIds.indexOf(editingCell.periodId);
-        if (currentPIdx === -1) return;
-
         const ds = editingCell.dateStr;
+        const pid = editingCell.periodId;
         const di = editingCell.dayIndex;
-        const setting = getDaySetting(ds, di);
-        let nd = {...weeklyData};
+        const periodIds = ['p1','p2','p3','p4','p5','p6'];
+        const prefix = cls || '';
+        const expectedTmpl = `${prefix}${subj.name}`;
+
+        // 現在コマは常に含める（テンプレート不問）
+        const currentSetting = getDaySetting(ds, di);
+        const slotsToFill = [{ dstr: ds, p: pid, dayIdx: di, setting: currentSetting }];
+
+        // 現在コマ以降の空きテンプレート一致コマを週内で収集
+        for (let i = 0; i < 7; i++) {
+          const cd = new Date(currentWeekStart); cd.setDate(cd.getDate() + i);
+          const dstr = formatDate(cd);
+          if (dstr < ds) continue;
+          const setting = getDaySetting(dstr, i);
+          if (setting.type === 'holiday') continue;
+
+          for (const p of periodIds) {
+            if (dstr === ds && p === pid) continue; // 現在コマは既に追加済み
+            if (dstr === ds && periodIds.indexOf(p) < periodIds.indexOf(pid)) continue;
+
+            // テンプレート一致チェック
+            const tk = `${i}-${p}`;
+            const tmpl = baseTemplate[tk];
+            if (!tmpl || !tmpl.subject || tmpl.subject.trim() !== expectedTmpl) continue;
+
+            // 空きコマのみ対象（既に別内容があるセルはスキップ）
+            const wk = `${dstr}-${p}`;
+            const existing = weeklyData[wk];
+            if (existing && !existing.useTemplate && existing.subject && existing.subject.trim() !== '') continue;
+
+            slotsToFill.push({ dstr, p, dayIdx: i, setting });
+          }
+        }
+
+        let nd = { ...weeklyData };
         let up = [...syllabusData];
-        let s = {...up[subjIdx]};
+        const s = up[subjIdx];
         const prog = getClassProgress(s, cls);
         let curHour = prog.currentHour;
         let curUnitIdx = prog.currentUnitIdx;
-        const prefix = cls || '';
         let filled = 0;
 
-        for (let p = currentPIdx; p < periodIds.length && filled < numHours; p++) {
-          const pid = periodIds[p];
+        for (const { dstr, p, setting } of slotsToFill) {
           const unit = s.units?.[curUnitIdx];
-          if (!unit) break;
+          if (!unit) break; // 全単元完了
 
           const text = `${prefix}${s.name}（${unit.name} ${curHour}/${unit.hours}）`;
-          const times = SCHEDULE_TIMES[setting.type]?.[pid];
-          nd[`${ds}-${pid}`] = {
-            subject: text, memo: '', useTemplate: false,
-            startTime: times?.start || '', endTime: times?.end || '',
-            color: tempColor || ''
+          const times = SCHEDULE_TIMES[setting.type]?.[p];
+          const existing = nd[`${dstr}-${p}`] || {};
+          nd[`${dstr}-${p}`] = {
+            subject: text,
+            memo: existing.memo || '',
+            useTemplate: false,
+            startTime: times?.start || existing.startTime || '',
+            endTime: times?.end || existing.endTime || '',
+            color: tempColor || existing.color || ''
           };
           filled++;
           curHour++;
@@ -1153,7 +1185,7 @@
         saveSyllabus(up);
         saveAll(baseTemplate, templateSettings, nd, weeklySettings);
         setEditingCell(null);
-        showToast(`${filled}コマ連続入力しました`);
+        showToast(`📚 ${filled}コマ自動入力しました`);
       };
 
       // 単元テスト・自習・延長などの特別コマを挿入し、同週の後続セルを1コマずらす
@@ -2924,7 +2956,8 @@
                     
                     {!editingCell.isTemplate && editingCell.periodId.startsWith('p') && syllabusData.length > 0 && (
                       <div className="bg-blue-50/50 p-3 rounded-xl border border-blue-200 max-h-52 overflow-y-auto hide-scrollbar space-y-2 shadow-inner">
-                        <div className="text-[11px] font-black text-blue-800 mb-2">💡 進度からワンタップ入力</div>
+                        <div className="text-[11px] font-black text-blue-800 mb-1">📚 今週を自動入力</div>
+                        <div className="text-[10px] text-blue-600 mb-2">ボタンで現在コマ〜週末まで空きコマに連続入力　▸ 1コマのみは右ボタン</div>
                         {syllabusData.map((subj, subjIdx) => {
                           if(subj.type==='auto') {
                             const clsList = subj.classes && subj.classes.length > 0 ? subj.classes : [null];
@@ -2934,25 +2967,11 @@
                               const isFinished = subj.units?.length > 0 && !unit;
                               const prefix = cls || '';
                               const text = isFinished ? `${prefix}${subj.name}（終了）` : (unit ? `${prefix}${subj.name}（${unit.name} ${prog.currentHour}/${unit.hours}）` : `${prefix}${subj.name}`);
-                              const periodIds = ['p1','p2','p3','p4','p5','p6'];
-                              const curPIdx = periodIds.indexOf(editingCell.periodId);
-                              const remainingSlots = curPIdx >= 0 ? periodIds.length - curPIdx : 0;
-                              let remainingHours = 0;
-                              if (unit) {
-                                remainingHours = unit.hours - prog.currentHour + 1;
-                                for (let ui = prog.currentUnitIdx + 1; ui < (subj.units?.length || 0); ui++) remainingHours += subj.units[ui].hours;
-                              }
-                              const maxFill = Math.min(remainingSlots, remainingHours);
                               return (
                                 <div key={`${subj.id}-${cls||'_'}`} className="space-y-1">
                                   <div className="flex gap-1.5 items-center">
-                                    <button type="button" onClick={()=>setTempSubject(text)} className="flex-1 bg-white text-blue-900 text-sm font-bold py-2 px-3 rounded-lg border border-blue-300 shadow-sm text-left truncate active:scale-95">{text}</button>
-                                    {!isFinished && maxFill >= 2 && (
-                                      <select onChange={(e) => { if(e.target.value) handleAutoFillLessons(subjIdx, parseInt(e.target.value), cls); e.target.value=''; }} defaultValue="" className="bg-green-50 text-green-800 text-[10px] font-black border border-green-400 rounded-lg px-1.5 py-2 shadow-sm cursor-pointer hover:bg-green-100 transition-colors shrink-0">
-                                        <option value="" disabled>連続</option>
-                                        {Array.from({length: maxFill - 1}, (_, k) => k + 2).map(n => (<option key={n} value={n}>{n}コマ</option>))}
-                                      </select>
-                                    )}
+                                    <button type="button" onClick={()=>handleSmartAutoFill(subjIdx, cls)} disabled={isFinished} className="flex-1 bg-blue-600 text-white text-sm font-bold py-2 px-3 rounded-lg shadow-sm text-left truncate active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-blue-700 transition-colors">{text}</button>
+                                    <button type="button" onClick={()=>setTempSubject(text)} title="このコマだけ入力" className="shrink-0 bg-white text-slate-600 text-[10px] font-bold py-2 px-2 rounded-lg border border-slate-300 shadow-sm active:scale-95 hover:bg-slate-50 transition-colors whitespace-nowrap">1コマ</button>
                                   </div>
                                   <div className="flex gap-1 pl-0.5">
                                     <button type="button" onClick={()=>handleInsertSpecial('test', subjIdx, cls)} className="flex-1 bg-rose-50 text-rose-700 text-[11px] font-black py-1.5 px-2 rounded-md border border-rose-300 shadow-sm hover:bg-rose-100 active:scale-95 transition-all">🧪 単元テスト</button>
