@@ -1934,7 +1934,7 @@
           const dateStr = formatDate(d);
           const setting = getDaySetting(dateStr, i);
           if (setting.type !== 'holiday') return;
-          
+
           const allItems = [];
           ['morning','p1','p2','p3','p4','lunch','p5','p6'].forEach(pid => {
             const cd = getCellData(dateStr, pid, i);
@@ -1944,11 +1944,16 @@
           });
 
           const RANGE_START = 7.5 * 60; // 7:30
-          const RANGE_END = 16 * 60;  // 16:00
+          const RANGE_END = 16 * 60;    // 16:00
+          const NOON = 12 * 60;         // 12:00
           const TOTAL_RANGE = RANGE_END - RANGE_START;
           const COLORS = ['#0d9488','#3b82f6','#8b5cf6','#06b6d4','#10b981','#f59e0b','#ec4899'];
-          const itemsWithoutTime = allItems.filter(e => !e.start).length;
-          let untimedCounter = 0;
+          const MORNING_PIDS = ['morning','p1','p2','p3','p4'];
+          const noonPct = ((NOON - RANGE_START) / TOTAL_RANGE) * 100;
+          const morningUntimedCount = allItems.filter(e => !e.start && MORNING_PIDS.includes(e.pid)).length;
+          const afternoonUntimedCount = allItems.filter(e => !e.start && !MORNING_PIDS.includes(e.pid)).length;
+          let morningUntimedCounter = 0;
+          let afternoonUntimedCounter = 0;
 
           overlays.push(
             <div key={`hol-overlay-${i}`} className="absolute inset-y-0 left-0 right-0 z-30 pointer-events-none flex">
@@ -1961,6 +1966,15 @@
                     <div key={j}
                          className={`min-w-0 ${cf} pointer-events-auto relative z-30 cursor-pointer bg-slate-300/70 dark:bg-slate-700/80 hover:bg-slate-300/90 dark:hover:bg-slate-700/90 transition-colors`}
                          onClick={() => openEditModal({subject:'',memo:'',startTime:'',endTime:'',events:[],handwriting:null}, dateStr, ROWS.find(r=>r.id===getAvailablePid(dateStr, i)), i, day, true, null)}>
+                      <div className="absolute top-1 left-0 right-0 z-50 flex justify-center pointer-events-none">
+                        <span className="text-[7px] sm:text-[8px] font-black text-amber-700 bg-amber-50/90 border border-amber-300/60 px-1.5 py-0.5 rounded-full leading-none shadow-sm">午前</span>
+                      </div>
+                      <div className="absolute left-0 right-0 z-50 pointer-events-none" style={{ top: `${noonPct}%` }}>
+                        <div className="w-full border-t-2 border-slate-500/60 dark:border-slate-400/60"></div>
+                        <div className="flex justify-center mt-0.5">
+                          <span className="text-[7px] sm:text-[8px] font-black text-blue-700 bg-blue-50/90 dark:bg-blue-900/90 border border-blue-300/60 px-1.5 py-0.5 rounded-full leading-none shadow-sm">午後</span>
+                        </div>
+                      </div>
                       {allItems.map((e, idx) => {
                         let topPct, heightPct;
                         if (e.start) {
@@ -1971,10 +1985,18 @@
                           topPct = Math.max(0, ((startMin - RANGE_START) / TOTAL_RANGE) * 100);
                           heightPct = Math.max(4, ((endMin - startMin) / TOTAL_RANGE) * 100);
                         } else {
-                          const slotHeight = Math.min(18, Math.max(8, 90 / Math.max(1, itemsWithoutTime)));
-                          topPct = 5 + untimedCounter * slotHeight;
-                          heightPct = Math.max(8, slotHeight - 2);
-                          untimedCounter++;
+                          const isMorningPid = MORNING_PIDS.includes(e.pid);
+                          if (isMorningPid) {
+                            const slotH = Math.min(18, Math.max(8, (noonPct - 10) / Math.max(1, morningUntimedCount)));
+                            topPct = 10 + morningUntimedCounter * (slotH + 1);
+                            heightPct = Math.max(8, slotH - 2);
+                            morningUntimedCounter++;
+                          } else {
+                            const slotH = Math.min(18, Math.max(8, (90 - noonPct - 5) / Math.max(1, afternoonUntimedCount)));
+                            topPct = noonPct + 5 + afternoonUntimedCounter * (slotH + 1);
+                            heightPct = Math.max(8, slotH - 2);
+                            afternoonUntimedCounter++;
+                          }
                         }
                         const color = COLORS[idx % COLORS.length];
                         return (
