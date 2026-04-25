@@ -1964,7 +1964,7 @@
                   if (j !== i) return <div key={j} className={`min-w-0 ${cf}`}></div>;
                   return (
                     <div key={j}
-                         className={`min-w-0 ${cf} pointer-events-auto relative z-30 cursor-pointer bg-slate-300/70 dark:bg-slate-700/80 hover:bg-slate-300/90 dark:hover:bg-slate-700/90 transition-colors`}
+                         className={`min-w-0 ${cf} pointer-events-auto relative z-30 cursor-pointer bg-slate-300/70 dark:bg-slate-700/80 hover:bg-slate-300/90 dark:hover:bg-slate-700/90 transition-colors overflow-hidden`}
                          onClick={() => openEditModal({subject:'',memo:'',startTime:'',endTime:'',events:[],handwriting:null}, dateStr, ROWS.find(r=>r.id===getAvailablePid(dateStr, i)), i, day, true, null)}>
                       <div className="absolute top-1 left-0 right-0 z-50 flex justify-center pointer-events-none">
                         <span className="text-[7px] sm:text-[8px] font-black text-amber-700 bg-amber-50/90 border border-amber-300/60 px-1.5 py-0.5 rounded-full leading-none shadow-sm">午前</span>
@@ -1982,8 +1982,8 @@
                           const startMin = sh*60+sm;
                           let endMin = startMin + 60;
                           if (e.end) { const [eh,em]=e.end.split(':').map(Number); endMin=eh*60+em; }
-                          topPct = Math.max(0, ((startMin - RANGE_START) / TOTAL_RANGE) * 100);
-                          heightPct = Math.max(4, ((endMin - startMin) / TOTAL_RANGE) * 100);
+                          topPct = Math.max(0, Math.min(88, ((startMin - RANGE_START) / TOTAL_RANGE) * 100));
+                          heightPct = Math.max(4, Math.min(((endMin - startMin) / TOTAL_RANGE) * 100, 100 - topPct));
                         } else {
                           const isMorningPid = MORNING_PIDS.includes(e.pid);
                           if (isMorningPid) {
