@@ -1828,12 +1828,9 @@
                 const overflowClass = activeTab === 'weekly' && row.id !== 'event' && row.id !== 'afterschool' ? 'overflow-visible' : 'overflow-hidden';
 
                 if (activeTab === 'weekly' && isH && row.id !== 'event' && row.id !== 'afterschool') {
-                  if (!data.subject?.trim()) {
-                    return (
-                      <div key={i} onClick={()=>openEditModal(data,ds,row,i,day,isH,null)} className={`min-w-0 ${cf} border-r border-slate-300 dark:border-slate-700 last:border-r-0 ${cellBg} h-full cursor-pointer hover:bg-slate-200/40`}></div>
-                    );
-                  }
-                  // データあり → 通常セルとして描画
+                  return (
+                    <div key={i} className={`min-w-0 ${cf} border-r border-slate-300 dark:border-slate-700 last:border-r-0 ${cellBg} h-full`}></div>
+                  );
                 }
 
                 const hasData = (data.subject?.trim()) || (row.id === 'afterschool' && data.events?.some(e => e.subject?.trim()));
