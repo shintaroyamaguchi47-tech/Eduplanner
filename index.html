@@ -138,6 +138,27 @@
     const TODO_TAGS = ['授業準備', '学年業務', '部活', '会議・事務', '生徒・保護者', 'その他'];
     const DEFAULT_TEMPLATE_SETTINGS = { 0:{type:'normal',clean:false}, 1:{type:'normal',clean:true}, 2:{type:'normal',clean:true}, 3:{type:'normal',clean:false}, 4:{type:'normal',clean:true}, 5:{type:'holiday',clean:false}, 6:{type:'holiday',clean:false} };
 
+    const getYearlyEventText = (yData, ds) => {
+      const [y, m, d] = ds.split('-').map(Number);
+      const sy = m < 4 ? y - 1 : y;
+      return yData?.[sy]?.[`${m}-${d}`] || '';
+    };
+    const getEventImpact = (text = '') => {
+      const s = text.trim();
+      if (!s) return null;
+      if (/休業|休校|振替休|代休|休日|お休み/.test(s)) return { kind:'holiday', label:'休業', scheduleType:'holiday', badge:'bg-rose-100 text-rose-700 border-rose-300' };
+      if (/入試|テスト|試験|考査|学調|学力/.test(s)) return { kind:'test', label:'テスト', scheduleType:/入試/.test(s)?'special':'short', badge:'bg-rose-100 text-rose-700 border-rose-300' };
+      if (/始業式|終業式|修了式|卒業|入学式|離任式|式/.test(s)) return { kind:'ceremony', label:'式', scheduleType:'special', badge:'bg-purple-100 text-purple-700 border-purple-300' };
+      if (/保護者|参観|面談|懇談/.test(s)) return { kind:'parent', label:'保護者', scheduleType:'short', badge:'bg-amber-100 text-amber-700 border-amber-300' };
+      if (/体育祭|合唱|文化祭|生徒総会|集会/.test(s)) return { kind:'event', label:'行事', scheduleType:'special', badge:'bg-pink-100 text-pink-700 border-pink-300' };
+      if (/会議|研修|委員会|協議会/.test(s)) return { kind:'meeting', label:'会議', scheduleType:null, badge:'bg-orange-100 text-orange-700 border-orange-300' };
+      return { kind:'event', label:'行事', scheduleType:null, badge:'bg-slate-100 text-slate-700 border-slate-300' };
+    };
+    const getInferredDaySetting = (yData, ds) => {
+      const impact = getEventImpact(getYearlyEventText(yData, ds));
+      return impact?.scheduleType ? { type: impact.scheduleType, inferred: true, impact } : null;
+    };
+
     const NEW_INITIAL_YEARLY_DATA = {
       "2025": { "4-4":"新入生体験入学","4-5":"新入生説明会","4-8":"始業式/入学式 第1ステージ「出会い」","4-11":"給食開始 専門委員会","4-12":"仮入部 発育測定(2年)","4-25":"授業参観","5-20":"中間テスト","5-23":"1年保護者会","5-24":"2年保護者会","5-31":"生徒総会","6-10":"第2ステージ「挑戦」","6-13":"中間テスト 1日目","6-14":"中間テスト 2日目","6-17":"教育実習開始","7-20":"夏季休業開始","7-23":"中体連県大会","7-24":"専門委員会","8-27":"夏季休業日終了","8-28":"授業開始日","9-3":"3年県学調(1)","9-5":"体育祭","9-12":"前期期末テスト","9-28":"合唱祭","10-11":"前期終業式","10-15":"後期始業式 第3ステージ「深化」","11-6":"後期中間テスト 1日目","11-7":"後期中間テスト 2日目","12-20":"冬季休業開始 第3ステージ終了","1-6":"冬季休業日終了","1-7":"授業開始日 第4ステージ「感謝」","1-22":"1年保護者会","2-4":"私立高校入試","2-13":"学年末テスト","3-5":"公立高校入試","3-18":"修了式","3-19":"卒業式","3-20":"学年末休業日開始" },
       "2026": { "4-3":"新入生説明会","4-6":"第2回職員会議","4-7":"始業式/入学式 第1ステージ「出会い」","4-8":"お弁当の日","4-9":"2年生学区探訪","4-13":"仮入部 発育測定(2年)","4-15":"学級協議会","4-17":"大字講座","4-18":"キャリアパスポート","4-22":"全国学力テスト 1年交通安全教室","4-24":"政見放送","4-25":"授業参観","4-30":"離任式","5-1":"1年生保護者会","5-2":"校内研修会","5-7":"1年生正式入部","5-22":"2年保護者会","6-10":"前期中間テスト 1日目 第2ステージ「挑戦」開始","6-11":"前期中間テスト 2日目","6-15":"教育実習開始","7-22":"夏季休業前授業最終日 給食最終日","7-23":"夏季休業開始","8-26":"夏季休業日終了","8-27":"夏季休業日明け授業開始日","9-2":"3年県学調(1)","9-8":"前期期末テスト","10-1":"体育祭","10-15":"前期終業式 第2ステージ終了","10-16":"後期始業式 第3ステージ「深化」開始","11-4":"後期中間テスト 1日目","11-5":"後期中間テスト 2日目","12-24":"冬季休業開始 第3ステージ終了","1-4":"冬季休業日終了","1-5":"冬季休業日明け授業開始日 第4ステージ「感謝」開始","2-2":"私立高校入試","2-3":"私立高校入試","3-3":"公立高校入試","3-4":"公立高校入試","3-18":"修了式","3-19":"卒業証書授与式","3-20":"学年末休業日開始" }
@@ -288,7 +309,7 @@
                 let chip = dark ? 'bg-slate-700/80 border-slate-500' : 'bg-slate-100 border-slate-300';
                 let tag = '';
                 if (e.type === 'holiday') { chip = dark ? 'bg-rose-950/50 border-rose-700 text-rose-100' : 'bg-rose-50 border-rose-300 text-rose-900'; tag = '祝・休日'; }
-                else if (e.type === 'event') { chip = dark ? 'bg-pink-950/40 border-pink-700 text-pink-100' : 'bg-pink-50 border-pink-300 text-pink-900'; tag = '行事'; }
+                else if (e.type === 'event') { chip = e.impact ? e.impact.badge : (dark ? 'bg-pink-950/40 border-pink-700 text-pink-100' : 'bg-pink-50 border-pink-300 text-pink-900'); tag = e.impact?.label || '行事'; }
                 else if (e.type === 'todo') { chip = dark ? 'bg-blue-950/40 border-blue-700 text-blue-100' : 'bg-blue-50 border-blue-300 text-blue-900'; tag = 'TODO'; }
                 return (
                   <div key={idx} className={`rounded-xl border px-3 py-2.5 shadow-sm ${itemBase} ${chip}`}>
@@ -311,7 +332,7 @@
       const today = getJSTDate(); const todayStr = formatDate(today); let dayIdx = today.getDay() - 1; if (dayIdx === -1) dayIdx = 6;
       
       const isYearlyHoliday = (ds, yData) => {
-        const [y,m,d] = ds.split('-').map(Number); const sy = m < 4 ? y - 1 : y; const ye = yData[sy]?.[`${m}-${d}`];
+        const ye = getYearlyEventText(yData, ds);
         if (ye && (ye.includes('休業') || ye.includes('休校') || ye.includes('振替休') || ye.includes('代休') || ye.includes('休日') || ye.includes('お休み'))) return true;
         return false;
       };
@@ -321,6 +342,8 @@
         if (vacations.find(v => ds >= v.start && ds <= v.end)) return { type:'holiday' };
         const [y,m,d] = ds.split('-').map(Number);
         if (getHolidayName(y,m,d) || isYearlyHoliday(ds, yearlyData)) return { type:'holiday' };
+        const inferred = getInferredDaySetting(yearlyData, ds);
+        if (inferred) return inferred;
         return templateSettings[di] || DEFAULT_TEMPLATE_SETTINGS[di];
       };
       
@@ -332,7 +355,27 @@
         const override = weeklyData[wKey]; return (override && !override.useTemplate) ? override : base;
       };
 
-      const upcomingTodos = todos.filter(t => !t.completed).slice(0, 5);
+      const nowMinutes = today.getHours() * 60 + today.getMinutes();
+      const timeToMinutes = (time) => {
+        if (!time) return null;
+        const [h, m] = time.split(':').map(Number);
+        if (!Number.isFinite(h) || !Number.isFinite(m)) return null;
+        return h * 60 + m;
+      };
+      const formatTimeRange = (start, end) => start ? `${start}${end ? `-${end}` : ''}` : '時刻未設定';
+
+      const upcomingTodos = todos
+        .filter(t => !t.completed)
+        .sort((a, b) => {
+          if (a.important !== b.important) return a.important ? -1 : 1;
+          if (!a.dueDate && !b.dueDate) return 0;
+          if (!a.dueDate) return 1;
+          if (!b.dueDate) return -1;
+          return a.dueDate.localeCompare(b.dueDate);
+        })
+        .slice(0, 6);
+      const overdueTodos = todos.filter(t => !t.completed && t.dueDate && t.dueDate < todayStr);
+      const dueTodayTodos = todos.filter(t => !t.completed && t.dueDate === todayStr);
 
       const isHoliday = setting.type === 'holiday';
       const greetingHour = today.getHours();
@@ -342,21 +385,139 @@
         const data = getCellData(todayStr, r.id, dayIdx);
         const times = SCHEDULE_TIMES[setting.type];
         const time = times?.[r.id];
-        return { ...r, data, time };
-      }).filter(r => r.data?.subject);
+        const startTime = data.startTime || time?.start || '';
+        const endTime = data.endTime || time?.end || '';
+        return { ...r, data, time: { start: startTime, end: endTime } };
+      }).filter(r => r.data?.subject || (r.id === 'afterschool' && r.data?.events?.some(e => e.subject)));
+
+      const timedSchedule = todaySchedule
+        .flatMap(item => {
+          if (item.id === 'afterschool' && item.data?.events?.length) {
+            return item.data.events.filter(e => e.subject?.trim()).map((ev, idx) => ({
+              id: `${item.id}-${idx}`,
+              name: item.name,
+              icon: item.icon,
+              subject: ev.subject,
+              memo: ev.memo || '',
+              startTime: ev.startTime || item.time?.start || '',
+              endTime: ev.endTime || item.time?.end || ''
+            }));
+          }
+          return [{
+            id: item.id,
+            name: item.name,
+            icon: item.icon,
+            subject: item.data.subject,
+            memo: item.data.memo || '',
+            startTime: item.time?.start || '',
+            endTime: item.time?.end || ''
+          }];
+        })
+        .map(item => ({ ...item, startMin: timeToMinutes(item.startTime), endMin: timeToMinutes(item.endTime) }))
+        .filter(item => item.startMin !== null)
+        .sort((a, b) => a.startMin - b.startMin);
+
+      const currentLesson = timedSchedule.find(item => {
+        const endMin = item.endMin || item.startMin + 50;
+        return item.startMin <= nowMinutes && nowMinutes < endMin;
+      });
+      const nextLesson = timedSchedule.find(item => item.startMin > nowMinutes);
+      const nextFocus = currentLesson || nextLesson;
+      const openSlots = [];
+      for (let i = 0; i < timedSchedule.length - 1; i++) {
+        const curEnd = timedSchedule[i].endMin;
+        const nextStart = timedSchedule[i + 1].startMin;
+        if (curEnd && nextStart && nextStart - curEnd >= 20) {
+          openSlots.push({ start: timedSchedule[i].endTime, end: timedSchedule[i + 1].startTime, minutes: nextStart - curEnd });
+        }
+      }
+      const slotSuggestions = openSlots.slice(0, 3).map(slot => {
+        const match = upcomingTodos.find(t => {
+          const minutes = parseInt(t.minutes || 15, 10);
+          return minutes <= slot.minutes && (t.important || !t.dueDate || t.dueDate <= todayStr);
+        }) || upcomingTodos.find(t => parseInt(t.minutes || 15, 10) <= slot.minutes);
+        return { ...slot, todo: match };
+      });
 
       return (
         <div className="flex-1 overflow-y-auto p-3 sm:p-4 pb-24 bg-[var(--paper)]">
           <div className="max-w-5xl mx-auto space-y-3">
             <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-300 anim-fade-up relative overflow-hidden">
-              <div className="absolute -top-32 -right-32 w-96 h-96 bg-gradient-to-br from-blue-100 to-purple-100 rounded-full blur-3xl opacity-70 pointer-events-none"></div>
               <div className="relative z-10 flex items-center justify-between gap-3 flex-wrap">
                 <div>
                   <div className="text-xs font-bold text-slate-500 mb-0.5">{today.getFullYear()}年{today.getMonth()+1}月{today.getDate()}日 ({DAYS[dayIdx]}曜日)</div>
                   <div className="text-xl sm:text-2xl font-black text-slate-800 flex items-center gap-2">{greeting} <span className="text-2xl inline-block origin-bottom-right hover:animate-pulse cursor-default">👋</span></div>
                 </div>
-                <span className={`text-xs font-bold px-3 py-1.5 rounded-lg border ${SCHEDULE_TYPES[setting.type].color}`}>{SCHEDULE_TYPES[setting.type].label}日課</span>
+                <div className="flex items-center gap-2 flex-wrap justify-end">
+                  {setting.inferred && setting.impact && <span className={`text-xs font-black px-3 py-1.5 rounded-lg border ${setting.impact.badge}`}>年間: {setting.impact.label}</span>}
+                  <span className={`text-xs font-bold px-3 py-1.5 rounded-lg border ${SCHEDULE_TYPES[setting.type].color}`}>{SCHEDULE_TYPES[setting.type].label}日課</span>
+                </div>
               </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">
+              <div className="bg-white rounded-2xl p-3 sm:p-4 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-300 anim-fade-up" style={{animationDelay:'0.02s'}}>
+                <div className="text-xs font-black text-slate-500 mb-2">いま見る授業</div>
+                {isHoliday ? (
+                  <div className="text-sm font-black text-slate-700">今日は休日です</div>
+                ) : nextFocus ? (
+                  <button onClick={onGoToWeekly} className="text-left w-full group">
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <span className={`text-[10px] font-black px-2 py-1 rounded-md ${currentLesson ? 'bg-blue-100 text-blue-800' : 'bg-emerald-100 text-emerald-800'}`}>{currentLesson ? '進行中' : '次の予定'}</span>
+                      <span className="text-[10px] font-mono font-bold text-slate-500">{formatTimeRange(nextFocus.startTime, nextFocus.endTime)}</span>
+                    </div>
+                    <div className="text-base font-black text-slate-800 leading-tight group-hover:text-blue-800 transition-colors break-words">{nextFocus.subject}</div>
+                    {nextFocus.memo && <div className="text-xs font-bold text-slate-500 mt-1 line-clamp-2">{nextFocus.memo}</div>}
+                  </button>
+                ) : (
+                  <div className="text-sm font-black text-slate-700">この後の予定はありません</div>
+                )}
+              </div>
+
+              <div className="bg-white rounded-2xl p-3 sm:p-4 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-300 anim-fade-up" style={{animationDelay:'0.04s'}}>
+                <div className="text-xs font-black text-slate-500 mb-2">締切アラート</div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="rounded-xl border border-rose-200 bg-rose-50 p-3">
+                    <div className="text-2xl font-black text-rose-700 leading-none">{overdueTodos.length}</div>
+                    <div className="text-[10px] font-black text-rose-700 mt-1">期限超過</div>
+                  </div>
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+                    <div className="text-2xl font-black text-amber-700 leading-none">{dueTodayTodos.length}</div>
+                    <div className="text-[10px] font-black text-amber-700 mt-1">今日まで</div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-2xl p-3 sm:p-4 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-300 anim-fade-up" style={{animationDelay:'0.06s'}}>
+                <div className="text-xs font-black text-slate-500 mb-2">使えそうな空き時間</div>
+                {slotSuggestions.length === 0 ? (
+                  <div className="text-sm font-black text-slate-700">20分以上の空きは少なめです</div>
+                ) : (
+                  <div className="space-y-1.5">
+                    {slotSuggestions.map((slot, idx) => (
+                      <div key={idx} className="rounded-lg border border-teal-200 bg-teal-50 px-2.5 py-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-mono font-bold text-teal-800">{slot.start}-{slot.end}</span>
+                          <span className="text-[10px] font-black text-teal-700">{slot.minutes}分</span>
+                        </div>
+                        {slot.todo && (
+                          <div className="mt-1 text-[11px] font-black text-teal-900 truncate">
+                            {slot.todo.important && <span className="text-amber-500 mr-1">★</span>}
+                            {slot.todo.text}
+                            <span className="ml-1 text-[10px] text-teal-700">({slot.todo.minutes || 15}分)</span>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <button onClick={onGoToWeekly} className="bg-white rounded-2xl p-3 sm:p-4 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-300 anim-fade-up text-left hover:border-blue-300 hover:bg-blue-50/40 transition-colors" style={{animationDelay:'0.08s'}}>
+                <div className="text-xs font-black text-slate-500 mb-2">週案へ</div>
+                <div className="text-sm font-black text-slate-800">今日の列を開く</div>
+                <div className="text-[10px] font-bold text-blue-700 mt-1">予定の修正・入力はこちら</div>
+              </button>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
@@ -371,12 +532,28 @@
                   ) : todaySchedule.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-full text-slate-500 gap-3 py-6 lg:py-0"><span className="text-5xl drop-shadow-sm opacity-80">☕</span><span className="font-bold text-sm tracking-widest text-slate-600">まだ予定がありません</span></div>
                   ) : (
-                    todaySchedule.map((item) => (
+                    todaySchedule.map((item) => {
+                      const itemEvents = item.id === 'afterschool' && item.data?.events?.length
+                        ? item.data.events.filter(e => e.subject?.trim()).slice().sort((a,b)=>(a.startTime||'99:99').localeCompare(b.startTime||'99:99'))
+                        : null;
+                      return (
                       <div key={item.id} className="flex items-center gap-2.5 px-2.5 py-2 rounded-xl bg-slate-50 border border-slate-200 hover:border-blue-300 hover:bg-blue-50/50 transition-colors group">
                         <div className="w-9 h-9 rounded-lg bg-white border border-slate-300 flex items-center justify-center shrink-0 shadow-sm text-slate-600 group-hover:text-blue-600 group-hover:border-blue-300 transition-colors"><span className="text-xs font-black">{item.id.startsWith('p') ? item.id.replace('p','') : item.icon}</span></div>
-                        <div className="flex-1 min-w-0"><div className="text-sm font-black text-slate-800 break-words whitespace-pre-wrap leading-tight group-hover:text-blue-900 transition-colors">{item.data?.subject}</div>{item.time?.start && <div className="text-[10px] font-mono text-slate-500 font-bold mt-0.5">{item.time.start}–{item.time.end}</div>}</div>
+                        <div className="flex-1 min-w-0">
+                          {itemEvents ? itemEvents.map((ev, idx) => (
+                            <div key={idx} className="py-0.5">
+                              <div className="text-sm font-black text-slate-800 break-words whitespace-pre-wrap leading-tight group-hover:text-blue-900 transition-colors">{ev.subject}</div>
+                              {ev.startTime && <div className="text-[10px] font-mono text-slate-500 font-bold mt-0.5">{formatTimeRange(ev.startTime, ev.endTime)}</div>}
+                            </div>
+                          )) : (
+                            <>
+                              <div className="text-sm font-black text-slate-800 break-words whitespace-pre-wrap leading-tight group-hover:text-blue-900 transition-colors">{item.data?.subject}</div>
+                              {item.time?.start && <div className="text-[10px] font-mono text-slate-500 font-bold mt-0.5">{formatTimeRange(item.time.start, item.time.end)}</div>}
+                            </>
+                          )}
+                        </div>
                       </div>
-                    ))
+                    )})
                   )}
                 </div>
               </div>
@@ -398,13 +575,152 @@
                       return (
                         <div key={t.id} className={`flex items-start gap-2.5 p-2.5 rounded-xl border shadow-sm transition-all group ${cardStyle}`}>
                           <button type="button" onClick={() => onToggleTodo && onToggleTodo(t.id)} aria-label="完了" className={`w-5 h-5 rounded-md border-[3px] mt-0.5 shrink-0 flex items-center justify-center bg-white hover:bg-slate-50 transition-colors ${t.important ? 'border-amber-500' : isOverdue ? 'border-rose-500' : 'border-slate-400'}`}></button>
-                          <div className="flex-1 min-w-0 flex flex-col justify-center"><div className="text-sm font-black text-slate-800 leading-snug break-words whitespace-pre-wrap">{t.important && <span className="text-amber-500 mr-1.5">★</span>}{t.text}</div>{t.dueDate && <div className={`text-[10px] font-bold mt-1 font-mono ${dueStyle}`}>{dueText} : {t.dueDate}</div>}</div>
+                          <div className="flex-1 min-w-0 flex flex-col justify-center">
+                            <div className="text-sm font-black text-slate-800 leading-snug break-words whitespace-pre-wrap">{t.important && <span className="text-amber-500 mr-1.5">★</span>}{t.text}</div>
+                            <div className="flex items-center gap-2 flex-wrap mt-1">
+                              {t.dueDate && <div className={`text-[10px] font-bold font-mono ${dueStyle}`}>{dueText} : {t.dueDate}</div>}
+                              <span className="text-[10px] font-black text-slate-500 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded">{t.minutes || 15}分</span>
+                            </div>
+                          </div>
                           <button type="button" onClick={() => onDeleteTodo && onDeleteTodo(t.id)} aria-label="削除" className="text-rose-400 bg-white border border-rose-200 hover:bg-rose-50 hover:text-rose-600 rounded-lg p-1.5 shrink-0 text-xs shadow-sm opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all">🗑</button>
                         </div>
                       );
                     })
                   )}
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    const FieldMode = ({ weeklyData, baseTemplate, todos, yearlyData, vacations, weeklySettings, templateSettings, onGoToWeekly, onToggleTodo }) => {
+      const today = getJSTDate(); const todayStr = formatDate(today); let dayIdx = today.getDay() - 1; if (dayIdx === -1) dayIdx = 6;
+      const nowMinutes = today.getHours() * 60 + today.getMinutes();
+      const timeToMinutes = (time) => { if (!time) return null; const [h,m] = time.split(':').map(Number); return Number.isFinite(h)&&Number.isFinite(m) ? h*60+m : null; };
+      const formatTimeRange = (start, end) => start ? `${start}${end ? `-${end}` : ''}` : '時刻未設定';
+      const isYearlyHoliday = (ds, yData) => {
+        const ye = getYearlyEventText(yData, ds);
+        return !!(ye && (ye.includes('休業') || ye.includes('休校') || ye.includes('振替休') || ye.includes('代休') || ye.includes('休日') || ye.includes('お休み')));
+      };
+      const getDaySettingLocal = (ds, di) => {
+        if (weeklySettings[ds]) return weeklySettings[ds];
+        if (vacations.find(v => ds >= v.start && ds <= v.end)) return { type:'holiday' };
+        const [y,m,d] = ds.split('-').map(Number);
+        if (getHolidayName(y,m,d) || isYearlyHoliday(ds, yearlyData)) return { type:'holiday' };
+        const inferred = getInferredDaySetting(yearlyData, ds);
+        if (inferred) return inferred;
+        return templateSettings[di] || DEFAULT_TEMPLATE_SETTINGS[di];
+      };
+      const getCellDataLocal = (ds, pid, di) => {
+        const wKey = `${ds}-${pid}`; const tKey = `${di}-${pid}`; let base = baseTemplate[tKey] || { subject:'', memo:'' };
+        if (pid === 'event') { const [y,m,d] = ds.split('-').map(Number); const sy = m < 4 ? y - 1 : y; const ye = yearlyData[sy]?.[`${m}-${d}`]; if (ye) base = { ...base, subject: ye }; }
+        const override = weeklyData[wKey]; return (override && !override.useTemplate) ? override : base;
+      };
+
+      const setting = getDaySettingLocal(todayStr, dayIdx);
+      const isHoliday = setting.type === 'holiday';
+      const todaySchedule = ROWS.filter(r => r.id !== 'diary').map(r => {
+        const data = getCellDataLocal(todayStr, r.id, dayIdx);
+        const time = SCHEDULE_TIMES[setting.type]?.[r.id];
+        return { ...r, data, time: { start: data.startTime || time?.start || '', end: data.endTime || time?.end || '' } };
+      }).filter(r => r.data?.subject || (r.id === 'afterschool' && r.data?.events?.some(e => e.subject)));
+      const timedSchedule = todaySchedule.flatMap(item => {
+        if (item.id === 'afterschool' && item.data?.events?.length) {
+          return item.data.events.filter(e => e.subject?.trim()).map((ev, idx) => ({ id:`${item.id}-${idx}`, label:item.name, subject:ev.subject, memo:ev.memo||'', startTime:ev.startTime||item.time.start, endTime:ev.endTime||item.time.end }));
+        }
+        return [{ id:item.id, label:item.name, subject:item.data.subject, memo:item.data.memo||'', startTime:item.time.start, endTime:item.time.end }];
+      }).map(item => ({ ...item, startMin:timeToMinutes(item.startTime), endMin:timeToMinutes(item.endTime) })).filter(item => item.startMin !== null).sort((a,b)=>a.startMin-b.startMin);
+      const current = timedSchedule.find(item => item.startMin <= nowMinutes && nowMinutes < (item.endMin || item.startMin + 50));
+      const next = timedSchedule.find(item => item.startMin > nowMinutes);
+      const focus = current || next;
+      const minutesLeft = current ? Math.max(0, (current.endMin || current.startMin + 50) - nowMinutes) : null;
+      const minutesToNext = !current && next ? Math.max(0, next.startMin - nowMinutes) : null;
+      const eventData = getCellDataLocal(todayStr, 'event', dayIdx);
+      const afterschool = todaySchedule.find(item => item.id === 'afterschool');
+      const urgentTodos = todos.filter(t => !t.completed).sort((a,b) => {
+        if (a.important !== b.important) return a.important ? -1 : 1;
+        if (!a.dueDate && !b.dueDate) return 0;
+        if (!a.dueDate) return 1;
+        if (!b.dueDate) return -1;
+        return a.dueDate.localeCompare(b.dueDate);
+      }).slice(0, 4);
+
+      return (
+        <div className="flex-1 overflow-y-auto bg-slate-950 text-white p-3 sm:p-5 pb-24">
+          <div className="max-w-3xl mx-auto space-y-3">
+            <div className="rounded-2xl border border-white/10 bg-white/10 p-4 shadow-lg">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-xs font-black text-slate-300">{today.getFullYear()}年{today.getMonth()+1}月{today.getDate()}日 ({DAYS[dayIdx]})</div>
+                  <div className="text-2xl font-black mt-1">現場モード</div>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap justify-end">
+                  {setting.inferred && setting.impact && <span className="text-xs font-black rounded-lg bg-amber-200 text-amber-950 px-3 py-1.5">年間: {setting.impact.label}</span>}
+                  <span className="text-xs font-black rounded-lg bg-white text-slate-900 px-3 py-1.5">{SCHEDULE_TYPES[setting.type].label}</span>
+                </div>
+              </div>
+            </div>
+
+            <button onClick={onGoToWeekly} className="w-full text-left rounded-2xl border border-blue-400/40 bg-blue-500/20 p-5 shadow-lg active:scale-[0.99] transition-transform">
+              <div className="flex items-center justify-between gap-2 mb-3">
+                <span className={`text-xs font-black px-3 py-1 rounded-full ${current ? 'bg-blue-300 text-blue-950' : 'bg-emerald-300 text-emerald-950'}`}>{isHoliday ? '休日' : current ? 'いま' : '次'}</span>
+                {focus && <span className="text-sm font-mono font-black text-blue-100">{formatTimeRange(focus.startTime, focus.endTime)}</span>}
+              </div>
+              {!isHoliday && (minutesLeft !== null || minutesToNext !== null) && (
+                <div className="mb-3 inline-flex items-baseline gap-1 rounded-xl bg-white/15 border border-white/15 px-3 py-2">
+                  <span className="text-3xl font-black leading-none">{minutesLeft !== null ? minutesLeft : minutesToNext}</span>
+                  <span className="text-xs font-black text-blue-100">{minutesLeft !== null ? '分で終了' : '分後に開始'}</span>
+                </div>
+              )}
+              <div className="text-3xl sm:text-4xl font-black leading-tight break-words">{isHoliday ? '今日は休日です' : focus ? focus.subject : 'この後の予定はありません'}</div>
+              {focus?.memo && <div className="mt-3 text-sm font-bold text-blue-100 whitespace-pre-wrap">{focus.memo}</div>}
+            </button>
+
+            {eventData?.subject?.trim() && (
+              <div className="rounded-2xl border border-pink-300/30 bg-pink-500/15 p-4">
+                <div className="text-xs font-black text-pink-100 mb-2">今日の行事</div>
+                <div className="space-y-1">
+                  {eventData.subject.split('\n').filter(s=>s.trim()).map((s, idx) => <div key={idx} className="text-lg font-black leading-tight">{s}</div>)}
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="rounded-2xl border border-amber-300/30 bg-amber-500/15 p-4">
+                <div className="text-xs font-black text-amber-100 mb-3">今すぐ見るTODO</div>
+                {urgentTodos.length === 0 ? (
+                  <div className="text-sm font-bold text-amber-50/80">未完了TODOはありません</div>
+                ) : (
+                  <div className="space-y-2">
+                    {urgentTodos.map(t => (
+                      <div key={t.id} className="flex items-start gap-2 rounded-xl bg-white/10 p-2.5">
+                        <button onClick={()=>onToggleTodo(t.id)} className="mt-0.5 w-5 h-5 rounded-md border-2 border-amber-200 shrink-0"></button>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-sm font-black leading-snug break-words">{t.important && <span className="text-amber-300 mr-1">★</span>}{t.text}</div>
+                          <div className="text-[10px] font-bold text-amber-100/80 mt-1">{t.dueDate ? `期限 ${t.dueDate}` : '期限なし'} / {t.minutes || 15}分</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-2xl border border-teal-300/30 bg-teal-500/15 p-4">
+                <div className="text-xs font-black text-teal-100 mb-3">放課後</div>
+                {afterschool?.data?.events?.some(e=>e.subject?.trim()) ? (
+                  <div className="space-y-2">
+                    {afterschool.data.events.filter(e=>e.subject?.trim()).slice().sort((a,b)=>(a.startTime||'99:99').localeCompare(b.startTime||'99:99')).map((ev, idx) => (
+                      <div key={idx} className="rounded-xl bg-white/10 p-2.5">
+                        {ev.startTime && <div className="text-[11px] font-mono font-black text-teal-100/80 mb-1">{formatTimeRange(ev.startTime, ev.endTime)}</div>}
+                        <div className="text-sm font-black leading-tight break-words">{ev.subject}</div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-sm font-bold text-teal-50/80">放課後予定はありません</div>
+                )}
               </div>
             </div>
           </div>
@@ -456,6 +772,7 @@
       const [newTodoDate, setNewTodoDate] = useState('');
       const [newTodoTag, setNewTodoTag] = useState('');
       const [newTodoImportant, setNewTodoImportant] = useState(false);
+      const [newTodoMinutes, setNewTodoMinutes] = useState(15);
       const [toastMessage, setToastMessage] = useState('');
       const [editingCell, setEditingCell] = useState(null);
       const [editingTodoId, setEditingTodoId] = useState(null);
@@ -1045,9 +1362,7 @@
       };
 
       const isYearlyHoliday = (ds, yData) => {
-        const [y,m,d] = ds.split('-').map(Number);
-        const sy = m < 4 ? y - 1 : y;
-        const ye = yData[sy]?.[`${m}-${d}`];
+        const ye = getYearlyEventText(yData, ds);
         if (ye && (ye.includes('休業') || ye.includes('休校') || ye.includes('振替休') || ye.includes('代休') || ye.includes('休日') || ye.includes('お休み'))) {
           return true;
         }
@@ -1060,7 +1375,37 @@
         const [y,m,d] = ds.split('-').map(Number);
         if (getHolidayName(y,m,d)) return {type:'holiday'};
         if (isYearlyHoliday(ds, yearlyData)) return {type:'holiday'};
+        const inferred = getInferredDaySetting(yearlyData, ds);
+        if (inferred) return inferred;
         return templateSettings[di] || DEFAULT_TEMPLATE_SETTINGS[di]; 
+      };
+      const syncEventToYearly = (dateStr, nextSubject) => {
+        if (!dateStr) return;
+        const [y,m,d] = dateStr.split('-').map(Number);
+        const sy = m < 4 ? y - 1 : y;
+        const md = `${m}-${d}`;
+        const prevWeekly = weeklyData[`${dateStr}-event`]?.subject || '';
+        const currentYearlyLines = (yearlyData[sy]?.[md] || '').split('\n').filter(s => s.trim());
+        const prevLines = prevWeekly.split('\n').map(s => s.trim()).filter(Boolean);
+        const nextLines = (nextSubject || '').split('\n').map(s => s.trim()).filter(Boolean);
+        const keptLines = currentYearlyLines.filter(line => !prevLines.includes(line.trim()));
+        const mergedLines = [...keptLines];
+        nextLines.forEach(line => { if (!mergedLines.includes(line)) mergedLines.push(line); });
+        const nextYear = { ...(yearlyData[sy] || {}) };
+        if (mergedLines.length > 0) nextYear[md] = mergedLines.join('\n');
+        else delete nextYear[md];
+        saveExtraData({ ...yearlyData, [sy]: nextYear }, documents, vacations);
+      };
+      const getMergedYearlyEventText = (dateStr) => {
+        const yearlyText = getYearlyEventText(yearlyData, dateStr);
+        const weeklyText = weeklyData[`${dateStr}-event`]?.subject || '';
+        const lines = [];
+        [yearlyText, weeklyText].forEach(text => {
+          text.split('\n').map(s => s.trim()).filter(Boolean).forEach(line => {
+            if (!lines.includes(line)) lines.push(line);
+          });
+        });
+        return lines.join('\n');
       };
       
       const getCellData = (ds, pid, di) => { 
@@ -1108,7 +1453,7 @@
       const getPeriodTime = (setting, pid) => SCHEDULE_TIMES[setting.type]?.[pid];
       const handleSettingChange = (ds, di, ns) => { if(activeTab==='template'){ const n={...templateSettings,[di]:ns}; setTemplateSettings(n); saveAll(baseTemplate,n,weeklyData,weeklySettings); } else { const n={...weeklySettings,[ds]:ns}; setWeeklySettings(n); saveAll(baseTemplate,templateSettings,weeklyData,n); } };
       
-      const handleSaveCell = (d) => { if(!editingCell.isTemplate && d.subject){ let up=[...syllabusData]; let ch=false; for(let i=0;i<up.length;i++){ let s=up[i]; if(s.type==='auto') { const tryMatch = (prefix, cls) => { const prog = getClassProgress(s, cls); const unit = s.units?.[prog.currentUnitIdx]; if(!unit) return false; const exp=`${prefix}${s.name}（${unit.name} ${prog.currentHour}/${unit.hours}）`; if(d.subject===exp){ let nh=prog.currentHour+1; let nu=prog.currentUnitIdx; if(nh>unit.hours){nh=1;nu++;} up[i]=setClassProgress(up[i],cls,nu,nh); return true; } return false; }; if(s.classes&&s.classes.length>0){ for(const cls of s.classes){ if(tryMatch(cls,cls)){ch=true;break;} } }else{ if(tryMatch('',null)) ch=true; } if(ch) break; }else if(s.type==='history'){ const pat=s.classes&&s.classes.length>0 ? `^(?:${s.classes.join('|')})?${s.name}（(.+)）$` : `^${s.name}（(.+)）$`; const m=d.subject.match(new RegExp(pat)); if(m){ let h=s.history||[]; if(!h.includes(m[1])){ up[i]={...s,history:[m[1],...h].slice(0,15)}; ch=true; } } } } if(ch) saveSyllabus(up); } if(editingCell.isTemplate){ const n={...baseTemplate,[`${editingCell.dayIndex}-${editingCell.periodId}`]:d}; saveAll(n,templateSettings,weeklyData,weeklySettings); } else { const n={...weeklyData,[`${editingCell.dateStr}-${editingCell.periodId}`]:{...d,useTemplate:false}}; saveAll(baseTemplate,templateSettings,n,weeklySettings); } setEditingCell(null); };
+      const handleSaveCell = (d) => { if(!editingCell.isTemplate && d.subject){ let up=[...syllabusData]; let ch=false; for(let i=0;i<up.length;i++){ let s=up[i]; if(s.type==='auto') { const tryMatch = (prefix, cls) => { const prog = getClassProgress(s, cls); const unit = s.units?.[prog.currentUnitIdx]; if(!unit) return false; const exp=`${prefix}${s.name}（${unit.name} ${prog.currentHour}/${unit.hours}）`; if(d.subject===exp){ let nh=prog.currentHour+1; let nu=prog.currentUnitIdx; if(nh>unit.hours){nh=1;nu++;} up[i]=setClassProgress(up[i],cls,nu,nh); return true; } return false; }; if(s.classes&&s.classes.length>0){ for(const cls of s.classes){ if(tryMatch(cls,cls)){ch=true;break;} } }else{ if(tryMatch('',null)) ch=true; } if(ch) break; }else if(s.type==='history'){ const pat=s.classes&&s.classes.length>0 ? `^(?:${s.classes.join('|')})?${s.name}（(.+)）$` : `^${s.name}（(.+)）$`; const m=d.subject.match(new RegExp(pat)); if(m){ let h=s.history||[]; if(!h.includes(m[1])){ up[i]={...s,history:[m[1],...h].slice(0,15)}; ch=true; } } } } if(ch) saveSyllabus(up); } if(editingCell.isTemplate){ const n={...baseTemplate,[`${editingCell.dayIndex}-${editingCell.periodId}`]:d}; saveAll(n,templateSettings,weeklyData,weeklySettings); } else { if(editingCell.periodId==='event') syncEventToYearly(editingCell.dateStr, d.subject || ''); const n={...weeklyData,[`${editingCell.dateStr}-${editingCell.periodId}`]:{...d,useTemplate:false}}; saveAll(baseTemplate,templateSettings,n,weeklySettings); } setEditingCell(null); };
 
       // 週全体スマート自動入力：現在コマを含め今週のテンプレート一致する空きコマに連続入力
       const handleSmartAutoFill = (subjIdx, cls = null) => {
@@ -1382,7 +1727,7 @@
 
       const combinedNotes = useMemo(() => { const c=[...notesData.map(n=>({...n,type:'note'}))]; Object.keys(weeklyData).forEach(k=>{if(k.endsWith('-diary')){const ds=k.replace('-diary','');const d=weeklyData[k];if(d?.memo?.trim())c.push({id:`diary-${ds}`,type:'diary',title:`${new Date(ds).getMonth()+1}月${new Date(ds).getDate()}日のメモ`,content:d.memo,updatedAt:new Date(ds).getTime()+86399000,dateStr:ds});}}); return c.sort((a,b)=>b.updatedAt-a.updatedAt); }, [notesData, weeklyData]);
 
-      const addTodo = (e) => { e.preventDefault(); if(!newTodoText.trim()) return; saveTodos([{id:Date.now(),text:newTodoText,completed:false,dueDate:newTodoDate,tag:newTodoTag,important:newTodoImportant}, ...todos]); setNewTodoText(''); };
+      const addTodo = (e) => { e.preventDefault(); if(!newTodoText.trim()) return; saveTodos([{id:Date.now(),text:newTodoText,completed:false,dueDate:newTodoDate,tag:newTodoTag,important:newTodoImportant,minutes:newTodoMinutes}, ...todos]); setNewTodoText(''); };
       
       const dragItemIdx = useRef(null);
       const dragOverItemIdx = useRef(null);
@@ -1764,7 +2109,7 @@
         todos.filter(t=>!t.completed&&t.dueDate===ds).forEach(t=>evs.push({type:'todo',text:t.text})); 
         const ed=getCellData(ds,'event',di); 
         if(ed?.subject) {
-          ed.subject.split('\n').filter(s=>s.trim()!=='').forEach(s => evs.push({type:'event',text:s.trim()}));
+          ed.subject.split('\n').filter(s=>s.trim()!=='').forEach(s => evs.push({type:'event',text:s.trim(),impact:getEventImpact(s.trim())}));
         }
         return evs; 
       };
@@ -2086,9 +2431,9 @@
             </div>
 
             <div className="flex gap-1.5 sm:gap-2.5 overflow-x-auto hide-scrollbar pl-4 ml-auto">
-              {['dashboard','yearly','monthly','weekly','notes','syllabus','documents', 'settings'].map(t=>(
+              {['dashboard','field','yearly','monthly','weekly','notes','syllabus','documents', 'settings'].map(t=>(
                 <button key={t} onClick={()=>setActiveTab(t)} className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-black whitespace-nowrap transition-colors ${activeTab===t?'bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-300 shadow-sm border border-blue-300 dark:border-blue-700':'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 border border-transparent'}`}>
-                  {t==='dashboard'?'今日':t==='yearly'?'年間':t==='monthly'?'月間':t==='weekly'?'週案':t==='notes'?'ノート':t==='syllabus'?'進度':t==='documents'?'資料':'設定'}
+                  {t==='dashboard'?'今日':t==='field'?'現場':t==='yearly'?'年間':t==='monthly'?'月間':t==='weekly'?'週案':t==='notes'?'ノート':t==='syllabus'?'進度':t==='documents'?'資料':'設定'}
                 </button>
               ))}
               <button onClick={()=>setActiveTab('template')} className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-black whitespace-nowrap transition-colors ${activeTab==='template'?'bg-purple-100 dark:bg-purple-900/50 text-purple-800 dark:text-purple-300 shadow-sm border border-purple-300 dark:border-purple-700':'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 border border-transparent'}`}>
@@ -2102,6 +2447,7 @@
           <div className="flex-1 min-h-0 relative flex flex-col bg-[var(--paper)] dark:bg-slate-900">
 
             {activeTab === 'dashboard' && <Dashboard weeklyData={weeklyData} baseTemplate={baseTemplate} todos={todos} syllabusData={syllabusData} yearlyData={yearlyData} vacations={vacations} weeklySettings={weeklySettings} templateSettings={templateSettings} onGoToWeekly={()=>setActiveTab('weekly')} onGoToDate={d=>setSelectedDateDetails({dateStr:formatDate(d),dateObj:d})} onDeleteTodo={(id)=>saveTodos(todos.filter(td=>td.id!==id))} onToggleTodo={(id)=>saveTodos(todos.map(td=>td.id===id?{...td,completed:!td.completed}:td))} />}
+            {activeTab === 'field' && <FieldMode weeklyData={weeklyData} baseTemplate={baseTemplate} todos={todos} yearlyData={yearlyData} vacations={vacations} weeklySettings={weeklySettings} templateSettings={templateSettings} onGoToWeekly={()=>setActiveTab('weekly')} onToggleTodo={(id)=>saveTodos(todos.map(td=>td.id===id?{...td,completed:!td.completed}:td))} />}
             
             {/* 月間カレンダー */}
             {activeTab === 'monthly' && (
@@ -2124,7 +2470,7 @@
                       
                       const setting = getDaySetting(ds, di);
                       const eventRow = ROWS.find(r => r.id === 'event');
-                      const dotMax = 5;
+                      const textMax = isMobile ? 2 : 5;
                       
                       return (
                         <div key={i} title={isMobile ? 'タップで予定を表示' : undefined} onClick={()=>{
@@ -2132,26 +2478,18 @@
                           else { openEditModal(getCellData(ds,'event',di), ds, eventRow, di, DAYS[di], setting.type==='holiday', null); }
                         }} className={`flex flex-col overflow-hidden cursor-pointer hover:brightness-95 dark:hover:brightness-110 relative transition-all min-h-0 min-w-0 ${bg} ${isMobile ? 'p-0.5' : 'p-1 sm:p-1.5'}`}>
                           <span onClick={(e)=>{ e.stopPropagation(); setCurrentWeekStart(getMonday(day.date)); setActiveTab('weekly'); }} className={`cursor-pointer hover:scale-125 hover:z-20 font-black flex items-center justify-center rounded-full shrink-0 z-10 relative ${isMobile ? 'w-5 h-5 text-[9px] mb-px' : 'text-[10px] sm:text-xs w-5 h-5 sm:w-6 sm:h-6 mb-0.5'} ${isT?'bg-blue-600 text-white shadow-md today-ring':isCM?(di===6?'text-rose-700 dark:text-rose-300':di===5?'text-blue-700 dark:text-blue-300':'text-slate-800 dark:text-slate-100'):'text-slate-400 dark:text-slate-500'}`} title="週案へ移動">{day.date.getDate()}</span>
-                          {isMobile ? (
-                            <div className="flex-1 flex flex-wrap content-center justify-center gap-0.5 min-h-0 min-w-0 overflow-hidden pointer-events-none items-center px-0.5 pb-0.5">
-                              {evs.length === 0 ? null : evs.slice(0, dotMax).map((e, idx) => (
-                                <span key={idx} className={`w-1.5 h-1.5 rounded-full shrink-0 ${e.type==='holiday'?'bg-rose-500':e.type==='event'?'bg-pink-500':'bg-blue-500'}`} title={e.text} />
-                              ))}
-                              {evs.length > dotMax && (
-                                <span className="text-[7px] font-black leading-none text-slate-600 dark:text-slate-300">+{evs.length - dotMax}</span>
-                              )}
-                            </div>
-                          ) : (
-                            <div className="flex-1 space-y-1 overflow-y-auto overflow-x-hidden hide-scrollbar min-h-0 min-w-0 w-full pointer-events-none">
-                              {evs.map((e,idx)=>{
-                                let c='bg-slate-100 text-slate-800 border-slate-300 dark:bg-slate-700 dark:text-slate-100 dark:border-slate-500'; let ic='';
-                                if(e.type==='holiday') c='bg-rose-50 text-rose-800 border-rose-300 dark:bg-rose-950/50 dark:text-rose-100 dark:border-rose-700';
-                                else if(e.type==='event') { c='bg-pink-50 text-pink-900 border-pink-300 dark:bg-pink-950/40 dark:text-pink-100 dark:border-pink-700'; ic='🚩'; }
-                                else if(e.type==='todo') { c='bg-blue-50 text-blue-900 border-blue-300 dark:bg-blue-950/40 dark:text-blue-100 dark:border-blue-700'; ic='☑️'; }
-                                return <div key={idx} className={`text-[9px] sm:text-[10px] lg:text-xs font-black border rounded px-1 sm:px-1.5 truncate w-full shadow-sm leading-tight py-0.5 ${c}`} title={e.text}>{ic}{e.text}</div>
-                              })}
-                            </div>
-                          )}
+                          <div className={`flex-1 space-y-0.5 sm:space-y-1 overflow-y-auto overflow-x-hidden hide-scrollbar min-h-0 min-w-0 w-full pointer-events-none ${isMobile ? 'px-0.5 pb-0.5' : ''}`}>
+                            {evs.slice(0, textMax).map((e,idx)=>{
+                              let c='bg-slate-100 text-slate-800 border-slate-300 dark:bg-slate-700 dark:text-slate-100 dark:border-slate-500'; let ic='';
+                              if(e.type==='holiday') c='bg-rose-50 text-rose-800 border-rose-300 dark:bg-rose-950/50 dark:text-rose-100 dark:border-rose-700';
+                              else if(e.type==='event') { c=e.impact?.badge || 'bg-pink-50 text-pink-900 border-pink-300 dark:bg-pink-950/40 dark:text-pink-100 dark:border-pink-700'; ic='🚩'; }
+                              else if(e.type==='todo') { c='bg-blue-50 text-blue-900 border-blue-300 dark:bg-blue-950/40 dark:text-blue-100 dark:border-blue-700'; ic='☑️'; }
+                              return <div key={idx} className={`font-black border rounded truncate w-full shadow-sm leading-tight ${isMobile ? 'text-[7px] px-1 py-0.5' : 'text-[9px] sm:text-[10px] lg:text-xs px-1 sm:px-1.5 py-0.5'} ${c}`} title={e.text}>{ic}{e.text}</div>
+                            })}
+                            {evs.length > textMax && (
+                              <div className={`font-black text-slate-600 dark:text-slate-300 ${isMobile ? 'text-[7px]' : 'text-[9px]'}`}>+{evs.length - textMax}件</div>
+                            )}
+                          </div>
                           {isT && <div className="absolute inset-0 border-[3px] border-blue-500 pointer-events-none z-20 rounded-sm"></div>}
                         </div>
                       );
@@ -2237,6 +2575,11 @@
                                       {Object.values(SCHEDULE_TYPES).map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
                                     </select>
                                   </div>
+                                  {setting.inferred && setting.impact && (
+                                    <div className={`text-[7px] sm:text-[8px] font-black rounded px-1 py-0.5 border ${setting.impact.badge} truncate`} title="年間行事から日課を自動推定">
+                                      年間: {setting.impact.label}
+                                    </div>
+                                  )}
                                   
                                   <div className="relative w-full">
                                     <select value="" onChange={(e) => { const v=e.target.value; if(v==='revert') handleRevertDay(ds); else if(v!=='') handleCopyDay(ds,v); }}
@@ -2492,7 +2835,7 @@
                       {Array.from({length:31},(_,i)=>i+1).map(d=><tr key={d} className="border-b border-slate-200 hover:bg-blue-50/50">
                         <td className="border-r border-slate-300 p-2 text-center bg-slate-50 sticky left-0 font-black text-slate-600 z-10">{d}</td>
                         {[4,5,6,7,8,9,10,11,12,1,2,3].map(m=>{
-                          const y=m<=3?schoolYear+1:schoolYear;const dt=new Date(y,m-1,d);const iv=dt.getDate()===d;const hol=iv?getHolidayName(y,m,d):null;const ut=yearlyData[schoolYear]?.[`${m}-${d}`]||'';
+                          const y=m<=3?schoolYear+1:schoolYear;const dt=new Date(y,m-1,d);const iv=dt.getDate()===d;const ds=iv?formatDate(dt):'';const hol=iv?getHolidayName(y,m,d):null;const ut=iv?getMergedYearlyEventText(ds):'';
                           return <td key={m} className={`border-r border-slate-300 p-1 sm:p-1.5 align-top overflow-hidden relative ${!iv?'bg-stone-100/50':dt.getDay()===0||hol?'bg-rose-50/60':dt.getDay()===6?'bg-blue-50/30':''}`}>
                             {iv&&<div className="flex flex-col h-full w-full">
                               <div 
@@ -2850,6 +3193,13 @@
                         <input type="date" value={t.dueDate || ''} onChange={(e) => saveTodos(todos.map(todo => todo.id === t.id ? { ...todo, dueDate: e.target.value } : todo))}
                           className={`text-[11px] outline-none bg-transparent cursor-pointer font-mono font-bold ${t.completed ? 'text-slate-400' : isOverdue ? 'text-rose-600' : 'text-slate-700'}`} />
                       </div>
+                      <select
+                        value={t.minutes || 15}
+                        onChange={(e) => saveTodos(todos.map(todo => todo.id === t.id ? { ...todo, minutes: parseInt(e.target.value, 10) } : todo))}
+                        className="text-[10px] bg-white border border-slate-300 text-slate-600 px-2 py-1 rounded-md font-bold shadow-sm outline-none cursor-pointer hover:bg-slate-50 transition-colors"
+                      >
+                        {[5,10,15,30,45,60].map(min => <option key={min} value={min}>{min}分</option>)}
+                      </select>
                     </div>
                   </div>
                   <button onClick={() => saveTodos(todos.filter(todo => todo.id !== t.id))} className="text-rose-400 bg-white border border-rose-200 hover:bg-rose-50 hover:text-rose-600 rounded-lg p-2 shrink-0 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all shadow-sm">🗑</button>
@@ -2880,6 +3230,9 @@
                     <span className="text-[10px] text-slate-500 font-bold">期限:</span>
                     <input type="date" className="bg-transparent border-0 text-xs text-slate-700 font-mono font-bold outline-none cursor-pointer w-full" value={newTodoDate} onChange={e => setNewTodoDate(e.target.value)} />
                   </div>
+                  <select value={newTodoMinutes} onChange={e => setNewTodoMinutes(parseInt(e.target.value, 10))} className="bg-slate-50 border border-slate-300 text-slate-700 text-xs font-bold rounded-xl px-3 py-2 outline-none shadow-sm cursor-pointer focus:border-blue-400">
+                    {[5,10,15,30,45,60].map(min => <option key={min} value={min}>{min}分</option>)}
+                  </select>
                   <button type="submit" disabled={!newTodoText.trim()} className="bg-blue-600 text-white px-5 py-2 rounded-xl font-black text-sm shadow-md disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 transition-all shrink-0 hover:bg-blue-700">追加</button>
                 </div>
               </div>
