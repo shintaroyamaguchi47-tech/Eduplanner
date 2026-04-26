@@ -1396,6 +1396,17 @@
         else delete nextYear[md];
         saveExtraData({ ...yearlyData, [sy]: nextYear }, documents, vacations);
       };
+      const getMergedYearlyEventText = (dateStr) => {
+        const yearlyText = getYearlyEventText(yearlyData, dateStr);
+        const weeklyText = weeklyData[`${dateStr}-event`]?.subject || '';
+        const lines = [];
+        [yearlyText, weeklyText].forEach(text => {
+          text.split('\n').map(s => s.trim()).filter(Boolean).forEach(line => {
+            if (!lines.includes(line)) lines.push(line);
+          });
+        });
+        return lines.join('\n');
+      };
       
       const getCellData = (ds, pid, di) => { 
         const wk=`${ds}-${pid}`; 
@@ -2824,7 +2835,7 @@
                       {Array.from({length:31},(_,i)=>i+1).map(d=><tr key={d} className="border-b border-slate-200 hover:bg-blue-50/50">
                         <td className="border-r border-slate-300 p-2 text-center bg-slate-50 sticky left-0 font-black text-slate-600 z-10">{d}</td>
                         {[4,5,6,7,8,9,10,11,12,1,2,3].map(m=>{
-                          const y=m<=3?schoolYear+1:schoolYear;const dt=new Date(y,m-1,d);const iv=dt.getDate()===d;const hol=iv?getHolidayName(y,m,d):null;const ut=yearlyData[schoolYear]?.[`${m}-${d}`]||'';
+                          const y=m<=3?schoolYear+1:schoolYear;const dt=new Date(y,m-1,d);const iv=dt.getDate()===d;const ds=iv?formatDate(dt):'';const hol=iv?getHolidayName(y,m,d):null;const ut=iv?getMergedYearlyEventText(ds):'';
                           return <td key={m} className={`border-r border-slate-300 p-1 sm:p-1.5 align-top overflow-hidden relative ${!iv?'bg-stone-100/50':dt.getDay()===0||hol?'bg-rose-50/60':dt.getDay()===6?'bg-blue-50/30':''}`}>
                             {iv&&<div className="flex flex-col h-full w-full">
                               <div 
