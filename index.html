@@ -138,6 +138,27 @@
     const TODO_TAGS = ['授業準備', '学年業務', '部活', '会議・事務', '生徒・保護者', 'その他'];
     const DEFAULT_TEMPLATE_SETTINGS = { 0:{type:'normal',clean:false}, 1:{type:'normal',clean:true}, 2:{type:'normal',clean:true}, 3:{type:'normal',clean:false}, 4:{type:'normal',clean:true}, 5:{type:'holiday',clean:false}, 6:{type:'holiday',clean:false} };
 
+    const getYearlyEventText = (yData, ds) => {
+      const [y, m, d] = ds.split('-').map(Number);
+      const sy = m < 4 ? y - 1 : y;
+      return yData?.[sy]?.[`${m}-${d}`] || '';
+    };
+    const getEventImpact = (text = '') => {
+      const s = text.trim();
+      if (!s) return null;
+      if (/休業|休校|振替休|代休|休日|お休み/.test(s)) return { kind:'holiday', label:'休業', scheduleType:'holiday', badge:'bg-rose-100 text-rose-700 border-rose-300' };
+      if (/入試|テスト|試験|考査|学調|学力/.test(s)) return { kind:'test', label:'テスト', scheduleType:/入試/.test(s)?'special':'short', badge:'bg-rose-100 text-rose-700 border-rose-300' };
+      if (/始業式|終業式|修了式|卒業|入学式|離任式|式/.test(s)) return { kind:'ceremony', label:'式', scheduleType:'special', badge:'bg-purple-100 text-purple-700 border-purple-300' };
+      if (/保護者|参観|面談|懇談/.test(s)) return { kind:'parent', label:'保護者', scheduleType:'short', badge:'bg-amber-100 text-amber-700 border-amber-300' };
+      if (/体育祭|合唱|文化祭|生徒総会|集会/.test(s)) return { kind:'event', label:'行事', scheduleType:'special', badge:'bg-pink-100 text-pink-700 border-pink-300' };
+      if (/会議|研修|委員会|協議会/.test(s)) return { kind:'meeting', label:'会議', scheduleType:null, badge:'bg-orange-100 text-orange-700 border-orange-300' };
+      return { kind:'event', label:'行事', scheduleType:null, badge:'bg-slate-100 text-slate-700 border-slate-300' };
+    };
+    const getInferredDaySetting = (yData, ds) => {
+      const impact = getEventImpact(getYearlyEventText(yData, ds));
+      return impact?.scheduleType ? { type: impact.scheduleType, inferred: true, impact } : null;
+    };
+
     const NEW_INITIAL_YEARLY_DATA = {
       "2025": { "4-4":"新入生体験入学","4-5":"新入生説明会","4-8":"始業式/入学式 第1ステージ「出会い」","4-11":"給食開始 専門委員会","4-12":"仮入部 発育測定(2年)","4-25":"授業参観","5-20":"中間テスト","5-23":"1年保護者会","5-24":"2年保護者会","5-31":"生徒総会","6-10":"第2ステージ「挑戦」","6-13":"中間テスト 1日目","6-14":"中間テスト 2日目","6-17":"教育実習開始","7-20":"夏季休業開始","7-23":"中体連県大会","7-24":"専門委員会","8-27":"夏季休業日終了","8-28":"授業開始日","9-3":"3年県学調(1)","9-5":"体育祭","9-12":"前期期末テスト","9-28":"合唱祭","10-11":"前期終業式","10-15":"後期始業式 第3ステージ「深化」","11-6":"後期中間テスト 1日目","11-7":"後期中間テスト 2日目","12-20":"冬季休業開始 第3ステージ終了","1-6":"冬季休業日終了","1-7":"授業開始日 第4ステージ「感謝」","1-22":"1年保護者会","2-4":"私立高校入試","2-13":"学年末テスト","3-5":"公立高校入試","3-18":"修了式","3-19":"卒業式","3-20":"学年末休業日開始" },
       "2026": { "4-3":"新入生説明会","4-6":"第2回職員会議","4-7":"始業式/入学式 第1ステージ「出会い」","4-8":"お弁当の日","4-9":"2年生学区探訪","4-13":"仮入部 発育測定(2年)","4-15":"学級協議会","4-17":"大字講座","4-18":"キャリアパスポート","4-22":"全国学力テスト 1年交通安全教室","4-24":"政見放送","4-25":"授業参観","4-30":"離任式","5-1":"1年生保護者会","5-2":"校内研修会","5-7":"1年生正式入部","5-22":"2年保護者会","6-10":"前期中間テスト 1日目 第2ステージ「挑戦」開始","6-11":"前期中間テスト 2日目","6-15":"教育実習開始","7-22":"夏季休業前授業最終日 給食最終日","7-23":"夏季休業開始","8-26":"夏季休業日終了","8-27":"夏季休業日明け授業開始日","9-2":"3年県学調(1)","9-8":"前期期末テスト","10-1":"体育祭","10-15":"前期終業式 第2ステージ終了","10-16":"後期始業式 第3ステージ「深化」開始","11-4":"後期中間テスト 1日目","11-5":"後期中間テスト 2日目","12-24":"冬季休業開始 第3ステージ終了","1-4":"冬季休業日終了","1-5":"冬季休業日明け授業開始日 第4ステージ「感謝」開始","2-2":"私立高校入試","2-3":"私立高校入試","3-3":"公立高校入試","3-4":"公立高校入試","3-18":"修了式","3-19":"卒業証書授与式","3-20":"学年末休業日開始" }
@@ -288,7 +309,7 @@
                 let chip = dark ? 'bg-slate-700/80 border-slate-500' : 'bg-slate-100 border-slate-300';
                 let tag = '';
                 if (e.type === 'holiday') { chip = dark ? 'bg-rose-950/50 border-rose-700 text-rose-100' : 'bg-rose-50 border-rose-300 text-rose-900'; tag = '祝・休日'; }
-                else if (e.type === 'event') { chip = dark ? 'bg-pink-950/40 border-pink-700 text-pink-100' : 'bg-pink-50 border-pink-300 text-pink-900'; tag = '行事'; }
+                else if (e.type === 'event') { chip = e.impact ? e.impact.badge : (dark ? 'bg-pink-950/40 border-pink-700 text-pink-100' : 'bg-pink-50 border-pink-300 text-pink-900'); tag = e.impact?.label || '行事'; }
                 else if (e.type === 'todo') { chip = dark ? 'bg-blue-950/40 border-blue-700 text-blue-100' : 'bg-blue-50 border-blue-300 text-blue-900'; tag = 'TODO'; }
                 return (
                   <div key={idx} className={`rounded-xl border px-3 py-2.5 shadow-sm ${itemBase} ${chip}`}>
@@ -311,7 +332,7 @@
       const today = getJSTDate(); const todayStr = formatDate(today); let dayIdx = today.getDay() - 1; if (dayIdx === -1) dayIdx = 6;
       
       const isYearlyHoliday = (ds, yData) => {
-        const [y,m,d] = ds.split('-').map(Number); const sy = m < 4 ? y - 1 : y; const ye = yData[sy]?.[`${m}-${d}`];
+        const ye = getYearlyEventText(yData, ds);
         if (ye && (ye.includes('休業') || ye.includes('休校') || ye.includes('振替休') || ye.includes('代休') || ye.includes('休日') || ye.includes('お休み'))) return true;
         return false;
       };
@@ -321,6 +342,8 @@
         if (vacations.find(v => ds >= v.start && ds <= v.end)) return { type:'holiday' };
         const [y,m,d] = ds.split('-').map(Number);
         if (getHolidayName(y,m,d) || isYearlyHoliday(ds, yearlyData)) return { type:'holiday' };
+        const inferred = getInferredDaySetting(yearlyData, ds);
+        if (inferred) return inferred;
         return templateSettings[di] || DEFAULT_TEMPLATE_SETTINGS[di];
       };
       
@@ -425,7 +448,10 @@
                   <div className="text-xs font-bold text-slate-500 mb-0.5">{today.getFullYear()}年{today.getMonth()+1}月{today.getDate()}日 ({DAYS[dayIdx]}曜日)</div>
                   <div className="text-xl sm:text-2xl font-black text-slate-800 flex items-center gap-2">{greeting} <span className="text-2xl inline-block origin-bottom-right hover:animate-pulse cursor-default">👋</span></div>
                 </div>
-                <span className={`text-xs font-bold px-3 py-1.5 rounded-lg border ${SCHEDULE_TYPES[setting.type].color}`}>{SCHEDULE_TYPES[setting.type].label}日課</span>
+                <div className="flex items-center gap-2 flex-wrap justify-end">
+                  {setting.inferred && setting.impact && <span className={`text-xs font-black px-3 py-1.5 rounded-lg border ${setting.impact.badge}`}>年間: {setting.impact.label}</span>}
+                  <span className={`text-xs font-bold px-3 py-1.5 rounded-lg border ${SCHEDULE_TYPES[setting.type].color}`}>{SCHEDULE_TYPES[setting.type].label}日課</span>
+                </div>
               </div>
             </div>
 
@@ -569,7 +595,7 @@
       const timeToMinutes = (time) => { if (!time) return null; const [h,m] = time.split(':').map(Number); return Number.isFinite(h)&&Number.isFinite(m) ? h*60+m : null; };
       const formatTimeRange = (start, end) => start ? `${start}${end ? `-${end}` : ''}` : '時刻未設定';
       const isYearlyHoliday = (ds, yData) => {
-        const [y,m,d] = ds.split('-').map(Number); const sy = m < 4 ? y - 1 : y; const ye = yData[sy]?.[`${m}-${d}`];
+        const ye = getYearlyEventText(yData, ds);
         return !!(ye && (ye.includes('休業') || ye.includes('休校') || ye.includes('振替休') || ye.includes('代休') || ye.includes('休日') || ye.includes('お休み')));
       };
       const getDaySettingLocal = (ds, di) => {
@@ -577,6 +603,8 @@
         if (vacations.find(v => ds >= v.start && ds <= v.end)) return { type:'holiday' };
         const [y,m,d] = ds.split('-').map(Number);
         if (getHolidayName(y,m,d) || isYearlyHoliday(ds, yearlyData)) return { type:'holiday' };
+        const inferred = getInferredDaySetting(yearlyData, ds);
+        if (inferred) return inferred;
         return templateSettings[di] || DEFAULT_TEMPLATE_SETTINGS[di];
       };
       const getCellDataLocal = (ds, pid, di) => {
@@ -620,7 +648,10 @@
                   <div className="text-xs font-black text-slate-300">{today.getFullYear()}年{today.getMonth()+1}月{today.getDate()}日 ({DAYS[dayIdx]})</div>
                   <div className="text-2xl font-black mt-1">現場モード</div>
                 </div>
-                <span className="text-xs font-black rounded-lg bg-white text-slate-900 px-3 py-1.5">{SCHEDULE_TYPES[setting.type].label}</span>
+                <div className="flex items-center gap-2 flex-wrap justify-end">
+                  {setting.inferred && setting.impact && <span className="text-xs font-black rounded-lg bg-amber-200 text-amber-950 px-3 py-1.5">年間: {setting.impact.label}</span>}
+                  <span className="text-xs font-black rounded-lg bg-white text-slate-900 px-3 py-1.5">{SCHEDULE_TYPES[setting.type].label}</span>
+                </div>
               </div>
             </div>
 
@@ -1317,9 +1348,7 @@
       };
 
       const isYearlyHoliday = (ds, yData) => {
-        const [y,m,d] = ds.split('-').map(Number);
-        const sy = m < 4 ? y - 1 : y;
-        const ye = yData[sy]?.[`${m}-${d}`];
+        const ye = getYearlyEventText(yData, ds);
         if (ye && (ye.includes('休業') || ye.includes('休校') || ye.includes('振替休') || ye.includes('代休') || ye.includes('休日') || ye.includes('お休み'))) {
           return true;
         }
@@ -1332,6 +1361,8 @@
         const [y,m,d] = ds.split('-').map(Number);
         if (getHolidayName(y,m,d)) return {type:'holiday'};
         if (isYearlyHoliday(ds, yearlyData)) return {type:'holiday'};
+        const inferred = getInferredDaySetting(yearlyData, ds);
+        if (inferred) return inferred;
         return templateSettings[di] || DEFAULT_TEMPLATE_SETTINGS[di]; 
       };
       
@@ -2036,7 +2067,7 @@
         todos.filter(t=>!t.completed&&t.dueDate===ds).forEach(t=>evs.push({type:'todo',text:t.text})); 
         const ed=getCellData(ds,'event',di); 
         if(ed?.subject) {
-          ed.subject.split('\n').filter(s=>s.trim()!=='').forEach(s => evs.push({type:'event',text:s.trim()}));
+          ed.subject.split('\n').filter(s=>s.trim()!=='').forEach(s => evs.push({type:'event',text:s.trim(),impact:getEventImpact(s.trim())}));
         }
         return evs; 
       };
@@ -2408,7 +2439,7 @@
                           {isMobile ? (
                             <div className="flex-1 flex flex-wrap content-center justify-center gap-0.5 min-h-0 min-w-0 overflow-hidden pointer-events-none items-center px-0.5 pb-0.5">
                               {evs.length === 0 ? null : evs.slice(0, dotMax).map((e, idx) => (
-                                <span key={idx} className={`w-1.5 h-1.5 rounded-full shrink-0 ${e.type==='holiday'?'bg-rose-500':e.type==='event'?'bg-pink-500':'bg-blue-500'}`} title={e.text} />
+                                <span key={idx} className={`w-1.5 h-1.5 rounded-full shrink-0 ${e.type==='holiday'?'bg-rose-500':e.impact?.kind==='test'?'bg-rose-500':e.impact?.kind==='parent'?'bg-amber-500':e.impact?.kind==='ceremony'?'bg-purple-500':e.type==='event'?'bg-pink-500':'bg-blue-500'}`} title={e.text} />
                               ))}
                               {evs.length > dotMax && (
                                 <span className="text-[7px] font-black leading-none text-slate-600 dark:text-slate-300">+{evs.length - dotMax}</span>
@@ -2419,7 +2450,7 @@
                               {evs.map((e,idx)=>{
                                 let c='bg-slate-100 text-slate-800 border-slate-300 dark:bg-slate-700 dark:text-slate-100 dark:border-slate-500'; let ic='';
                                 if(e.type==='holiday') c='bg-rose-50 text-rose-800 border-rose-300 dark:bg-rose-950/50 dark:text-rose-100 dark:border-rose-700';
-                                else if(e.type==='event') { c='bg-pink-50 text-pink-900 border-pink-300 dark:bg-pink-950/40 dark:text-pink-100 dark:border-pink-700'; ic='🚩'; }
+                                else if(e.type==='event') { c=e.impact?.badge || 'bg-pink-50 text-pink-900 border-pink-300 dark:bg-pink-950/40 dark:text-pink-100 dark:border-pink-700'; ic='🚩'; }
                                 else if(e.type==='todo') { c='bg-blue-50 text-blue-900 border-blue-300 dark:bg-blue-950/40 dark:text-blue-100 dark:border-blue-700'; ic='☑️'; }
                                 return <div key={idx} className={`text-[9px] sm:text-[10px] lg:text-xs font-black border rounded px-1 sm:px-1.5 truncate w-full shadow-sm leading-tight py-0.5 ${c}`} title={e.text}>{ic}{e.text}</div>
                               })}
@@ -2510,6 +2541,11 @@
                                       {Object.values(SCHEDULE_TYPES).map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
                                     </select>
                                   </div>
+                                  {setting.inferred && setting.impact && (
+                                    <div className={`text-[7px] sm:text-[8px] font-black rounded px-1 py-0.5 border ${setting.impact.badge} truncate`} title="年間行事から日課を自動推定">
+                                      年間: {setting.impact.label}
+                                    </div>
+                                  )}
                                   
                                   <div className="relative w-full">
                                     <select value="" onChange={(e) => { const v=e.target.value; if(v==='revert') handleRevertDay(ds); else if(v!=='') handleCopyDay(ds,v); }}
