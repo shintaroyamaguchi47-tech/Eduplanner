@@ -332,7 +332,27 @@
         const override = weeklyData[wKey]; return (override && !override.useTemplate) ? override : base;
       };
 
-      const upcomingTodos = todos.filter(t => !t.completed).slice(0, 5);
+      const nowMinutes = today.getHours() * 60 + today.getMinutes();
+      const timeToMinutes = (time) => {
+        if (!time) return null;
+        const [h, m] = time.split(':').map(Number);
+        if (!Number.isFinite(h) || !Number.isFinite(m)) return null;
+        return h * 60 + m;
+      };
+      const formatTimeRange = (start, end) => start ? `${start}${end ? `-${end}` : ''}` : '時刻未設定';
+
+      const upcomingTodos = todos
+        .filter(t => !t.completed)
+        .sort((a, b) => {
+          if (a.important !== b.important) return a.important ? -1 : 1;
+          if (!a.dueDate && !b.dueDate) return 0;
+          if (!a.dueDate) return 1;
+          if (!b.dueDate) return -1;
+          return a.dueDate.localeCompare(b.dueDate);
+        })
+        .slice(0, 6);
+      const overdueTodos = todos.filter(t => !t.completed && t.dueDate && t.dueDate < todayStr);
+      const dueTodayTodos = todos.filter(t => !t.completed && t.dueDate === todayStr);
 
       const isHoliday = setting.type === 'holiday';
       const greetingHour = today.getHours();
@@ -342,20 +362,113 @@
         const data = getCellData(todayStr, r.id, dayIdx);
         const times = SCHEDULE_TIMES[setting.type];
         const time = times?.[r.id];
-        return { ...r, data, time };
-      }).filter(r => r.data?.subject);
+        const startTime = data.startTime || time?.start || '';
+        const endTime = data.endTime || time?.end || '';
+        return { ...r, data, time: { start: startTime, end: endTime } };
+      }).filter(r => r.data?.subject || (r.id === 'afterschool' && r.data?.events?.some(e => e.subject)));
+
+      const timedSchedule = todaySchedule
+        .flatMap(item => {
+          if (item.id === 'afterschool' && item.data?.events?.length) {
+            return item.data.events.filter(e => e.subject?.trim()).map((ev, idx) => ({
+              id: `${item.id}-${idx}`,
+              name: item.name,
+              icon: item.icon,
+              subject: ev.subject,
+              memo: ev.memo || '',
+              startTime: ev.startTime || item.time?.start || '',
+              endTime: ev.endTime || item.time?.end || ''
+            }));
+          }
+          return [{
+            id: item.id,
+            name: item.name,
+            icon: item.icon,
+            subject: item.data.subject,
+            memo: item.data.memo || '',
+            startTime: item.time?.start || '',
+            endTime: item.time?.end || ''
+          }];
+        })
+        .map(item => ({ ...item, startMin: timeToMinutes(item.startTime), endMin: timeToMinutes(item.endTime) }))
+        .filter(item => item.startMin !== null)
+        .sort((a, b) => a.startMin - b.startMin);
+
+      const currentLesson = timedSchedule.find(item => {
+        const endMin = item.endMin || item.startMin + 50;
+        return item.startMin <= nowMinutes && nowMinutes < endMin;
+      });
+      const nextLesson = timedSchedule.find(item => item.startMin > nowMinutes);
+      const nextFocus = currentLesson || nextLesson;
+      const openSlots = [];
+      for (let i = 0; i < timedSchedule.length - 1; i++) {
+        const curEnd = timedSchedule[i].endMin;
+        const nextStart = timedSchedule[i + 1].startMin;
+        if (curEnd && nextStart && nextStart - curEnd >= 20) {
+          openSlots.push({ start: timedSchedule[i].endTime, end: timedSchedule[i + 1].startTime, minutes: nextStart - curEnd });
+        }
+      }
 
       return (
         <div className="flex-1 overflow-y-auto p-3 sm:p-4 pb-24 bg-[var(--paper)]">
           <div className="max-w-5xl mx-auto space-y-3">
             <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-300 anim-fade-up relative overflow-hidden">
-              <div className="absolute -top-32 -right-32 w-96 h-96 bg-gradient-to-br from-blue-100 to-purple-100 rounded-full blur-3xl opacity-70 pointer-events-none"></div>
               <div className="relative z-10 flex items-center justify-between gap-3 flex-wrap">
                 <div>
                   <div className="text-xs font-bold text-slate-500 mb-0.5">{today.getFullYear()}年{today.getMonth()+1}月{today.getDate()}日 ({DAYS[dayIdx]}曜日)</div>
                   <div className="text-xl sm:text-2xl font-black text-slate-800 flex items-center gap-2">{greeting} <span className="text-2xl inline-block origin-bottom-right hover:animate-pulse cursor-default">👋</span></div>
                 </div>
                 <span className={`text-xs font-bold px-3 py-1.5 rounded-lg border ${SCHEDULE_TYPES[setting.type].color}`}>{SCHEDULE_TYPES[setting.type].label}日課</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="bg-white rounded-2xl p-3 sm:p-4 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-300 anim-fade-up" style={{animationDelay:'0.02s'}}>
+                <div className="text-xs font-black text-slate-500 mb-2">いま見る授業</div>
+                {isHoliday ? (
+                  <div className="text-sm font-black text-slate-700">今日は休日です</div>
+                ) : nextFocus ? (
+                  <button onClick={onGoToWeekly} className="text-left w-full group">
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <span className={`text-[10px] font-black px-2 py-1 rounded-md ${currentLesson ? 'bg-blue-100 text-blue-800' : 'bg-emerald-100 text-emerald-800'}`}>{currentLesson ? '進行中' : '次の予定'}</span>
+                      <span className="text-[10px] font-mono font-bold text-slate-500">{formatTimeRange(nextFocus.startTime, nextFocus.endTime)}</span>
+                    </div>
+                    <div className="text-base font-black text-slate-800 leading-tight group-hover:text-blue-800 transition-colors break-words">{nextFocus.subject}</div>
+                    {nextFocus.memo && <div className="text-xs font-bold text-slate-500 mt-1 line-clamp-2">{nextFocus.memo}</div>}
+                  </button>
+                ) : (
+                  <div className="text-sm font-black text-slate-700">この後の予定はありません</div>
+                )}
+              </div>
+
+              <div className="bg-white rounded-2xl p-3 sm:p-4 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-300 anim-fade-up" style={{animationDelay:'0.04s'}}>
+                <div className="text-xs font-black text-slate-500 mb-2">締切アラート</div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="rounded-xl border border-rose-200 bg-rose-50 p-3">
+                    <div className="text-2xl font-black text-rose-700 leading-none">{overdueTodos.length}</div>
+                    <div className="text-[10px] font-black text-rose-700 mt-1">期限超過</div>
+                  </div>
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+                    <div className="text-2xl font-black text-amber-700 leading-none">{dueTodayTodos.length}</div>
+                    <div className="text-[10px] font-black text-amber-700 mt-1">今日まで</div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-2xl p-3 sm:p-4 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-300 anim-fade-up" style={{animationDelay:'0.06s'}}>
+                <div className="text-xs font-black text-slate-500 mb-2">使えそうな空き時間</div>
+                {openSlots.length === 0 ? (
+                  <div className="text-sm font-black text-slate-700">20分以上の空きは少なめです</div>
+                ) : (
+                  <div className="space-y-1.5">
+                    {openSlots.slice(0, 3).map((slot, idx) => (
+                      <div key={idx} className="flex items-center justify-between gap-2 rounded-lg border border-teal-200 bg-teal-50 px-2.5 py-2">
+                        <span className="text-xs font-mono font-bold text-teal-800">{slot.start}-{slot.end}</span>
+                        <span className="text-[10px] font-black text-teal-700">{slot.minutes}分</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -371,12 +484,28 @@
                   ) : todaySchedule.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-full text-slate-500 gap-3 py-6 lg:py-0"><span className="text-5xl drop-shadow-sm opacity-80">☕</span><span className="font-bold text-sm tracking-widest text-slate-600">まだ予定がありません</span></div>
                   ) : (
-                    todaySchedule.map((item) => (
+                    todaySchedule.map((item) => {
+                      const itemEvents = item.id === 'afterschool' && item.data?.events?.length
+                        ? item.data.events.filter(e => e.subject?.trim()).slice().sort((a,b)=>(a.startTime||'99:99').localeCompare(b.startTime||'99:99'))
+                        : null;
+                      return (
                       <div key={item.id} className="flex items-center gap-2.5 px-2.5 py-2 rounded-xl bg-slate-50 border border-slate-200 hover:border-blue-300 hover:bg-blue-50/50 transition-colors group">
                         <div className="w-9 h-9 rounded-lg bg-white border border-slate-300 flex items-center justify-center shrink-0 shadow-sm text-slate-600 group-hover:text-blue-600 group-hover:border-blue-300 transition-colors"><span className="text-xs font-black">{item.id.startsWith('p') ? item.id.replace('p','') : item.icon}</span></div>
-                        <div className="flex-1 min-w-0"><div className="text-sm font-black text-slate-800 break-words whitespace-pre-wrap leading-tight group-hover:text-blue-900 transition-colors">{item.data?.subject}</div>{item.time?.start && <div className="text-[10px] font-mono text-slate-500 font-bold mt-0.5">{item.time.start}–{item.time.end}</div>}</div>
+                        <div className="flex-1 min-w-0">
+                          {itemEvents ? itemEvents.map((ev, idx) => (
+                            <div key={idx} className="py-0.5">
+                              <div className="text-sm font-black text-slate-800 break-words whitespace-pre-wrap leading-tight group-hover:text-blue-900 transition-colors">{ev.subject}</div>
+                              {ev.startTime && <div className="text-[10px] font-mono text-slate-500 font-bold mt-0.5">{formatTimeRange(ev.startTime, ev.endTime)}</div>}
+                            </div>
+                          )) : (
+                            <>
+                              <div className="text-sm font-black text-slate-800 break-words whitespace-pre-wrap leading-tight group-hover:text-blue-900 transition-colors">{item.data?.subject}</div>
+                              {item.time?.start && <div className="text-[10px] font-mono text-slate-500 font-bold mt-0.5">{formatTimeRange(item.time.start, item.time.end)}</div>}
+                            </>
+                          )}
+                        </div>
                       </div>
-                    ))
+                    )})
                   )}
                 </div>
               </div>
