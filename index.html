@@ -422,6 +422,13 @@
         .filter(item => item.id.startsWith('p') && item.data?.subject?.trim())
         .map(item => ({ ...item, prep: getPrepProgress(item.data.prepChecklist) }))
         .filter(item => !item.prep.isComplete);
+      const slotSuggestions = openSlots.slice(0, 3).map(slot => {
+        const match = upcomingTodos.find(t => {
+          const minutes = parseInt(t.minutes || 15, 10);
+          return minutes <= slot.minutes && (t.important || !t.dueDate || t.dueDate <= todayStr);
+        }) || upcomingTodos.find(t => parseInt(t.minutes || 15, 10) <= slot.minutes);
+        return { ...slot, todo: match };
+      });
 
       return (
         <div className="flex-1 overflow-y-auto p-3 sm:p-4 pb-24 bg-[var(--paper)]">
@@ -477,14 +484,23 @@
 
               <div className="bg-white rounded-2xl p-3 sm:p-4 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-300 anim-fade-up" style={{animationDelay:'0.06s'}}>
                 <div className="text-xs font-black text-slate-500 mb-2">使えそうな空き時間</div>
-                {openSlots.length === 0 ? (
+                {slotSuggestions.length === 0 ? (
                   <div className="text-sm font-black text-slate-700">20分以上の空きは少なめです</div>
                 ) : (
                   <div className="space-y-1.5">
-                    {openSlots.slice(0, 3).map((slot, idx) => (
-                      <div key={idx} className="flex items-center justify-between gap-2 rounded-lg border border-teal-200 bg-teal-50 px-2.5 py-2">
-                        <span className="text-xs font-mono font-bold text-teal-800">{slot.start}-{slot.end}</span>
-                        <span className="text-[10px] font-black text-teal-700">{slot.minutes}分</span>
+                    {slotSuggestions.map((slot, idx) => (
+                      <div key={idx} className="rounded-lg border border-teal-200 bg-teal-50 px-2.5 py-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-mono font-bold text-teal-800">{slot.start}-{slot.end}</span>
+                          <span className="text-[10px] font-black text-teal-700">{slot.minutes}分</span>
+                        </div>
+                        {slot.todo && (
+                          <div className="mt-1 text-[11px] font-black text-teal-900 truncate">
+                            {slot.todo.important && <span className="text-amber-500 mr-1">★</span>}
+                            {slot.todo.text}
+                            <span className="ml-1 text-[10px] text-teal-700">({slot.todo.minutes || 15}分)</span>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -553,7 +569,13 @@
                       return (
                         <div key={t.id} className={`flex items-start gap-2.5 p-2.5 rounded-xl border shadow-sm transition-all group ${cardStyle}`}>
                           <button type="button" onClick={() => onToggleTodo && onToggleTodo(t.id)} aria-label="完了" className={`w-5 h-5 rounded-md border-[3px] mt-0.5 shrink-0 flex items-center justify-center bg-white hover:bg-slate-50 transition-colors ${t.important ? 'border-amber-500' : isOverdue ? 'border-rose-500' : 'border-slate-400'}`}></button>
-                          <div className="flex-1 min-w-0 flex flex-col justify-center"><div className="text-sm font-black text-slate-800 leading-snug break-words whitespace-pre-wrap">{t.important && <span className="text-amber-500 mr-1.5">★</span>}{t.text}</div>{t.dueDate && <div className={`text-[10px] font-bold mt-1 font-mono ${dueStyle}`}>{dueText} : {t.dueDate}</div>}</div>
+                          <div className="flex-1 min-w-0 flex flex-col justify-center">
+                            <div className="text-sm font-black text-slate-800 leading-snug break-words whitespace-pre-wrap">{t.important && <span className="text-amber-500 mr-1.5">★</span>}{t.text}</div>
+                            <div className="flex items-center gap-2 flex-wrap mt-1">
+                              {t.dueDate && <div className={`text-[10px] font-bold font-mono ${dueStyle}`}>{dueText} : {t.dueDate}</div>}
+                              <span className="text-[10px] font-black text-slate-500 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded">{t.minutes || 15}分</span>
+                            </div>
+                          </div>
                           <button type="button" onClick={() => onDeleteTodo && onDeleteTodo(t.id)} aria-label="削除" className="text-rose-400 bg-white border border-rose-200 hover:bg-rose-50 hover:text-rose-600 rounded-lg p-1.5 shrink-0 text-xs shadow-sm opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all">🗑</button>
                         </div>
                       );
@@ -611,6 +633,7 @@
       const [newTodoDate, setNewTodoDate] = useState('');
       const [newTodoTag, setNewTodoTag] = useState('');
       const [newTodoImportant, setNewTodoImportant] = useState(false);
+      const [newTodoMinutes, setNewTodoMinutes] = useState(15);
       const [toastMessage, setToastMessage] = useState('');
       const [editingCell, setEditingCell] = useState(null);
       const [editingTodoId, setEditingTodoId] = useState(null);
@@ -1544,7 +1567,7 @@
 
       const combinedNotes = useMemo(() => { const c=[...notesData.map(n=>({...n,type:'note'}))]; Object.keys(weeklyData).forEach(k=>{if(k.endsWith('-diary')){const ds=k.replace('-diary','');const d=weeklyData[k];if(d?.memo?.trim())c.push({id:`diary-${ds}`,type:'diary',title:`${new Date(ds).getMonth()+1}月${new Date(ds).getDate()}日のメモ`,content:d.memo,updatedAt:new Date(ds).getTime()+86399000,dateStr:ds});}}); return c.sort((a,b)=>b.updatedAt-a.updatedAt); }, [notesData, weeklyData]);
 
-      const addTodo = (e) => { e.preventDefault(); if(!newTodoText.trim()) return; saveTodos([{id:Date.now(),text:newTodoText,completed:false,dueDate:newTodoDate,tag:newTodoTag,important:newTodoImportant}, ...todos]); setNewTodoText(''); };
+      const addTodo = (e) => { e.preventDefault(); if(!newTodoText.trim()) return; saveTodos([{id:Date.now(),text:newTodoText,completed:false,dueDate:newTodoDate,tag:newTodoTag,important:newTodoImportant,minutes:newTodoMinutes}, ...todos]); setNewTodoText(''); };
       
       const dragItemIdx = useRef(null);
       const dragOverItemIdx = useRef(null);
@@ -3020,6 +3043,13 @@
                         <input type="date" value={t.dueDate || ''} onChange={(e) => saveTodos(todos.map(todo => todo.id === t.id ? { ...todo, dueDate: e.target.value } : todo))}
                           className={`text-[11px] outline-none bg-transparent cursor-pointer font-mono font-bold ${t.completed ? 'text-slate-400' : isOverdue ? 'text-rose-600' : 'text-slate-700'}`} />
                       </div>
+                      <select
+                        value={t.minutes || 15}
+                        onChange={(e) => saveTodos(todos.map(todo => todo.id === t.id ? { ...todo, minutes: parseInt(e.target.value, 10) } : todo))}
+                        className="text-[10px] bg-white border border-slate-300 text-slate-600 px-2 py-1 rounded-md font-bold shadow-sm outline-none cursor-pointer hover:bg-slate-50 transition-colors"
+                      >
+                        {[5,10,15,30,45,60].map(min => <option key={min} value={min}>{min}分</option>)}
+                      </select>
                     </div>
                   </div>
                   <button onClick={() => saveTodos(todos.filter(todo => todo.id !== t.id))} className="text-rose-400 bg-white border border-rose-200 hover:bg-rose-50 hover:text-rose-600 rounded-lg p-2 shrink-0 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all shadow-sm">🗑</button>
@@ -3050,6 +3080,9 @@
                     <span className="text-[10px] text-slate-500 font-bold">期限:</span>
                     <input type="date" className="bg-transparent border-0 text-xs text-slate-700 font-mono font-bold outline-none cursor-pointer w-full" value={newTodoDate} onChange={e => setNewTodoDate(e.target.value)} />
                   </div>
+                  <select value={newTodoMinutes} onChange={e => setNewTodoMinutes(parseInt(e.target.value, 10))} className="bg-slate-50 border border-slate-300 text-slate-700 text-xs font-bold rounded-xl px-3 py-2 outline-none shadow-sm cursor-pointer focus:border-blue-400">
+                    {[5,10,15,30,45,60].map(min => <option key={min} value={min}>{min}分</option>)}
+                  </select>
                   <button type="submit" disabled={!newTodoText.trim()} className="bg-blue-600 text-white px-5 py-2 rounded-xl font-black text-sm shadow-md disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 transition-all shrink-0 hover:bg-blue-700">追加</button>
                 </div>
               </div>
