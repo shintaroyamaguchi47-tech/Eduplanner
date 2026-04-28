@@ -3453,7 +3453,7 @@
                                 <div key={`${subj.id}-${cls||'_'}`} className="space-y-1">
                                   <div className="flex gap-1.5 items-center">
                                     <button type="button" onClick={()=>handleSmartAutoFill(subjIdx, cls)} disabled={isFinished} className="flex-1 bg-blue-600 text-white text-sm font-bold py-2 px-3 rounded-lg shadow-sm text-left truncate active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-blue-700 transition-colors">{text}</button>
-                                    <button type="button" onClick={()=>setTempSubject(text)} title="このコマだけ入力" className="shrink-0 bg-white text-slate-600 text-[10px] font-bold py-2 px-2 rounded-lg border border-slate-300 shadow-sm active:scale-95 hover:bg-slate-50 transition-colors whitespace-nowrap">1コマ</button>
+                                    <button type="button" onClick={()=>{setTempSubject(text); setTempUnitPickerSel({ subjIdx, cls, unitIdx: prog.currentUnitIdx, hour: prog.currentHour });}} title="単元・時間目を選んで入力" className="shrink-0 bg-indigo-50 text-indigo-600 text-[10px] font-bold py-2 px-2 rounded-lg border border-indigo-300 shadow-sm active:scale-95 hover:bg-indigo-100 transition-colors whitespace-nowrap">単元選択</button>
                                   </div>
                                   <div className="flex gap-1 pl-0.5">
                                     <button type="button" onClick={()=>handleInsertSpecial('test', subjIdx, cls)} className="flex-1 bg-rose-50 text-rose-700 text-[11px] font-black py-1.5 px-2 rounded-md border border-rose-300 shadow-sm hover:bg-rose-100 active:scale-95 transition-all">🧪 単元テスト</button>
