@@ -1603,7 +1603,7 @@
       };
 
       // 単元テスト・自習・延長などの特別コマを挿入し、同週の後続セルを1コマずらす
-      const handleInsertSpecial = (kind, subjIdx, cls = null) => {
+      const handleInsertSpecial = (kind, subjIdx, cls = null, unitNameOverride = null) => {
         if (!editingCell || editingCell.isTemplate) return;
         const subj = syllabusData[subjIdx];
         if (!subj || subj.type !== 'auto') return;
@@ -1625,7 +1625,8 @@
         let text;
         let newColor = tempColor || '';
         if (kind === 'test') {
-          text = curUnit ? `${prefix}${subj.name}（${unitName} 単元テスト）` : `${prefix}${subj.name}（単元テスト）`;
+          const testUnitName = unitNameOverride || (wasConsuming ? wasConsuming[1] : unitName);
+          text = testUnitName ? `${prefix}${subj.name}（${testUnitName} 単元テスト）` : `${prefix}${subj.name}（単元テスト）`;
           newColor = 'test';
         } else if (kind === 'self') {
           text = `自習（${prefix}${subj.name}）`;
@@ -3484,7 +3485,14 @@
                           <div className="space-y-2 max-h-44 overflow-y-auto hide-scrollbar pr-1">
                             {subj.units.map((unit, uIdx) => (
                               <div key={uIdx}>
-                                <div className="text-[10px] font-bold text-indigo-600 mb-1">{unit.name}（全{unit.hours}時間）</div>
+                                <div className="flex items-center gap-1 mb-1">
+                                  <div className="text-[10px] font-bold text-indigo-600 flex-1">{unit.name}（全{unit.hours}時間）</div>
+                                  <button type="button"
+                                    onClick={() => { handleInsertSpecial('test', subjIdx, cls, unit.name); setTempUnitPickerSel(null); }}
+                                    className="shrink-0 bg-rose-50 text-rose-600 text-[9px] font-bold py-0.5 px-1.5 rounded border border-rose-300 hover:bg-rose-100 active:scale-95 transition-all whitespace-nowrap">
+                                    🧪 テスト
+                                  </button>
+                                </div>
                                 <div className="flex flex-wrap gap-1">
                                   {Array.from({length: unit.hours}, (_, h) => h + 1).map(h => {
                                     const isActive = uIdx === unitIdx && h === hour;
