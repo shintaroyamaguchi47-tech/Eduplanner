@@ -783,6 +783,7 @@
       const [tempEvents, setTempEvents] = useState([]);
       const [tempHandwriting, setTempHandwriting] = useState(null);
       const [tempColor, setTempColor] = useState('');
+      const [tempUnitPickerSel, setTempUnitPickerSel] = useState(null);
       const [showHandwritingPad, setShowHandwritingPad] = useState(false);
       
       const [editingWeekMemo, setEditingWeekMemo] = useState(null);
@@ -1533,6 +1534,74 @@
         showToast(`📚 ${filled}コマ自動入力しました`);
       };
 
+      // 指定の単元・時間目から週末まで自動入力
+      const handleSmartAutoFillFrom = (subjIdx, cls, startUnitIdx, startHour) => {
+        if (!editingCell || editingCell.isTemplate) return;
+        const subj = syllabusData[subjIdx];
+        if (!subj || subj.type !== 'auto') return;
+
+        const ds = editingCell.dateStr;
+        const pid = editingCell.periodId;
+        const di = editingCell.dayIndex;
+        const periodIds = ['p1','p2','p3','p4','p5','p6'];
+        const prefix = cls || '';
+        const expectedTmpl = `${prefix}${subj.name}`;
+
+        const currentSetting = getDaySetting(ds, di);
+        const slotsToFill = [{ dstr: ds, p: pid, dayIdx: di, setting: currentSetting }];
+
+        for (let i = 0; i < 7; i++) {
+          const cd = new Date(currentWeekStart); cd.setDate(cd.getDate() + i);
+          const dstr = formatDate(cd);
+          if (dstr < ds) continue;
+          const setting = getDaySetting(dstr, i);
+          if (setting.type === 'holiday') continue;
+
+          for (const p of periodIds) {
+            if (dstr === ds && p === pid) continue;
+            if (dstr === ds && periodIds.indexOf(p) < periodIds.indexOf(pid)) continue;
+            const tk = `${i}-${p}`;
+            const tmpl = baseTemplate[tk];
+            if (!tmpl || !tmpl.subject || tmpl.subject.trim() !== expectedTmpl) continue;
+            const wk = `${dstr}-${p}`;
+            const existing = weeklyData[wk];
+            if (existing && !existing.useTemplate && existing.subject && existing.subject.trim() !== '') continue;
+            slotsToFill.push({ dstr, p, dayIdx: i, setting });
+          }
+        }
+
+        let nd = { ...weeklyData };
+        let up = [...syllabusData];
+        const s = up[subjIdx];
+        let curHour = startHour;
+        let curUnitIdx = startUnitIdx;
+        let filled = 0;
+
+        for (const { dstr, p, setting } of slotsToFill) {
+          const unit = s.units?.[curUnitIdx];
+          if (!unit) break;
+          const text = `${prefix}${s.name}（${unit.name} ${curHour}/${unit.hours}）`;
+          const times = SCHEDULE_TIMES[setting.type]?.[p];
+          const existing = nd[`${dstr}-${p}`] || {};
+          nd[`${dstr}-${p}`] = {
+            subject: text, memo: existing.memo || '', useTemplate: false,
+            startTime: times?.start || existing.startTime || '',
+            endTime: times?.end || existing.endTime || '',
+            color: tempColor || existing.color || ''
+          };
+          filled++;
+          curHour++;
+          if (curHour > unit.hours) { curHour = 1; curUnitIdx++; }
+        }
+
+        up[subjIdx] = setClassProgress(s, cls, curUnitIdx, curHour);
+        saveSyllabus(up);
+        saveAll(baseTemplate, templateSettings, nd, weeklySettings);
+        setEditingCell(null);
+        setTempUnitPickerSel(null);
+        showToast(`📚 ${filled}コマ自動入力しました`);
+      };
+
       // 単元テスト・自習・延長などの特別コマを挿入し、同週の後続セルを1コマずらす
       const handleInsertSpecial = (kind, subjIdx, cls = null) => {
         if (!editingCell || editingCell.isTemplate) return;
@@ -1694,7 +1763,7 @@
         setWeeklyData(nd); setWeeklySettings(ns); saveAll(baseTemplate, templateSettings, nd, ns); showToast('振替をリセットしました');
       };
 
-      const openEditModal = (cd, ds, row, di, dn, ih) => { if(row.id==='afterschool'){ let ie=cd.events?.length>0?[...cd.events]:[]; if(ie.length===0&&(cd.subject||cd.memo)) ie=[{startTime:cd.startTime||'',endTime:cd.endTime||'',subject:cd.subject||'',memo:cd.memo||''}]; while(ie.length<5) ie.push({startTime:'',endTime:'',subject:'',memo:''}); setTempEvents(ie); } else if (row.id === 'event' && activeTab !== 'template') { const raw = weeklyData[`${ds}-event`]; setTempSubject(raw?.subject || ''); setTempMemo(cd.memo||''); setTempStartTime(cd.startTime||''); setTempEndTime(cd.endTime||''); } else { setTempSubject(cd.subject||''); setTempMemo(cd.memo||''); let sT=cd.startTime||''; let eT=cd.endTime||''; if(!ih && activeTab!=='template' && row.id!=='event' && row.id!=='diary') { const sc=SCHEDULE_TIMES[getDaySetting(ds,di).type]?.[row.id]; if(sc){ if(!sT) sT=sc.start||''; if(!eT) eT=sc.end||''; } } setTempStartTime(sT); setTempEndTime(eT); } setTempHandwriting(cd.handwriting||null); setTempColor(cd.color||''); setEditingCell({dateStr:ds, periodId:row.id, dayIndex:di, dayName:dn, periodName:row.name, isTemplate:activeTab==='template', ih}); };
+      const openEditModal = (cd, ds, row, di, dn, ih) => { if(row.id==='afterschool'){ let ie=cd.events?.length>0?[...cd.events]:[]; if(ie.length===0&&(cd.subject||cd.memo)) ie=[{startTime:cd.startTime||'',endTime:cd.endTime||'',subject:cd.subject||'',memo:cd.memo||''}]; while(ie.length<5) ie.push({startTime:'',endTime:'',subject:'',memo:''}); setTempEvents(ie); } else if (row.id === 'event' && activeTab !== 'template') { const raw = weeklyData[`${ds}-event`]; setTempSubject(raw?.subject || ''); setTempMemo(cd.memo||''); setTempStartTime(cd.startTime||''); setTempEndTime(cd.endTime||''); } else { setTempSubject(cd.subject||''); setTempMemo(cd.memo||''); let sT=cd.startTime||''; let eT=cd.endTime||''; if(!ih && activeTab!=='template' && row.id!=='event' && row.id!=='diary') { const sc=SCHEDULE_TIMES[getDaySetting(ds,di).type]?.[row.id]; if(sc){ if(!sT) sT=sc.start||''; if(!eT) eT=sc.end||''; } } setTempStartTime(sT); setTempEndTime(eT); } setTempHandwriting(cd.handwriting||null); setTempColor(cd.color||''); setTempUnitPickerSel(null); setEditingCell({dateStr:ds, periodId:row.id, dayIndex:di, dayName:dn, periodName:row.name, isTemplate:activeTab==='template', ih}); };
       const updateTempEvent = (i,f,v) => { const n=[...tempEvents]; n[i][f]=v; setTempEvents(n); };
       
       const handleSaveNote = () => { if(!editingNote.title.trim()&&!editingNote.content.trim()){ setEditingNote(null); return; } if(editingNote.type==='diary'){ const wk=`${editingNote.dateStr}-diary`; const nd={...weeklyData,[wk]:{...(weeklyData[wk]||{}),memo:editingNote.content,useTemplate:false}}; setWeeklyData(nd); saveAll(baseTemplate,templateSettings,nd,weeklySettings); showToast('メモを更新しました'); } else { const isN=!notesData.some(n=>n.id===editingNote.id); const ts=Date.now(); const nn=isN?[{...editingNote,type:'note',updatedAt:ts},...notesData]:notesData.map(n=>n.id===editingNote.id?{...editingNote,updatedAt:ts}:n); saveNotes(nn); showToast('ノートを保存しました'); } setEditingNote(null); };
@@ -3326,6 +3395,47 @@
                       <input value={tempSubject} onChange={e=>setTempSubject(e.target.value)} className="w-full text-2xl font-black p-3 border-b-[3px] border-slate-300 outline-none focus:border-blue-600 bg-transparent text-slate-800 placeholder-slate-400 transition-colors" placeholder="活動内容・教科名" autoFocus />
                     )}
                     
+                    {!editingCell.isTemplate && editingCell.periodId !== 'event' && editingCell.periodId !== 'diary' && editingCell.periodId !== 'afterschool' && (() => {
+                      const seen = new Set();
+                      const templateSubjects = [];
+                      for (let i = 0; i < 7; i++) {
+                        for (const p of ['p1','p2','p3','p4','p5','p6','morning']) {
+                          const val = baseTemplate[`${i}-${p}`];
+                          const s = val?.subject?.trim();
+                          if (s && !seen.has(s)) { seen.add(s); templateSubjects.push(s); }
+                        }
+                      }
+                      if (templateSubjects.length === 0) return null;
+                      return (
+                        <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 shadow-inner">
+                          <div className="text-[11px] font-black text-slate-600 mb-2">📋 基本設定から選ぶ</div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {templateSubjects.map(s => {
+                              const match = findSyllabusMatch(s, syllabusData);
+                              const hasUnits = match && syllabusData[match.idx]?.type === 'auto';
+                              const isSelected = tempUnitPickerSel && match && tempUnitPickerSel.subjIdx === match.idx && tempUnitPickerSel.cls === match.cls;
+                              return (
+                                <button key={s} type="button"
+                                  onClick={() => {
+                                    setTempSubject(s);
+                                    if (hasUnits) {
+                                      const subj = syllabusData[match.idx];
+                                      const prog = getClassProgress(subj, match.cls);
+                                      setTempUnitPickerSel({ subjIdx: match.idx, cls: match.cls, unitIdx: prog.currentUnitIdx, hour: prog.currentHour });
+                                    } else {
+                                      setTempUnitPickerSel(null);
+                                    }
+                                  }}
+                                  className={`px-3 py-1.5 text-xs font-bold rounded-lg border shadow-sm transition-all active:scale-95 ${isSelected ? 'bg-blue-600 text-white border-blue-700 shadow-md' : hasUnits ? 'bg-blue-50 text-blue-700 border-blue-300 hover:bg-blue-100' : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'}`}>
+                                  {s}{hasUnits ? ' 📖' : ''}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })()}
+
                     {!editingCell.isTemplate && editingCell.periodId.startsWith('p') && syllabusData.length > 0 && (
                       <div className="bg-blue-50/50 p-3 rounded-xl border border-blue-200 max-h-52 overflow-y-auto hide-scrollbar space-y-2 shadow-inner">
                         <div className="text-[11px] font-black text-blue-800 mb-1">📚 今週を自動入力</div>
@@ -3363,6 +3473,54 @@
                         })}
                       </div>
                     )}
+                    {!editingCell.isTemplate && tempUnitPickerSel && (() => {
+                      const { subjIdx, cls, unitIdx, hour } = tempUnitPickerSel;
+                      const subj = syllabusData[subjIdx];
+                      if (!subj || subj.type !== 'auto' || !subj.units?.length) return null;
+                      const isFinished = unitIdx >= subj.units.length;
+                      return (
+                        <div className="bg-indigo-50 p-3 rounded-xl border border-indigo-200 shadow-inner space-y-2">
+                          <div className="text-[11px] font-black text-indigo-800">📖 単元・時間目を選ぶ</div>
+                          <div className="space-y-2 max-h-44 overflow-y-auto hide-scrollbar pr-1">
+                            {subj.units.map((unit, uIdx) => (
+                              <div key={uIdx}>
+                                <div className="text-[10px] font-bold text-indigo-600 mb-1">{unit.name}（全{unit.hours}時間）</div>
+                                <div className="flex flex-wrap gap-1">
+                                  {Array.from({length: unit.hours}, (_, h) => h + 1).map(h => {
+                                    const isActive = uIdx === unitIdx && h === hour;
+                                    return (
+                                      <button key={h} type="button"
+                                        onClick={() => {
+                                          const prefix = cls || '';
+                                          const text = `${prefix}${subj.name}（${unit.name} ${h}/${unit.hours}）`;
+                                          setTempSubject(text);
+                                          setTempUnitPickerSel(prev => ({...prev, unitIdx: uIdx, hour: h}));
+                                        }}
+                                        className={`w-8 h-8 text-xs font-bold rounded-lg border transition-all active:scale-95 ${isActive ? 'bg-indigo-600 text-white border-indigo-700 shadow-md' : 'bg-white text-indigo-700 border-indigo-300 hover:bg-indigo-100'}`}>
+                                        {h}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="flex gap-2 pt-1 border-t border-indigo-100">
+                            <button type="button"
+                              onClick={() => handleSmartAutoFillFrom(subjIdx, cls, unitIdx, hour)}
+                              disabled={isFinished}
+                              className="flex-1 bg-indigo-600 text-white text-[12px] font-bold py-2 px-3 rounded-lg shadow-sm active:scale-95 hover:bg-indigo-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+                              この時間目から週末まで自動入力
+                            </button>
+                            <button type="button"
+                              onClick={() => { handleSaveCell({subject: tempSubject, memo: tempMemo, startTime: tempStartTime, endTime: tempEndTime, handwriting: tempHandwriting, color: tempColor||''}); setTempUnitPickerSel(null); }}
+                              className="shrink-0 bg-white text-indigo-700 text-[10px] font-bold py-2 px-3 rounded-lg border border-indigo-300 shadow-sm active:scale-95 hover:bg-indigo-50 transition-colors whitespace-nowrap">
+                              1コマのみ
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })()}
                     {editingCell.periodId !== 'event' && editingCell.periodId !== 'diary' && (
                       <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 shadow-inner">
                         <div className="text-[11px] font-black text-slate-600 mb-2">🎨 セルの色</div>
