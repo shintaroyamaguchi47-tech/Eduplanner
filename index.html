@@ -449,7 +449,6 @@
                   <div className="text-xl sm:text-2xl font-black text-slate-800 flex items-center gap-2">{greeting} <span className="text-2xl inline-block origin-bottom-right hover:animate-pulse cursor-default">👋</span></div>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap justify-end">
-                  {setting.inferred && setting.impact && <span className={`text-xs font-black px-3 py-1.5 rounded-lg border ${setting.impact.badge}`}>年間: {setting.impact.label}</span>}
                   <span className={`text-xs font-bold px-3 py-1.5 rounded-lg border ${SCHEDULE_TYPES[setting.type].color}`}>{SCHEDULE_TYPES[setting.type].label}日課</span>
                 </div>
               </div>
@@ -657,7 +656,6 @@
                   <div className="text-2xl font-black mt-1">現場モード</div>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap justify-end">
-                  {setting.inferred && setting.impact && <span className="text-xs font-black rounded-lg bg-amber-200 text-amber-950 px-3 py-1.5">年間: {setting.impact.label}</span>}
                   <span className="text-xs font-black rounded-lg bg-white text-slate-900 px-3 py-1.5">{SCHEDULE_TYPES[setting.type].label}</span>
                 </div>
               </div>
@@ -2297,7 +2295,7 @@
                             {(data.events?.length?data.events:[{subject:data.subject,start:data.startTime}]).filter(e=>e.subject).slice().sort((a,b)=>(a.startTime||'99:99').localeCompare(b.startTime||'99:99')).map((e,idx)=>(
                               <div key={idx} className="flex flex-col">
                                 {e.startTime && <div className={`text-[6px] sm:text-[7px] font-mono font-bold leading-none opacity-90 ${blockText} mb-0.5`}>{e.startTime}{e.endTime?`-${e.endTime}`:''}</div>}
-                                <div className={`${fontSizeClass} font-black mt-0.5 break-words ${activeTab === 'weekly' && row.id !== 'event' ? 'whitespace-pre-wrap' : ''} ${blockText}`} title={e.subject}>{e.subject}</div>
+                                <div className={`${fontSizeClass} font-black mt-0.5 break-words ${activeTab === 'weekly' && row.id !== 'event' ? 'whitespace-pre-wrap line-clamp-3 overflow-hidden' : ''} ${blockText}`} title={e.subject}>{e.subject}</div>
                               </div>
                             ))}
                           </div>
@@ -2319,9 +2317,9 @@
                                   <div className={`text-[7px] sm:text-[9px] font-bold ${blockText} opacity-70 leading-tight truncate`}>{sm[2]}</div>
                                 </div>
                               );
-                              return <div className={`${fontSizeClass} font-black break-words ${row.id === 'lunch' || row.id === 'morning' ? 'leading-[1.1]' : ''} ${activeTab === 'weekly' && row.id !== 'event' ? 'whitespace-pre-wrap' : ''} ${blockText}`} title={data.subject}>{data.subject}</div>;
+                              return <div className={`${fontSizeClass} font-black break-words ${row.id === 'lunch' || row.id === 'morning' ? 'leading-[1.1]' : ''} ${activeTab === 'weekly' && row.id !== 'event' ? 'whitespace-pre-wrap line-clamp-3 overflow-hidden' : ''} ${blockText}`} title={data.subject}>{data.subject}</div>;
                             })()}
-                            {data.memo && row.id !== 'lunch' && <div className={`text-[6px] sm:text-[8px] font-bold mt-1 opacity-80 break-words ${activeTab === 'weekly' && row.id !== 'event' ? 'whitespace-pre-wrap' : 'line-clamp-1'} ${blockText}`}>{data.memo}</div>}
+                            {data.memo && row.id !== 'lunch' && <div className={`text-[6px] sm:text-[8px] font-bold mt-1 opacity-80 break-words ${activeTab === 'weekly' && row.id !== 'event' ? 'line-clamp-2 overflow-hidden' : 'line-clamp-1'} ${blockText}`}>{data.memo}</div>}
                           </div>
                         )}
                       </div>
@@ -2640,12 +2638,6 @@
                                       {Object.values(SCHEDULE_TYPES).map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
                                     </select>
                                   </div>
-                                  {setting.inferred && setting.impact && (
-                                    <div className={`text-[7px] sm:text-[8px] font-black rounded px-1 py-0.5 border ${setting.impact.badge} truncate`} title="年間行事から日課を自動推定">
-                                      年間: {setting.impact.label}
-                                    </div>
-                                  )}
-                                  
                                   <div className="relative w-full">
                                     <select value="" onChange={(e) => { const v=e.target.value; if(v==='revert') handleRevertDay(ds); else if(v!=='') handleCopyDay(ds,v); }}
                                       className={`w-full text-[8px] sm:text-[9px] font-bold rounded px-0.5 sm:px-1 py-1 outline-none cursor-pointer text-center appearance-none shadow-sm transition-colors ${setting.type==='holiday' ? 'bg-white/50 text-rose-700 border border-rose-300' : 'bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300'} ${isMobile ? 'py-0.5 text-[7px]' : ''}`}>
