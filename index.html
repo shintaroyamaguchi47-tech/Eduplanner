@@ -2297,7 +2297,7 @@
                             {(data.events?.length?data.events:[{subject:data.subject,start:data.startTime}]).filter(e=>e.subject).slice().sort((a,b)=>(a.startTime||'99:99').localeCompare(b.startTime||'99:99')).map((e,idx)=>(
                               <div key={idx} className="flex flex-col">
                                 {e.startTime && <div className={`text-[6px] sm:text-[7px] font-mono font-bold leading-none opacity-90 ${blockText} mb-0.5`}>{e.startTime}{e.endTime?`-${e.endTime}`:''}</div>}
-                                <div className={`${fontSizeClass} font-black mt-0.5 break-words ${activeTab === 'weekly' && row.id !== 'event' ? 'whitespace-pre-wrap' : ''} ${blockText}`} title={e.subject}>{e.subject}</div>
+                                <div className={`${fontSizeClass} font-black mt-0.5 break-words ${activeTab === 'weekly' && row.id !== 'event' ? 'whitespace-pre-wrap line-clamp-3 overflow-hidden' : ''} ${blockText}`} title={e.subject}>{e.subject}</div>
                               </div>
                             ))}
                           </div>
@@ -2319,9 +2319,9 @@
                                   <div className={`text-[7px] sm:text-[9px] font-bold ${blockText} opacity-70 leading-tight truncate`}>{sm[2]}</div>
                                 </div>
                               );
-                              return <div className={`${fontSizeClass} font-black break-words ${row.id === 'lunch' || row.id === 'morning' ? 'leading-[1.1]' : ''} ${activeTab === 'weekly' && row.id !== 'event' ? 'whitespace-pre-wrap' : ''} ${blockText}`} title={data.subject}>{data.subject}</div>;
+                              return <div className={`${fontSizeClass} font-black break-words ${row.id === 'lunch' || row.id === 'morning' ? 'leading-[1.1]' : ''} ${activeTab === 'weekly' && row.id !== 'event' ? 'whitespace-pre-wrap line-clamp-3 overflow-hidden' : ''} ${blockText}`} title={data.subject}>{data.subject}</div>;
                             })()}
-                            {data.memo && row.id !== 'lunch' && <div className={`text-[6px] sm:text-[8px] font-bold mt-1 opacity-80 break-words ${activeTab === 'weekly' && row.id !== 'event' ? 'whitespace-pre-wrap' : 'line-clamp-1'} ${blockText}`}>{data.memo}</div>}
+                            {data.memo && row.id !== 'lunch' && <div className={`text-[6px] sm:text-[8px] font-bold mt-1 opacity-80 break-words ${activeTab === 'weekly' && row.id !== 'event' ? 'line-clamp-2 overflow-hidden' : 'line-clamp-1'} ${blockText}`}>{data.memo}</div>}
                           </div>
                         )}
                       </div>
