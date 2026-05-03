@@ -2203,7 +2203,7 @@
 
         if (activeTab === 'template') {
           customStyle={flex:'4',minHeight:'2.5rem'}; rh=''; fc=''; rb='';
-          if(row.id==='lunch'){customStyle={flex:'1',minHeight:'1rem'};rh='';fc='';rb='bg-amber-50/20 dark:bg-amber-900/10';}
+          if(row.id==='lunch'){customStyle={flex:'1.5',minHeight:'2rem'};rh='';fc='';rb='bg-amber-50/20 dark:bg-amber-900/10';}
           else if(row.id==='event'){customStyle={flex:'2.5',minHeight:'2.5rem'};rh='';fc='';}
           else if(row.id==='morning'){customStyle={flex:'1.5',minHeight:'1.5rem'};rh='';fc='';}
           else if(row.id==='afterschool'){customStyle={flex:'4',minHeight:'2.5rem'};rh='';fc='';}
@@ -2211,13 +2211,13 @@
           if (isMobile && activeTab === 'weekly') {
             if (row.id === 'event') { rh = 'h-7 shrink-0'; fc = 'flex-none'; rb = ''; }
             else if (row.id === 'morning') { rh = 'h-7 shrink-0'; fc = 'flex-none'; rb = ''; }
-            else if (row.id === 'lunch') { rh = 'h-5 shrink-0'; fc = 'flex-none'; rb = 'bg-amber-50/20 dark:bg-amber-900/10'; }
+            else if (row.id === 'lunch') { rh = 'h-8 shrink-0'; fc = 'flex-none'; rb = 'bg-amber-50/20 dark:bg-amber-900/10'; }
             else if (row.id === 'afterschool') { rh = 'h-[4rem] shrink-0'; fc = 'flex-none'; rb = ''; }
             else { rh = 'h-10 shrink-0'; fc = 'flex-none'; rb = ''; }
           } else {
             if (row.id === 'event') { customStyle={flex:'2.5',minHeight:'2.5rem'}; rh=''; fc=''; rb=''; }
             else if (row.id === 'morning') { customStyle={flex:'1.5',minHeight:'1.5rem'}; rh=''; fc=''; rb=''; }
-            else if (row.id === 'lunch') { customStyle={flex:'1',minHeight:'1rem'}; rh=''; fc=''; rb='bg-amber-50/20 dark:bg-amber-900/10'; }
+            else if (row.id === 'lunch') { customStyle={flex:'1.5',minHeight:'2rem'}; rh=''; fc=''; rb='bg-amber-50/20 dark:bg-amber-900/10'; }
             else if (row.id === 'afterschool') { customStyle={flex:'4',minHeight:'2.5rem'}; rh=''; fc=''; rb=''; }
             else { customStyle={flex:'4',minHeight:'2.5rem'}; rh=''; fc=''; rb=''; }
           }
