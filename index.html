@@ -2203,18 +2203,18 @@
           customStyle={flex:'4',minHeight:'2.5rem'}; rh=''; fc=''; rb='';
           if(row.id==='lunch'){customStyle={flex:'1.5',minHeight:'2rem'};rh='';fc='';rb='bg-amber-50/20 dark:bg-amber-900/10';}
           else if(row.id==='event'){customStyle={flex:'2.5',minHeight:'2.5rem'};rh='';fc='';}
-          else if(row.id==='morning'){customStyle={flex:'1.5',minHeight:'1.5rem'};rh='';fc='';}
+          else if(row.id==='morning'){customStyle={flex:'1.5',minHeight:'2rem'};rh='';fc='';}
           else if(row.id==='afterschool'){customStyle={flex:'4',minHeight:'2.5rem'};rh='';fc='';}
         } else {
           if (isMobile && activeTab === 'weekly') {
             if (row.id === 'event') { rh = 'h-7 shrink-0'; fc = 'flex-none'; rb = ''; }
-            else if (row.id === 'morning') { rh = 'h-7 shrink-0'; fc = 'flex-none'; rb = ''; }
+            else if (row.id === 'morning') { rh = 'h-8 shrink-0'; fc = 'flex-none'; rb = ''; }
             else if (row.id === 'lunch') { rh = 'h-8 shrink-0'; fc = 'flex-none'; rb = 'bg-amber-50/20 dark:bg-amber-900/10'; }
             else if (row.id === 'afterschool') { rh = 'h-[4rem] shrink-0'; fc = 'flex-none'; rb = ''; }
             else { rh = 'h-10 shrink-0'; fc = 'flex-none'; rb = ''; }
           } else {
             if (row.id === 'event') { customStyle={flex:'2.5',minHeight:'2.5rem'}; rh=''; fc=''; rb=''; }
-            else if (row.id === 'morning') { customStyle={flex:'1.5',minHeight:'1.5rem'}; rh=''; fc=''; rb=''; }
+            else if (row.id === 'morning') { customStyle={flex:'1.5',minHeight:'2rem'}; rh=''; fc=''; rb=''; }
             else if (row.id === 'lunch') { customStyle={flex:'1.5',minHeight:'2rem'}; rh=''; fc=''; rb='bg-amber-50/20 dark:bg-amber-900/10'; }
             else if (row.id === 'afterschool') { customStyle={flex:'4',minHeight:'2.5rem'}; rh=''; fc=''; rb=''; }
             else { customStyle={flex:'4',minHeight:'2.5rem'}; rh=''; fc=''; rb=''; }
@@ -2311,7 +2311,7 @@
                               if (sm) return (
                                 <div className="flex flex-col min-w-0" title={data.subject}>
                                   <div className="flex items-baseline gap-1 min-w-0">
-                                    <span className={`${fontSizeClass} font-black ${blockText} truncate`}>{sm[1]}</span>
+                                    <span className={`${fontSizeClass} font-black ${blockText} flex-1 min-w-0 truncate`}>{sm[1]}</span>
                                     <span className={`text-[8px] sm:text-[9px] font-black shrink-0 ${blockText} opacity-70 bg-white/50 dark:bg-black/20 px-1 rounded`}>{sm[3]}/{sm[4]}</span>
                                   </div>
                                   <div className={`text-[7px] sm:text-[9px] font-bold ${blockText} opacity-70 leading-tight truncate`}>{sm[2]}</div>
