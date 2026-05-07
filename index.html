@@ -1548,6 +1548,9 @@
         const currentSetting = getDaySetting(ds, di);
         const slotsToFill = [{ dstr: ds, p: pid, dayIdx: di, setting: currentSetting }];
 
+        const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const autoFillPat = new RegExp(`^${escRe(prefix)}${escRe(subj.name)}（.+ \\d+/\\d+）$`);
+
         for (let i = 0; i < 7; i++) {
           const cd = new Date(currentWeekStart); cd.setDate(cd.getDate() + i);
           const dstr = formatDate(cd);
@@ -1558,13 +1561,18 @@
           for (const p of periodIds) {
             if (dstr === ds && p === pid) continue;
             if (dstr === ds && periodIds.indexOf(p) < periodIds.indexOf(pid)) continue;
-            const tk = `${i}-${p}`;
-            const tmpl = baseTemplate[tk];
-            if (!tmpl || !tmpl.subject || tmpl.subject.trim() !== expectedTmpl) continue;
             const wk = `${dstr}-${p}`;
             const existing = weeklyData[wk];
-            if (existing && !existing.useTemplate && existing.subject && existing.subject.trim() !== '') continue;
-            slotsToFill.push({ dstr, p, dayIdx: i, setting });
+            const tk = `${i}-${p}`;
+            const tmpl = baseTemplate[tk];
+            const tmplMatches = tmpl?.subject?.trim() === expectedTmpl;
+            const existingIsAutoFill = existing?.subject?.match(autoFillPat);
+            // テンプレートが一致して空セル、またはすでにこの科目の自動入力が入っているセル
+            if (tmplMatches && (!existing || existing.useTemplate || !existing.subject || existing.subject.trim() === '')) {
+              slotsToFill.push({ dstr, p, dayIdx: i, setting });
+            } else if (existingIsAutoFill) {
+              slotsToFill.push({ dstr, p, dayIdx: i, setting });
+            }
           }
         }
 
