@@ -1655,7 +1655,7 @@
           color: newColor
         };
 
-        if (wasConsuming) {
+        if (wasConsuming || (kind === 'repeat' && curUnit)) {
           const periodIds = ['p1','p2','p3','p4','p5','p6'];
           const curPIdx = periodIds.indexOf(pid);
           const unitByName = {};
@@ -3485,12 +3485,7 @@
                                     const isActive = uIdx === unitIdx && h === hour;
                                     return (
                                       <button key={h} type="button"
-                                        onClick={() => {
-                                          const prefix = cls || '';
-                                          const text = `${prefix}${subj.name}（${unit.name} ${h}/${unit.hours}）`;
-                                          setTempSubject(text);
-                                          setTempUnitPickerSel(prev => ({...prev, unitIdx: uIdx, hour: h}));
-                                        }}
+                                        onClick={() => handleSmartAutoFillFrom(subjIdx, cls, uIdx, h)}
                                         className={`w-8 h-8 text-xs font-bold rounded-lg border transition-all active:scale-95 ${isActive ? 'bg-indigo-600 text-white border-indigo-700 shadow-md' : 'bg-white text-indigo-700 border-indigo-300 hover:bg-indigo-100'}`}>
                                         {h}
                                       </button>
