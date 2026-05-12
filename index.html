@@ -944,16 +944,23 @@
       const todayStr = formatDate(getJSTDate());
       const schoolYear = currentMonth.getMonth() < 3 ? currentMonth.getFullYear() - 1 : currentMonth.getFullYear();
 
-      const getDynamicFontSize = (text, isMobile) => {
-        if (!text) return isMobile ? 'text-[11px]' : 'text-sm';
+      const getDynamicFontSize = (text, isMobile, isWeekly = false) => {
+        if (!text) return isMobile ? 'text-[11px]' : isWeekly ? 'text-xs' : 'text-sm';
         const len = text.length;
         if (isMobile) {
           if (len < 6) return 'text-[13px]';
-          if (len < 12) return 'text-[12px]';
+          if (len < 12) return isWeekly ? 'text-[11px]' : 'text-[12px]';
           if (len < 20) return 'text-[11px]';
           if (len < 30) return 'text-[10px] leading-tight';
           return 'text-[9px] leading-tight';
         } else {
+          if (isWeekly) {
+            if (len < 8) return 'text-sm leading-tight';
+            if (len < 16) return 'text-xs leading-tight';
+            if (len < 25) return 'text-[11px] leading-tight';
+            if (len < 35) return 'text-[10px] leading-tight';
+            return 'text-[9px] leading-tight';
+          }
           if (len < 8) return 'text-base';
           if (len < 16) return 'text-sm';
           if (len < 25) return 'text-[13px]';
@@ -2332,12 +2339,12 @@
                   }
                 }
 
-                const fontSizeClass = row.id === 'event' ? getEventFontSize(data.subject, isMobile) : (row.id === 'lunch' || row.id === 'morning') ? getEventFontSize(data.subject, isMobile) : getDynamicFontSize(data.subject, isMobile);
+                const fontSizeClass = row.id === 'event' ? getEventFontSize(data.subject, isMobile) : (row.id === 'lunch' || row.id === 'morning') ? getEventFontSize(data.subject, isMobile) : getDynamicFontSize(data.subject, isMobile, activeTab === 'weekly');
 
                 return (
                   <div key={i} onClick={()=>{if(isMobile && activeTab==='weekly' && hasData) openViewModal(data,ds,row,i,day,isH); else openEditModal(data,ds,row,i,day,isH,null);}} className={`min-w-0 ${cf} border-r border-slate-200 dark:border-slate-700 last:border-r-0 p-0.5 sm:p-1 cursor-pointer flex flex-col justify-start relative ${overflowClass} ${activeTab==='weekly'&&isT?'bg-blue-50/30 dark:bg-blue-900/10':''} ${cellBg} hover:bg-slate-100/80 dark:hover:bg-slate-700/30 transition-colors h-full`}>
                     {hasData && (
-                      <div className={`cell-card ${blockClasses} rounded-md sm:rounded-lg flex flex-col px-1 py-0.5 sm:px-1.5 sm:py-1.5 border-l-[3px] sm:border-l-[4px] transition-colors ${row.id === 'event' ? 'overflow-hidden' : row.id === 'morning' ? 'overflow-visible' : 'overflow-y-auto'} ${row.id !== 'afterschool' ? 'hide-scrollbar' : ''} ${blockBg} ${blockBorder}`} style={{...blockStyle, boxShadow:'0 1px 3px rgba(0,0,0,0.08), 0 1px 1px rgba(0,0,0,0.04)'}}>
+                      <div className={`cell-card ${blockClasses} rounded-md sm:rounded-lg flex flex-col px-0.5 py-0.5 sm:px-1 sm:py-1 border-l-[3px] sm:border-l-[4px] transition-colors ${row.id === 'event' ? 'overflow-hidden' : row.id === 'morning' ? 'overflow-visible' : 'overflow-y-auto'} ${row.id !== 'afterschool' ? 'hide-scrollbar' : ''} ${blockBg} ${blockBorder}`} style={{...blockStyle, boxShadow:'0 1px 3px rgba(0,0,0,0.08), 0 1px 1px rgba(0,0,0,0.04)'}}>
                         {row.id === 'event' ? (
                           <div className="flex flex-col justify-center h-full space-y-0.5">
                             {data.subject.split('\n').filter(s => s.trim() !== '').map((s, idx) => (
@@ -2366,7 +2373,7 @@
                               const sm = row.id.startsWith('p') && data.subject.match(/^(.+?)（(.+)\s+(\d+)\/(\d+)）$/);
                               if (isMobile && activeTab === 'weekly' && row.id.startsWith('p')) {
                                 const label = sm ? sm[1] : data.subject.split('\n')[0];
-                                return <div className={`text-[11px] font-black ${blockText} truncate leading-tight`} title={data.subject}>{label}</div>;
+                                return <div className={`text-[10px] font-black ${blockText} line-clamp-2 break-words leading-tight`} title={data.subject}>{label}</div>;
                               }
                               if (sm) return (
                                 <div className="flex flex-col min-w-0" title={data.subject}>
@@ -2374,12 +2381,12 @@
                                     <span className={`${fontSizeClass} font-black ${blockText} truncate`}>{sm[1]}</span>
                                     <span className={`text-[8px] sm:text-[9px] font-black shrink-0 ${blockText} opacity-70 bg-white/50 dark:bg-black/20 px-1 rounded`}>{sm[3]}/{sm[4]}</span>
                                   </div>
-                                  <div className={`text-[7px] sm:text-[9px] font-bold ${blockText} opacity-70 leading-tight truncate`}>{sm[2]}</div>
+                                  <div className={`text-[7px] sm:text-[8px] font-bold ${blockText} opacity-70 leading-tight line-clamp-2 break-words`}>{sm[2]}</div>
                                 </div>
                               );
                               return <div className={`${fontSizeClass} font-black break-words ${row.id === 'lunch' || row.id === 'morning' ? 'leading-[1.1]' : ''} ${activeTab === 'weekly' && row.id !== 'event' ? 'whitespace-pre-wrap line-clamp-3 overflow-hidden' : ''} ${blockText}`} title={data.subject}>{data.subject}</div>;
                             })()}
-                            {data.memo && row.id !== 'lunch' && <div className={`text-[6px] sm:text-[10px] font-bold mt-1 opacity-80 break-words ${activeTab === 'weekly' && row.id !== 'event' ? 'line-clamp-2 overflow-hidden' : 'line-clamp-1'} ${blockText}`}>{data.memo}</div>}
+                            {data.memo && row.id !== 'lunch' && <div className={`text-[6px] sm:text-[9px] font-bold mt-0.5 opacity-80 break-words ${activeTab === 'weekly' && row.id !== 'event' ? 'line-clamp-2 overflow-hidden' : 'line-clamp-1'} ${blockText}`}>{data.memo}</div>}
                           </div>
                         )}
                       </div>
