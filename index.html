@@ -773,6 +773,7 @@
       const [newTodoMinutes, setNewTodoMinutes] = useState(15);
       const [toastMessage, setToastMessage] = useState('');
       const [editingCell, setEditingCell] = useState(null);
+      const [viewingCell, setViewingCell] = useState(null);
       const [editingTodoId, setEditingTodoId] = useState(null);
       const [tempSubject, setTempSubject] = useState('');
       const [tempMemo, setTempMemo] = useState('');
@@ -1770,6 +1771,10 @@
         setWeeklyData(nd); setWeeklySettings(ns); saveAll(baseTemplate, templateSettings, nd, ns); showToast('振替をリセットしました');
       };
 
+      const openViewModal = (data, ds, row, di, day, isH) => {
+        setViewingCell({ data, dateStr: ds, row, dayIndex: di, dayName: day, isH });
+      };
+
       const openEditModal = (cd, ds, row, di, dn, ih) => { if(row.id==='afterschool'){ let ie=cd.events?.length>0?[...cd.events]:[]; if(ie.length===0&&(cd.subject||cd.memo)) ie=[{startTime:cd.startTime||'',endTime:cd.endTime||'',subject:cd.subject||'',memo:cd.memo||''}]; while(ie.length<5) ie.push({startTime:'',endTime:'',subject:'',memo:''}); setTempEvents(ie); } else if (row.id === 'event' && activeTab !== 'template') { const raw = weeklyData[`${ds}-event`]; setTempSubject(raw?.subject || ''); setTempMemo(cd.memo||''); setTempStartTime(cd.startTime||''); setTempEndTime(cd.endTime||''); } else { setTempSubject(cd.subject||''); setTempMemo(cd.memo||''); let sT=cd.startTime||''; let eT=cd.endTime||''; if(!ih && activeTab!=='template' && row.id!=='event' && row.id!=='diary') { const sc=SCHEDULE_TIMES[getDaySetting(ds,di).type]?.[row.id]; if(sc){ if(!sT) sT=sc.start||''; if(!eT) eT=sc.end||''; } } setTempStartTime(sT); setTempEndTime(eT); } setTempHandwriting(cd.handwriting||null); setTempColor(cd.color||''); setTempUnitPickerSel(null); setEditingCell({dateStr:ds, periodId:row.id, dayIndex:di, dayName:dn, periodName:row.name, isTemplate:activeTab==='template', ih}); };
       const updateTempEvent = (i,f,v) => { const n=[...tempEvents]; n[i][f]=v; setTempEvents(n); };
       
@@ -2287,7 +2292,7 @@
                 const fontSizeClass = row.id === 'event' ? getEventFontSize(data.subject, isMobile) : (row.id === 'lunch' || row.id === 'morning') ? getEventFontSize(data.subject, isMobile) : getDynamicFontSize(data.subject, isMobile);
 
                 return (
-                  <div key={i} onClick={()=>openEditModal(data,ds,row,i,day,isH,null)} className={`min-w-0 ${cf} border-r border-slate-300 dark:border-slate-700 last:border-r-0 p-0.5 cursor-pointer flex flex-col justify-start relative ${overflowClass} ${activeTab==='weekly'&&isT?'bg-blue-50/20':''} ${cellBg} hover:bg-slate-100/70 transition-colors h-full`}>
+                  <div key={i} onClick={()=>{if(isMobile && activeTab==='weekly' && hasData) openViewModal(data,ds,row,i,day,isH); else openEditModal(data,ds,row,i,day,isH,null);}} className={`min-w-0 ${cf} border-r border-slate-300 dark:border-slate-700 last:border-r-0 p-0.5 cursor-pointer flex flex-col justify-start relative ${overflowClass} ${activeTab==='weekly'&&isT?'bg-blue-50/20':''} ${cellBg} hover:bg-slate-100/70 transition-colors h-full`}>
                     {hasData && (
                       <div className={`${blockClasses} rounded sm:rounded-md shadow-[0_1px_2px_rgba(0,0,0,0.08)] flex flex-col px-1 py-0.5 sm:py-1 border-l-[3px] sm:border-l-[4px] transition-colors ${row.id === 'event' ? 'overflow-hidden' : row.id === 'morning' ? 'overflow-visible' : 'overflow-y-auto'} ${row.id !== 'afterschool' ? 'hide-scrollbar' : ''} ${blockBg} ${blockBorder}`} style={blockStyle}>
                         {row.id === 'event' ? (
@@ -2316,6 +2321,10 @@
                             )}
                             {(() => {
                               const sm = row.id.startsWith('p') && data.subject.match(/^(.+?)（(.+)\s+(\d+)\/(\d+)）$/);
+                              if (isMobile && activeTab === 'weekly' && row.id.startsWith('p')) {
+                                const label = sm ? sm[1] : data.subject.split('\n')[0];
+                                return <div className={`text-[11px] font-black ${blockText} truncate leading-tight`} title={data.subject}>{label}</div>;
+                              }
                               if (sm) return (
                                 <div className="flex flex-col min-w-0" title={data.subject}>
                                   <div className="flex items-baseline gap-1 min-w-0">
@@ -3548,6 +3557,74 @@
                     <button onClick={()=>setEditingCell(null)} className="px-4 sm:px-6 py-3 bg-slate-100 text-slate-700 border border-slate-300 rounded-xl font-bold text-xs sm:text-sm shadow-sm hover:bg-slate-200 transition-colors">キャンセル</button>
                     <button onClick={()=>{const subj=editingCell.periodId==='event'?tempSubject.split('\n').filter(s=>s.trim()!=='').join('\n'):tempSubject; const data={subject:subj,memo:tempMemo,startTime:tempStartTime,endTime:tempEndTime,handwriting:tempHandwriting,color:tempColor||''}; if(editingCell.periodId==='afterschool') data.events=tempEvents.filter(ev=>ev.subject.trim()!==''); handleSaveCell(data);}} className="px-6 sm:px-8 py-3 bg-blue-600 text-white rounded-xl font-black text-sm sm:text-base shadow-md active:scale-95 transition-transform hover:bg-blue-700">保存</button>
                   </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 📋 授業コマ詳細（モバイル用） */}
+          {viewingCell && (
+            <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[100] flex items-end sm:items-center justify-center sm:p-4" onClick={()=>setViewingCell(null)}>
+              <div className="bg-white dark:bg-slate-900 w-full sm:max-w-lg rounded-t-[2rem] sm:rounded-[2rem] shadow-2xl p-5 flex flex-col anim-scale-in max-h-[80dvh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
+                <div className="flex justify-between items-center mb-4">
+                  <div>
+                    <div className="text-xs font-bold text-slate-500 dark:text-slate-400">{viewingCell.dateStr} ({viewingCell.dayName}曜)</div>
+                    <h2 className="text-lg font-black text-slate-800 dark:text-slate-100">{viewingCell.row.name}</h2>
+                  </div>
+                  <button onClick={()=>setViewingCell(null)} className="w-9 h-9 flex items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 font-black text-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">×</button>
+                </div>
+
+                {viewingCell.row.id === 'afterschool' ? (
+                  <div className="space-y-3">
+                    {(viewingCell.data.events?.length ? viewingCell.data.events : [{subject:viewingCell.data.subject,startTime:viewingCell.data.startTime,endTime:viewingCell.data.endTime}]).filter(e=>e.subject?.trim()).map((e,idx)=>(
+                      <div key={idx} className="bg-slate-50 dark:bg-slate-800 rounded-xl p-3 border border-slate-200 dark:border-slate-700">
+                        {(e.startTime||e.endTime) && <div className="text-xs font-mono font-bold text-slate-500 mb-1">{e.startTime}{e.endTime?`〜${e.endTime}`:''}</div>}
+                        <div className="text-xl font-black text-slate-800 dark:text-slate-100 break-words whitespace-pre-wrap">{e.subject}</div>
+                        {e.memo && <div className="text-sm text-slate-600 dark:text-slate-400 mt-1 break-words whitespace-pre-wrap">{e.memo}</div>}
+                      </div>
+                    ))}
+                  </div>
+                ) : viewingCell.row.id === 'event' ? (
+                  <div className="space-y-2">
+                    {viewingCell.data.subject.split('\n').filter(s=>s.trim()).map((s,idx)=>(
+                      <div key={idx} className="text-xl font-black text-slate-800 dark:text-slate-100">{s}</div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {(viewingCell.data.startTime||viewingCell.data.endTime) && viewingCell.row.id !== 'morning' && viewingCell.row.id !== 'lunch' && (
+                      <div className="text-sm font-mono font-bold text-slate-500 dark:text-slate-400">{viewingCell.data.startTime}{viewingCell.data.endTime?`〜${viewingCell.data.endTime}`:''}</div>
+                    )}
+                    {(() => {
+                      const sm = viewingCell.row.id.startsWith('p') && viewingCell.data.subject.match(/^(.+?)（(.+)\s+(\d+)\/(\d+)）$/);
+                      if (sm) return (
+                        <div>
+                          <div className="text-2xl font-black text-slate-800 dark:text-slate-100 break-words leading-tight">{sm[1]}</div>
+                          <div className="flex items-center gap-2 mt-2 flex-wrap">
+                            <div className="text-sm font-bold text-slate-600 dark:text-slate-400">{sm[2]}</div>
+                            <div className="flex items-center gap-1.5">
+                              <div className="w-20 h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                                <div className="h-full rounded-full bg-blue-500" style={{width:`${(parseInt(sm[3])/parseInt(sm[4]))*100}%`}}></div>
+                              </div>
+                              <span className="text-xs font-bold text-slate-500 dark:text-slate-400">{sm[3]}/{sm[4]}時間目</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                      return <div className="text-2xl font-black text-slate-800 dark:text-slate-100 break-words leading-tight whitespace-pre-wrap">{viewingCell.data.subject}</div>;
+                    })()}
+                    {viewingCell.data.memo && (
+                      <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-3 border border-slate-200 dark:border-slate-700">
+                        <div className="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">メモ</div>
+                        <div className="text-sm font-bold text-slate-700 dark:text-slate-300 break-words whitespace-pre-wrap">{viewingCell.data.memo}</div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className="flex gap-2 mt-5 pt-4 border-t border-slate-200 dark:border-slate-700 pb-[env(safe-area-inset-bottom)]">
+                  <button onClick={()=>setViewingCell(null)} className="flex-1 py-3 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl font-bold text-sm border border-slate-300 dark:border-slate-600 active:scale-95 transition-colors">閉じる</button>
+                  <button onClick={()=>{const {data,dateStr,row,dayIndex,dayName,isH}=viewingCell; setViewingCell(null); openEditModal(data,dateStr,row,dayIndex,dayName,isH,null);}} className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-black text-sm shadow-md active:scale-95 transition-transform hover:bg-blue-700">編集する</button>
                 </div>
               </div>
             </div>
