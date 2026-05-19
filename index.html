@@ -1301,6 +1301,31 @@
         if (cls) return { ...s, classProgress: { ...(s.classProgress || {}), [cls]: { currentUnitIdx: unitIdx, currentHour: hour } } };
         return { ...s, currentUnitIdx: unitIdx, currentHour: hour };
       };
+      // 実施済みコマ数を weeklyData の過去日付エントリから算出（今日以前のみカウント）
+      const calcCompletedHours = (s, cls) => {
+        if (s.type !== 'auto' || !s.units || s.units.length === 0) return 0;
+        const todayStr = formatDate(getJSTDate());
+        const prefix = cls || '';
+        const esc = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const pat = new RegExp(`^${esc(prefix)}${esc(s.name)}（.+ \\d+/\\d+）$`);
+        let count = 0;
+        for (const key of Object.keys(weeklyData)) {
+          const dateStr = key.substring(0, 10);
+          if (dateStr > todayStr) continue;
+          const cell = weeklyData[key];
+          if (!cell?.subject) continue;
+          if (pat.test(cell.subject)) count++;
+        }
+        return count;
+      };
+      const getActualProgressFromHours = (units, doneHours) => {
+        let rem = doneHours;
+        for (let ui = 0; ui < units.length; ui++) {
+          if (rem >= units[ui].hours) { rem -= units[ui].hours; }
+          else { return { currentUnitIdx: ui, currentHour: rem + 1 }; }
+        }
+        return { currentUnitIdx: units.length, currentHour: 1 };
+      };
       const saveExtraData = (ny,nd,nv) => { setYearlyData(ny); setDocuments(nd); setVacations(nv); saveToFirestore('extra',{yearlyData:ny,documents:nd,vacations:nv}); saveToLocal({yearlyData:ny,documents:nd,vacations:nv}); };
       const saveQuickMemos = (nm) => { setQuickMemos(nm); saveToFirestore('quickMemos',{memos:nm}); saveToLocal({quickMemos:nm}); };
 
@@ -3051,8 +3076,7 @@
                         {s.units && s.units.length > 0 && (
                           <div className="space-y-2 mb-3">
                             {clsList.map(cls => {
-                              const prog = getClassProgress(s, cls);
-                              const doneHours = s.units.slice(0,prog.currentUnitIdx).reduce((sum,u)=>sum+u.hours,0) + (prog.currentHour-1);
+                              const doneHours = calcCompletedHours(s, cls);
                               const progressPct = totalHours > 0 ? Math.min(100, Math.round(doneHours/totalHours*100)) : 0;
                               return (
                                 <div key={cls||'_default'} className={`${clsList.length>1?'p-3 bg-white rounded-xl border border-slate-200 shadow-sm mb-2':''}`}>
@@ -3070,9 +3094,10 @@
                               <div className="text-[10px] font-black text-slate-500 mb-1">単元一覧（全クラス共通）</div>
                               {s.units.map((unit,ui)=>{
                                 const unitStatuses = clsList.map(cls => {
-                                  const cp = getClassProgress(s, cls);
-                                  if (ui < cp.currentUnitIdx) return { cls, kind: 'done', hour: unit.hours };
-                                  if (ui === cp.currentUnitIdx) return { cls, kind: 'current', hour: Math.min(unit.hours, cp.currentHour - 1) };
+                                  const doneHrs = calcCompletedHours(s, cls);
+                                  const ap = getActualProgressFromHours(s.units, doneHrs);
+                                  if (ui < ap.currentUnitIdx) return { cls, kind: 'done', hour: unit.hours };
+                                  if (ui === ap.currentUnitIdx) return { cls, kind: 'current', hour: Math.min(unit.hours, ap.currentHour - 1) };
                                   return { cls, kind: 'pending', hour: 0 };
                                 });
                                 const anyCurrent = unitStatuses.some(st => st.kind === 'current');
