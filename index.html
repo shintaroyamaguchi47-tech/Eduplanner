@@ -3540,6 +3540,16 @@
                       );
                     })()}
 
+                    {!editingCell.isTemplate && editingCell.periodId !== 'event' && editingCell.periodId !== 'diary' && editingCell.periodId !== 'afterschool' && (
+                      <div className="bg-rose-50 p-3 rounded-xl border border-rose-200 shadow-inner">
+                        <div className="text-[11px] font-black text-rose-700 mb-2">📝 定型入力</div>
+                        <button type="button" onClick={() => { setTempSubject('定期テスト'); setTempColor('test'); setTempUnitPickerSel(null); }}
+                          className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-black border transition-all active:scale-95 ${tempSubject === '定期テスト' ? 'bg-rose-600 text-white border-rose-700 shadow-md' : 'bg-white text-rose-700 border-rose-300 hover:bg-rose-100'}`}>
+                          📝 定期テスト
+                        </button>
+                      </div>
+                    )}
+
                     {!editingCell.isTemplate && editingCell.periodId.startsWith('p') && syllabusData.length > 0 && (
                       <div className="bg-blue-50/50 p-3 rounded-xl border border-blue-200 max-h-52 overflow-y-auto hide-scrollbar space-y-2 shadow-inner">
                         <div className="text-[11px] font-black text-blue-800 mb-1">📚 今週を自動入力</div>
