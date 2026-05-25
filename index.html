@@ -955,10 +955,10 @@
           return 'text-[9px] leading-tight';
         } else {
           if (isWeekly) {
-            if (len < 8) return 'text-sm leading-tight';
-            if (len < 16) return 'text-xs leading-tight';
-            if (len < 25) return 'text-[11px] leading-tight';
-            if (len < 35) return 'text-[10px] leading-tight';
+            if (len < 8) return 'text-xs leading-tight';
+            if (len < 16) return 'text-[11px] leading-tight';
+            if (len < 25) return 'text-[10px] leading-tight';
+            if (len < 35) return 'text-[9px] leading-tight';
             return 'text-[9px] leading-tight';
           }
           if (len < 8) return 'text-base';
@@ -2301,11 +2301,11 @@
             else if (row.id === 'afterschool') { rh = 'h-[4rem] shrink-0'; fc = 'flex-none'; rb = ''; }
             else { rh = 'h-10 shrink-0'; fc = 'flex-none'; rb = ''; }
           } else {
-            if (row.id === 'event') { customStyle={flex:'3',minHeight:'3rem'}; rh=''; fc=''; rb=''; }
-            else if (row.id === 'morning') { customStyle={flex:'2',minHeight:'2rem'}; rh=''; fc=''; rb=''; }
-            else if (row.id === 'lunch') { customStyle={flex:'2',minHeight:'2.5rem'}; rh=''; fc=''; rb='bg-amber-50/20 dark:bg-amber-900/10'; }
-            else if (row.id === 'afterschool') { customStyle={flex:'5',minHeight:'3.5rem'}; rh=''; fc=''; rb=''; }
-            else { customStyle={flex:'5',minHeight:'3.5rem'}; rh=''; fc=''; rb=''; }
+            if (row.id === 'event') { customStyle={flex:'2.5',minHeight:'2.5rem'}; rh=''; fc=''; rb=''; }
+            else if (row.id === 'morning') { customStyle={flex:'1.5',minHeight:'1.5rem'}; rh=''; fc=''; rb=''; }
+            else if (row.id === 'lunch') { customStyle={flex:'1.5',minHeight:'2rem'}; rh=''; fc=''; rb='bg-amber-50/20 dark:bg-amber-900/10'; }
+            else if (row.id === 'afterschool') { customStyle={flex:'4.5',minHeight:'3rem'}; rh=''; fc=''; rb=''; }
+            else { customStyle={flex:'4',minHeight:'3rem'}; rh=''; fc=''; rb=''; }
           }
         }
         
@@ -2760,7 +2760,7 @@
 
                     <div className={`flex flex-col relative ${activeTab === 'template' || !isMobile ? 'flex-1 min-h-0' : 'pb-4'}`}>
                       {renderRow(ROWS.find(r => r.id === 'event'))}
-                      <div className="flex flex-col relative min-h-0" style={(activeTab === 'template' || !isMobile) ? {flex: '26.5 1 0%'} : undefined}>
+                      <div className="flex flex-col relative min-h-0" style={(activeTab === 'template' || !isMobile) ? {flex: '21 1 0%'} : undefined}>
                         {ROWS.filter(r => r.id !== 'diary' && r.id !== 'event' && r.id !== 'afterschool').map(row => renderRow(row))}
                         {activeTab === 'weekly' && renderHolidayOverlays()}
                       </div>
