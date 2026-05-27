@@ -1835,6 +1835,68 @@
         showToast(`📚 ${filled}コマ自動入力しました`);
       };
 
+      // 今週以降・学年末まで全週を自動入力
+      const handleAutoFillAllWeeks = () => {
+        if (syllabusData.length === 0) { showToast('進度データがありません'); return; }
+        const endDate = new Date(schoolYear + 1, 2, 20); // 学年末休業開始日（3/20）
+        const weeksCount = Math.ceil((endDate - currentWeekStart) / (7 * 24 * 60 * 60 * 1000));
+        if (!window.confirm(`今週から学年末まで（約${weeksCount}週分）の授業を自動入力します。\n既に入力済みのコマは上書きしません。\nよろしいですか？`)) return;
+
+        const periodIds = ['p1','p2','p3','p4','p5','p6'];
+        let nd = {...weeklyData};
+        let up = syllabusData.map(s => ({...s, classProgress: {...(s.classProgress||{})}}));
+        let filled = 0;
+
+        let weekStart = new Date(currentWeekStart);
+        while (weekStart < endDate) {
+          for (let i = 0; i < 7; i++) {
+            const cd = new Date(weekStart); cd.setDate(cd.getDate() + i);
+            if (cd >= endDate) break;
+
+            const ds = formatDate(cd);
+            const setting = getDaySetting(ds, i);
+            if (setting.type === 'holiday') continue;
+
+            for (const pid of periodIds) {
+              const wk = `${ds}-${pid}`;
+              const ov = nd[wk];
+              if (ov && !ov.useTemplate) continue;
+
+              const tk = `${i}-${pid}`;
+              const tmpl = baseTemplate[tk];
+              if (!tmpl || !tmpl.subject || !tmpl.subject.trim()) continue;
+              const tSubj = tmpl.subject.trim();
+
+              const match = findSyllabusMatch(tSubj, up);
+              if (!match) continue;
+              const s = up[match.idx];
+              const prog = getClassProgress(s, match.cls);
+              const unit = s.units?.[prog.currentUnitIdx];
+              if (!unit) continue;
+
+              const prefix = match.cls || '';
+              const text = `${prefix}${s.name}（${unit.name} ${prog.currentHour}/${unit.hours}）`;
+              const times = SCHEDULE_TIMES[setting.type]?.[pid];
+              nd[wk] = {
+                subject: text, memo: tmpl.memo || '', useTemplate: false,
+                startTime: times?.start || '', endTime: times?.end || '', color: ''
+              };
+              filled++;
+              let nh = prog.currentHour + 1;
+              let nu = prog.currentUnitIdx;
+              if (nh > unit.hours) { nh = 1; nu++; }
+              up[match.idx] = setClassProgress(up[match.idx], match.cls, nu, nh);
+            }
+          }
+          weekStart.setDate(weekStart.getDate() + 7);
+        }
+
+        if (filled === 0) { showToast('自動入力できる授業がありません'); return; }
+        saveSyllabus(up);
+        saveAll(baseTemplate, templateSettings, nd, weeklySettings);
+        showToast(`📚 ${filled}コマ自動入力しました`);
+      };
+
       const handleCopyDay = (target,source) => { if(source==='') return; const sIdx=parseInt(source); const ns={...weeklySettings,[target]:{...(templateSettings[sIdx]||DEFAULT_TEMPLATE_SETTINGS[sIdx]),routine:sIdx}}; const nd={...weeklyData}; ROWS.forEach(r=>{ nd[`${target}-${r.id}`]={...(baseTemplate[`${sIdx}-${r.id}`]||{}),useTemplate:false}; }); setWeeklySettings(ns); setWeeklyData(nd); saveAll(baseTemplate,templateSettings,nd,ns); };
       const handleRevertDay = (target) => {
         const nd = {...weeklyData}; const ns = {...weeklySettings};
@@ -2677,9 +2739,14 @@
                         {!isMobile && (
                           <div className="flex gap-1.5 ml-auto">
                             {syllabusData.some(s => s.type === 'auto' && s.units?.length > 0) && (
-                              <button onClick={handleAutoFillWeek} className="action-btn text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2.5 py-1.5 rounded-lg hover:bg-blue-100 transition-colors flex items-center gap-1 whitespace-nowrap" title="基本設定の教科と進度データを照合し、今週の授業を自動入力">
-                                📚 進度から自動入力
-                              </button>
+                              <>
+                                <button onClick={handleAutoFillWeek} className="action-btn text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2.5 py-1.5 rounded-lg hover:bg-blue-100 transition-colors flex items-center gap-1 whitespace-nowrap" title="基本設定の教科と進度データを照合し、今週の授業を自動入力">
+                                  📚 今週を自動入力
+                                </button>
+                                <button onClick={handleAutoFillAllWeeks} className="action-btn text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-1.5 rounded-lg hover:bg-indigo-100 transition-colors flex items-center gap-1 whitespace-nowrap" title="今週から学年末まで全週の授業を自動入力（入力済みのコマは上書きしません）">
+                                  📚 学期末まで自動入力
+                                </button>
+                              </>
                             )}
                             <button onClick={copyFromPreviousWeek} className="action-btn text-[10px] font-bold text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 px-2.5 py-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-600 transition-colors flex items-center gap-1 whitespace-nowrap" title="先週の週案をコピーして今週に貼り付け">
                               📋 前週コピー
@@ -2690,9 +2757,14 @@
                           </div>
                         )}
                         {isMobile && syllabusData.some(s => s.type === 'auto' && s.units?.length > 0) && (
-                          <button onClick={handleAutoFillWeek} className="text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-1.5 rounded-lg transition-colors shrink-0 whitespace-nowrap" title="進度から自動入力">
-                            📚 自動
-                          </button>
+                          <>
+                            <button onClick={handleAutoFillWeek} className="text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-1.5 rounded-lg transition-colors shrink-0 whitespace-nowrap" title="今週を自動入力">
+                              📚 今週
+                            </button>
+                            <button onClick={handleAutoFillAllWeeks} className="text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-1.5 rounded-lg transition-colors shrink-0 whitespace-nowrap" title="学期末まで自動入力">
+                              📚 全期間
+                            </button>
+                          </>
                         )}
                       </div>
                     ) : (
