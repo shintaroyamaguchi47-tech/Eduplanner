@@ -824,7 +824,8 @@
       const [tempColor, setTempColor] = useState('');
       const [tempUnitPickerSel, setTempUnitPickerSel] = useState(null);
       const [showHandwritingPad, setShowHandwritingPad] = useState(false);
-      
+      const [unitPlanSubjIdx, setUnitPlanSubjIdx] = useState(0);
+
       const [editingWeekMemo, setEditingWeekMemo] = useState(null);
       const [showWeekMemoPad, setShowWeekMemoPad] = useState(false);
       const savedRangeRef = useRef(null);
@@ -1278,6 +1279,27 @@
       const saveTodos = (nt) => { if (!isUndoRedo.current) pushUndo(getCurrentSnapshot()); setTodos(nt); saveToFirestore('todos',{todos:nt}); saveToLocal({todos:nt}); };
       const saveNotes = (nn) => { setNotesData(nn); saveToFirestore('notes',{notes:nn}); saveToLocal({notesData:nn}); };
       const saveSyllabus = (ns) => { setSyllabusData(ns); saveToFirestore('syllabus',{syllabus:ns}); saveToLocal({syllabusData:ns}); };
+
+      const buildLessonDateMap = (subj) => {
+        if (!subj || subj.type !== 'auto' || !subj.units?.length) return {};
+        const map = {};
+        const clsList = subj.classes?.length > 0 ? subj.classes : [];
+        Object.entries(weeklyData).forEach(([key, cell]) => {
+          if (!cell?.subject || !/^\d{4}-\d{2}-\d{2}-/.test(key)) return;
+          const dateStr = key.slice(0, 10);
+          clsList.forEach(cls => {
+            subj.units.forEach((unit, uIdx) => {
+              for (let h = 1; h <= unit.hours; h++) {
+                if (cell.subject === `${cls}${subj.name}（${unit.name} ${h}/${unit.hours}）`) {
+                  const mk = `${uIdx}_${h}_${cls}`;
+                  if (!map[mk]) map[mk] = dateStr;
+                }
+              }
+            });
+          });
+        });
+        return map;
+      };
 
       // クラス対応ヘルパー: テンプレート教科名（例:「202社会」）から進度データを検索
       const findSyllabusMatch = (tSubj, data) => {
@@ -2650,8 +2672,8 @@
             </div>
 
             <div className="flex gap-0.5 sm:gap-1 overflow-x-auto hide-scrollbar pl-3 ml-auto">
-              {['dashboard','field','yearly','monthly','weekly','notes','syllabus','documents','settings'].map(t=>{
-                const label = t==='dashboard'?'今日':t==='field'?'現場':t==='yearly'?'年間':t==='monthly'?'月間':t==='weekly'?'週案':t==='notes'?'ノート':t==='syllabus'?'進度':t==='documents'?'資料':'設定';
+              {['dashboard','field','yearly','monthly','weekly','unitplan','notes','syllabus','documents','settings'].map(t=>{
+                const label = t==='dashboard'?'今日':t==='field'?'現場':t==='yearly'?'年間':t==='monthly'?'月間':t==='weekly'?'週案':t==='unitplan'?'単元計画':t==='notes'?'ノート':t==='syllabus'?'進度':t==='documents'?'資料':'設定';
                 const isActive = activeTab===t;
                 return (
                   <button key={t} onClick={()=>setActiveTab(t)} className={`nav-tab px-2.5 sm:px-3.5 py-1.5 rounded-lg text-xs sm:text-[13px] font-black whitespace-nowrap transition-all ${isActive?'bg-blue-600 text-white shadow-sm':'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700'} ${isActive?'active':''}`}>
@@ -3219,6 +3241,131 @@
               </div>
             )}
 
+            {/* 単元計画 */}
+            {activeTab === 'unitplan' && (() => {
+              const autoSubjects = syllabusData.filter(s => s.type === 'auto' && s.units?.length > 0);
+              const clampedIdx = Math.min(unitPlanSubjIdx, Math.max(0, autoSubjects.length - 1));
+              const subjRealIdx = autoSubjects.length > 0 ? syllabusData.findIndex(s => s.id === autoSubjects[clampedIdx]?.id) : -1;
+              const subj = subjRealIdx >= 0 ? syllabusData[subjRealIdx] : null;
+              const dateMap = subj ? buildLessonDateMap(subj) : {};
+              const clsList = subj?.classes?.length > 0 ? subj.classes : [];
+              const fmtDate = (ds) => { if (!ds) return ''; const d = new Date(ds+'T00:00:00'); return `${d.getMonth()+1}/${d.getDate()}(${['日','月','火','水','木','金','土'][d.getDay()]})`; };
+              return (
+                <div className="p-4 flex-1 overflow-y-auto bg-[var(--paper)]">
+                  <div className="max-w-5xl mx-auto">
+                    <div className="flex items-center gap-2 mb-4 flex-wrap">
+                      <h2 className="text-xl font-black text-slate-800 flex items-center gap-2 mr-2 shrink-0">📋 単元計画</h2>
+                      {autoSubjects.map((s, i) => (
+                        <button key={s.id} onClick={() => setUnitPlanSubjIdx(i)}
+                          className={`px-4 py-1.5 rounded-lg text-sm font-bold whitespace-nowrap transition-all border ${clampedIdx === i ? 'bg-blue-600 text-white border-blue-700 shadow-sm' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'}`}>
+                          {s.name}
+                        </button>
+                      ))}
+                      {autoSubjects.length === 0 && <span className="text-sm text-slate-400 italic">「進度」タブで教科・単元を登録してください</span>}
+                    </div>
+                    {subj && (<>
+                      {clsList.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mb-4">
+                          {clsList.map(cls => {
+                            const prog = getClassProgress(subj, cls);
+                            const unit = subj.units[prog.currentUnitIdx];
+                            const isDone = prog.currentUnitIdx >= subj.units.length;
+                            return (
+                              <div key={cls} className={`border rounded-xl px-3 py-1.5 text-xs font-bold shadow-sm ${isDone ? 'bg-emerald-50 border-emerald-300 text-emerald-800' : 'bg-white border-indigo-200 text-slate-700'}`}>
+                                <span className="font-black text-indigo-700">[{cls}]</span> {isDone ? '全単元完了 ✅' : unit ? `${unit.name} ${prog.currentHour}/${unit.hours}時間目` : '—'}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                      <div className="space-y-5">
+                        {subj.units.map((unit, uIdx) => {
+                          const progList = clsList.map(cls => getClassProgress(subj, cls));
+                          const allDone = clsList.length > 0 && progList.every(p => p.currentUnitIdx > uIdx);
+                          const anyActive = progList.some(p => p.currentUnitIdx === uIdx);
+                          const borderCol = allDone ? 'border-emerald-300' : anyActive ? 'border-blue-400' : 'border-slate-200';
+                          const headBg = allDone ? 'bg-emerald-50 border-emerald-200' : anyActive ? 'bg-blue-50 border-blue-200' : 'bg-slate-50 border-slate-200';
+                          return (
+                            <div key={uIdx} className={`bg-white border ${borderCol} rounded-2xl shadow-sm overflow-hidden`}>
+                              <div className={`px-4 py-3 flex items-center gap-3 border-b ${headBg}`}>
+                                <span className="text-base">{allDone ? '✅' : anyActive ? '▶️' : '📖'}</span>
+                                <span className="font-black text-slate-800 flex-1 text-base">{unit.name}</span>
+                                <span className="text-xs font-bold text-slate-500 shrink-0">全{unit.hours}時間</span>
+                              </div>
+                              <div className="overflow-x-auto">
+                                <table className="w-full">
+                                  <thead>
+                                    <tr className="bg-slate-50 border-b border-slate-100 text-left">
+                                      <th className="text-[11px] font-black text-slate-500 px-3 py-2 text-center w-8 shrink-0">時</th>
+                                      <th className="text-[11px] font-black text-slate-500 px-3 py-2 min-w-[200px]">学習活動・内容</th>
+                                      {clsList.map(cls => <th key={cls} className="text-[11px] font-black text-indigo-600 px-2 py-2 text-center min-w-[72px]">{cls}</th>)}
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {Array.from({length: unit.hours}, (_, hIdx) => {
+                                      const h = hIdx + 1;
+                                      const content = (unit.lessonContents || [])[hIdx] || '';
+                                      const anyCurrentRow = progList.some(p => p.currentUnitIdx === uIdx && p.currentHour === h);
+                                      return (
+                                        <tr key={hIdx} className={`border-b border-slate-100 last:border-0 transition-colors ${anyCurrentRow ? 'bg-blue-50/40' : 'hover:bg-slate-50/30'}`}>
+                                          <td className={`text-center text-xs font-black px-3 py-2 ${anyCurrentRow ? 'text-blue-600' : 'text-slate-400'}`}>{h}</td>
+                                          <td className="px-2 py-1.5">
+                                            <textarea
+                                              value={content}
+                                              onChange={e => {
+                                                const up = [...syllabusData];
+                                                const unitCopy = {...up[subjRealIdx].units[uIdx]};
+                                                const lc = [...((unitCopy.lessonContents || Array(unitCopy.hours).fill('')))];
+                                                while (lc.length < unitCopy.hours) lc.push('');
+                                                lc[hIdx] = e.target.value;
+                                                unitCopy.lessonContents = lc;
+                                                up[subjRealIdx] = {...up[subjRealIdx], units: up[subjRealIdx].units.map((u,ii)=>ii===uIdx?unitCopy:u)};
+                                                setSyllabusData(up);
+                                              }}
+                                              onBlur={() => saveSyllabus(syllabusData)}
+                                              rows={2}
+                                              placeholder="学習内容を入力..."
+                                              className="w-full min-w-[180px] text-xs text-slate-700 font-medium bg-transparent outline-none resize-none placeholder-slate-300 focus:bg-white focus:rounded-lg focus:border focus:border-blue-300 focus:px-2 py-0.5 transition-all"
+                                            />
+                                          </td>
+                                          {clsList.map((cls, ci) => {
+                                            const prog = progList[ci];
+                                            const dateStr = dateMap[`${uIdx}_${h}_${cls}`];
+                                            const isDone = prog.currentUnitIdx > uIdx || (prog.currentUnitIdx === uIdx && prog.currentHour > h);
+                                            const isCurrent = prog.currentUnitIdx === uIdx && prog.currentHour === h;
+                                            const cellCls = isDone ? 'bg-emerald-100 text-emerald-700' : isCurrent ? 'bg-blue-100 text-blue-700 ring-1 ring-blue-400' : 'bg-slate-100 text-slate-500';
+                                            return (
+                                              <td key={cls} className="text-center px-2 py-2">
+                                                {dateStr ? (
+                                                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-lg whitespace-nowrap ${cellCls}`}>{fmtDate(dateStr)}</span>
+                                                ) : (
+                                                  <span className={`text-[11px] font-bold ${isCurrent ? 'text-blue-400' : 'text-slate-200'}`}>{isCurrent ? '▶' : '—'}</span>
+                                                )}
+                                              </td>
+                                            );
+                                          })}
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="mt-5 flex justify-end pb-4">
+                        <button onClick={() => { saveSyllabus(syllabusData); showToast('✅ 保存しました'); }}
+                          className="bg-blue-600 text-white px-6 py-2.5 rounded-xl font-black shadow-md hover:bg-blue-700 active:scale-95 transition-all">
+                          保存
+                        </button>
+                      </div>
+                    </>)}
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* パス */}
             {activeTab === 'documents' && (
               <div className="p-4 flex-1 overflow-y-auto bg-[var(--paper)]">
@@ -3690,6 +3837,7 @@
                                     );
                                   })}
                                 </div>
+                                {uIdx === unitIdx && (() => { const c = unit.lessonContents?.[hour-1]; return c ? <div className="text-[10px] text-indigo-700 bg-white rounded-lg px-2 py-1 border border-indigo-200 mt-1 leading-relaxed">📝 {c}</div> : null; })()}
                               </div>
                             ))}
                           </div>
