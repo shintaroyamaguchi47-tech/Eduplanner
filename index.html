@@ -825,6 +825,7 @@
       const [tempUnitPickerSel, setTempUnitPickerSel] = useState(null);
       const [showHandwritingPad, setShowHandwritingPad] = useState(false);
       const [unitPlanSubjIdx, setUnitPlanSubjIdx] = useState(0);
+      const [unitPlanShowSettings, setUnitPlanShowSettings] = useState(false);
 
       const [editingWeekMemo, setEditingWeekMemo] = useState(null);
       const [showWeekMemoPad, setShowWeekMemoPad] = useState(false);
@@ -2672,8 +2673,8 @@
             </div>
 
             <div className="flex gap-0.5 sm:gap-1 overflow-x-auto hide-scrollbar pl-3 ml-auto">
-              {['dashboard','field','yearly','monthly','weekly','unitplan','notes','syllabus','documents','settings'].map(t=>{
-                const label = t==='dashboard'?'今日':t==='field'?'現場':t==='yearly'?'年間':t==='monthly'?'月間':t==='weekly'?'週案':t==='unitplan'?'単元計画':t==='notes'?'ノート':t==='syllabus'?'進度':t==='documents'?'資料':'設定';
+              {['dashboard','field','yearly','monthly','weekly','unitplan','notes','documents','settings'].map(t=>{
+                const label = t==='dashboard'?'今日':t==='field'?'現場':t==='yearly'?'年間':t==='monthly'?'月間':t==='weekly'?'週案':t==='unitplan'?'単元計画':t==='notes'?'ノート':t==='documents'?'資料':'設定';
                 const isActive = activeTab===t;
                 return (
                   <button key={t} onClick={()=>setActiveTab(t)} className={`nav-tab px-2.5 sm:px-3.5 py-1.5 rounded-lg text-xs sm:text-[13px] font-black whitespace-nowrap transition-all ${isActive?'bg-blue-600 text-white shadow-sm':'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700'} ${isActive?'active':''}`}>
@@ -3134,233 +3135,245 @@
               </div>
             )}
             
-            {activeTab === 'syllabus' && (
-              <div className="p-4 flex-1 overflow-y-auto bg-[var(--paper)]">
-                <div className="max-w-3xl mx-auto bg-white p-6 sm:p-8 rounded-3xl border border-slate-300 shadow-md">
-                  <h2 className="text-2xl font-black mb-6 text-slate-800 flex items-center gap-2">📚 教科・進度</h2>
-                  {syllabusData.map((s,i)=>{
-                    const totalHours = s.type==='auto' && s.units ? s.units.reduce((sum,u)=>sum+u.hours,0) : 0;
-                    const clsList = s.type==='auto' && s.classes && s.classes.length > 0 ? s.classes : [null];
-                    return (
-                    <div key={s.id} className="border border-slate-300 rounded-2xl mb-5 overflow-hidden shadow-sm">
-                      <div className="bg-slate-50 p-4 border-b border-slate-300 flex justify-between items-center font-black">
-                        <span className="flex items-center gap-3 text-slate-800 text-lg">{s.name}<span className="text-[10px] bg-white border border-blue-300 text-blue-700 px-2 py-0.5 rounded-lg shadow-sm">{s.type==='auto'?'自動':'履歴'}</span></span>
-                        <button onClick={()=>saveSyllabus(syllabusData.filter(x=>x.id!==s.id))} className="text-xs text-rose-600 font-bold border border-rose-300 bg-white px-3 py-1 rounded-lg hover:bg-rose-50 shadow-sm">削除</button>
-                      </div>
-                    <div className="p-4 bg-slate-50/50">
-                      {s.type==='auto'&&(
-                        <div className="mb-3 p-3 bg-indigo-50 rounded-xl border border-indigo-200">
-                          <div className="text-[11px] font-black text-indigo-800 mb-2">🏫 対象クラス（基本設定の教科名と一致させる）</div>
-                          <div className="flex flex-wrap gap-1.5 mb-2">
-                            {(s.classes||[]).map((cls,ci)=>(
-                              <span key={ci} className="text-xs font-black bg-white text-indigo-800 px-2.5 py-1 rounded-lg border border-indigo-300 shadow-sm flex items-center gap-1.5">
-                                {cls}
-                                <button onClick={()=>{const u=[...syllabusData];u[i]={...u[i],classes:u[i].classes.filter((_,x)=>x!==ci)};const cp={...(u[i].classProgress||{})};delete cp[cls];u[i].classProgress=cp;saveSyllabus(u);}} className="text-indigo-400 hover:text-rose-500 font-black">×</button>
-                              </span>
-                            ))}
-                            {(!s.classes||s.classes.length===0)&&<span className="text-[10px] text-slate-400 italic">未設定（教科名そのままで照合）</span>}
-                          </div>
-                          <div className="flex gap-2 items-center">
-                            <input id={`cls-${s.id}`} placeholder="例: 202" className="flex-1 text-sm font-bold p-1.5 border border-slate-300 rounded-lg outline-none focus:border-indigo-500 bg-white" onKeyDown={e=>{if(e.key==='Enter'){const el=document.getElementById(`cls-${s.id}`);const v=el.value.trim();if(v&&!(s.classes||[]).includes(v)){const u=[...syllabusData];u[i]={...u[i],classes:[...(u[i].classes||[]),v],classProgress:{...(u[i].classProgress||{}),[v]:{currentUnitIdx:0,currentHour:1}}};saveSyllabus(u);el.value='';}}}} />
-                            <button onClick={()=>{const el=document.getElementById(`cls-${s.id}`);const v=el.value.trim();if(v&&!(s.classes||[]).includes(v)){const u=[...syllabusData];u[i]={...u[i],classes:[...(u[i].classes||[]),v],classProgress:{...(u[i].classProgress||{}),[v]:{currentUnitIdx:0,currentHour:1}}};saveSyllabus(u);el.value='';}}} className="bg-indigo-600 text-white px-3 py-1.5 rounded-lg font-black text-xs shadow-sm hover:bg-indigo-700 active:scale-95 shrink-0">追加</button>
-                          </div>
-                        </div>
-                      )}
-                      {s.type==='auto'?(<>
-                        {s.units && s.units.length > 0 && (
-                          <div className="space-y-2 mb-3">
-                            {clsList.map(cls => {
-                              const doneHours = calcCompletedHours(s, cls);
-                              const progressPct = totalHours > 0 ? Math.min(100, Math.round(doneHours/totalHours*100)) : 0;
-                              return (
-                                <div key={cls||'_default'} className={`${clsList.length>1?'p-3 bg-white rounded-xl border border-slate-200 shadow-sm mb-2':''}`}>
-                                  <div className="flex items-center justify-between text-xs font-black text-slate-600 mb-1">
-                                    <span>{cls?<span className="text-indigo-700 mr-1">[{cls}]</span>:''}{doneHours}/{totalHours}時間 ({progressPct}%)</span>
-                                    <button onClick={()=>{const u=[...syllabusData];u[i]=setClassProgress(u[i],cls,0,1);saveSyllabus(u);}} className="bg-white px-2.5 py-1 border border-slate-300 rounded-lg shadow-sm text-[10px] hover:bg-slate-100">リセット</button>
-                                  </div>
-                                  <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
-                                    <div className="bg-blue-500 h-full rounded-full transition-all" style={{width:`${progressPct}%`}}></div>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                            <div className="space-y-1.5 mt-3">
-                              <div className="text-[10px] font-black text-slate-500 mb-1">単元一覧（全クラス共通）</div>
-                              {s.units.map((unit,ui)=>{
-                                const unitStatuses = clsList.map(cls => {
-                                  const doneHrs = calcCompletedHours(s, cls);
-                                  const ap = getActualProgressFromHours(s.units, doneHrs);
-                                  if (ui < ap.currentUnitIdx) return { cls, kind: 'done', hour: unit.hours };
-                                  if (ui === ap.currentUnitIdx) return { cls, kind: 'current', hour: Math.min(unit.hours, ap.currentHour - 1) };
-                                  return { cls, kind: 'pending', hour: 0 };
-                                });
-                                const anyCurrent = unitStatuses.some(st => st.kind === 'current');
-                                const allDone = unitStatuses.every(st => st.kind === 'done');
-                                const bgClass = allDone ? 'bg-emerald-50 border-emerald-300' : anyCurrent ? 'bg-blue-50 border-blue-400' : 'bg-white border-slate-200';
-                                const icon = allDone ? '✅' : anyCurrent ? '▶️' : '📖';
-                                return (
-                                  <div key={ui} className={`flex flex-col gap-1 p-2 rounded-xl border transition-colors ${bgClass}`}>
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-base w-5 text-center shrink-0">{icon}</span>
-                                      <input value={unit.name} onChange={e=>{const u=[...syllabusData];u[i].units[ui]={...unit,name:e.target.value};setSyllabusData(u);}} onBlur={()=>saveSyllabus(syllabusData)} className="flex-1 min-w-0 text-sm font-black bg-transparent outline-none border-b border-transparent focus:border-blue-400 text-slate-700" />
-                                      <div className="flex items-center gap-1 shrink-0">
-                                        <input type="number" value={unit.hours} min="1" onChange={e=>{const u=[...syllabusData];u[i].units[ui]={...unit,hours:Math.max(1,parseInt(e.target.value)||1)};u[i].rawText=formatUnits(u[i].units);saveSyllabus(u);}} className="w-10 text-center text-xs font-black border border-slate-300 rounded-lg py-1 bg-white outline-none focus:border-blue-400" />
-                                        <span className="text-[10px] font-bold text-slate-500">時間</span>
-                                      </div>
-                                      <button onClick={()=>{const u=[...syllabusData];const curUnits=u[i].units;const newUnits=curUnits.filter((_,x)=>x!==ui);const adjustProg=(cp)=>{let nu=cp.currentUnitIdx;let nh=cp.currentHour;if(ui<nu){nu=Math.max(0,nu-1);}else if(ui===nu){nh=1;if(nu>=newUnits.length)nu=Math.max(0,newUnits.length-1);}return{currentUnitIdx:nu,currentHour:nh};};const newClassProgress={...(u[i].classProgress||{})};Object.keys(newClassProgress).forEach(k=>{newClassProgress[k]=adjustProg(newClassProgress[k]);});const globalProg=adjustProg({currentUnitIdx:u[i].currentUnitIdx||0,currentHour:u[i].currentHour||1});u[i]={...u[i],units:newUnits,rawText:formatUnits(newUnits),classProgress:newClassProgress,currentUnitIdx:globalProg.currentUnitIdx,currentHour:globalProg.currentHour};saveSyllabus(u);}} className="text-slate-400 hover:text-rose-500 text-xs font-black shrink-0">✕</button>
-                                    </div>
-                                    <div className="flex flex-wrap gap-1.5 pl-7">
-                                      {unitStatuses.map((st, sti) => {
-                                        const label = st.kind === 'done' ? `${unit.hours}/${unit.hours} 完了` : st.kind === 'current' ? `${st.hour}/${unit.hours} 進行中` : `0/${unit.hours} 未着手`;
-                                        const c = st.kind === 'done' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : st.kind === 'current' ? 'bg-blue-100 text-blue-800 border-blue-400' : 'bg-slate-100 text-slate-500 border-slate-300';
-                                        return (
-                                          <span key={sti} className={`text-[10px] font-black px-2 py-0.5 rounded-md border ${c}`}>
-                                            {st.cls ? <span className="text-indigo-700 mr-1">[{st.cls}]</span> : ''}{label}
-                                          </span>
-                                        );
-                                      })}
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        )}
-                        <div className="flex gap-2 items-center bg-blue-50 p-3 rounded-xl border border-blue-200">
-                          <input id={`unit-name-${s.id}`} placeholder="単元名" className="flex-1 text-sm font-bold p-2 border border-slate-300 rounded-lg outline-none focus:border-blue-500 bg-white" />
-                          <input id={`unit-hours-${s.id}`} type="number" min="1" defaultValue="1" placeholder="時数" className="w-16 text-sm font-bold p-2 border border-slate-300 rounded-lg outline-none focus:border-blue-500 bg-white text-center" />
-                          <button onClick={()=>{const nameEl=document.getElementById(`unit-name-${s.id}`);const hoursEl=document.getElementById(`unit-hours-${s.id}`);const nm=nameEl.value.trim();const hr=Math.max(1,parseInt(hoursEl.value)||1);if(nm){const u=[...syllabusData];const newUnits=[...(u[i].units||[]),{name:nm,hours:hr}];u[i]={...u[i],units:newUnits,rawText:formatUnits(newUnits)};saveSyllabus(u);nameEl.value='';hoursEl.value='1';}}} className="bg-blue-600 text-white px-4 py-2 rounded-lg font-black text-sm shadow-sm hover:bg-blue-700 active:scale-95 shrink-0">追加</button>
-                        </div>
-                      </>):(
-                      <div className="flex flex-wrap gap-2">{s.history?.map((h,hi)=><span key={hi} className="text-sm font-bold bg-white text-teal-800 px-3 py-1.5 rounded-xl border border-teal-300 shadow-sm flex items-center gap-1">{h}<button onClick={()=>{const u=[...syllabusData];u[i].history=s.history.filter((_,x)=>x!==hi);saveSyllabus(u);}} className="ml-1 text-teal-500 hover:text-teal-700 font-black">×</button></span>)}</div>)}
-                    </div></div>
-                    );
-                  })}
-                  <div className="bg-blue-50 border border-blue-200 p-5 rounded-2xl flex flex-col sm:flex-row gap-3 shadow-sm mt-8"><input id="nsn" placeholder="教科名（例: 社会）" className="text-sm font-bold p-3 rounded-xl border border-slate-300 flex-1 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 shadow-inner"/><select id="nst" className="text-sm font-bold p-3 rounded-xl border border-slate-300 outline-none w-full sm:w-1/3 bg-white shadow-sm"><option value="auto">自動カウント</option><option value="history">履歴選択</option></select><button onClick={()=>{const n=document.getElementById('nsn').value;const t=document.getElementById('nst').value;if(n)saveSyllabus([...syllabusData,{id:Date.now().toString(),name:n,type:t,...(t==='auto'?{units:[],classes:[],classProgress:{},currentUnitIdx:0,currentHour:1,rawText:''}:{history:[]})}])}} className="bg-blue-600 text-white px-6 py-3 rounded-xl font-black shadow-md hover:bg-blue-700 w-full sm:w-auto">追加</button></div>
-                </div>
-              </div>
-            )}
-
-            {/* 単元計画 */}
+            {/* 単元計画（統合版） */}
             {activeTab === 'unitplan' && (() => {
-              const autoSubjects = syllabusData.filter(s => s.type === 'auto' && s.units?.length > 0);
-              const clampedIdx = Math.min(unitPlanSubjIdx, Math.max(0, autoSubjects.length - 1));
-              const subjRealIdx = autoSubjects.length > 0 ? syllabusData.findIndex(s => s.id === autoSubjects[clampedIdx]?.id) : -1;
-              const subj = subjRealIdx >= 0 ? syllabusData[subjRealIdx] : null;
-              const dateMap = subj ? buildLessonDateMap(subj) : {};
-              const clsList = subj?.classes?.length > 0 ? subj.classes : [];
+              const allSubjects = syllabusData;
+              const clampedIdx = Math.min(unitPlanSubjIdx, Math.max(0, allSubjects.length - 1));
+              const subjRealIdx = allSubjects.length > 0 ? clampedIdx : -1;
+              const subj = subjRealIdx >= 0 ? allSubjects[subjRealIdx] : null;
+              const dateMap = (subj && subj.type === 'auto') ? buildLessonDateMap(subj) : {};
+              const clsList = subj?.type === 'auto' && subj.classes?.length > 0 ? subj.classes : [];
+              const totalHours = subj?.type === 'auto' && subj.units ? subj.units.reduce((sum,u)=>sum+u.hours,0) : 0;
+              const clsListForProg = subj?.type === 'auto' && subj.classes?.length > 0 ? subj.classes : [null];
               const fmtDate = (ds) => { if (!ds) return ''; const d = new Date(ds+'T00:00:00'); return `${d.getMonth()+1}/${d.getDate()}(${['日','月','火','水','木','金','土'][d.getDay()]})`; };
               return (
                 <div className="p-4 flex-1 overflow-y-auto bg-[var(--paper)]">
                   <div className="max-w-5xl mx-auto">
-                    <div className="flex items-center gap-2 mb-4 flex-wrap">
-                      <h2 className="text-xl font-black text-slate-800 flex items-center gap-2 mr-2 shrink-0">📋 単元計画</h2>
-                      {autoSubjects.map((s, i) => (
-                        <button key={s.id} onClick={() => setUnitPlanSubjIdx(i)}
-                          className={`px-4 py-1.5 rounded-lg text-sm font-bold whitespace-nowrap transition-all border ${clampedIdx === i ? 'bg-blue-600 text-white border-blue-700 shadow-sm' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'}`}>
-                          {s.name}
+                    {/* 教科タブ */}
+                    <div className="flex items-center gap-2 mb-3 flex-wrap">
+                      <h2 className="text-xl font-black text-slate-800 mr-2 shrink-0">📋 単元計画</h2>
+                      {allSubjects.map((s, i) => (
+                        <button key={s.id} onClick={() => { setUnitPlanSubjIdx(i); setUnitPlanShowSettings(false); }}
+                          className={`px-3 py-1.5 rounded-lg text-sm font-bold whitespace-nowrap transition-all border ${clampedIdx === i ? 'bg-blue-600 text-white border-blue-700 shadow-sm' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'}`}>
+                          {s.name}{s.type === 'history' ? <span className="ml-1 text-[9px] opacity-60">履歴</span> : ''}
                         </button>
                       ))}
-                      {autoSubjects.length === 0 && <span className="text-sm text-slate-400 italic">「進度」タブで教科・単元を登録してください</span>}
                     </div>
+
+                    {/* 新規教科追加フォーム */}
+                    <div className="mb-4 bg-slate-50 border border-slate-200 p-3 rounded-2xl flex flex-col sm:flex-row gap-2 shadow-sm">
+                      <input id="up-nsn" placeholder="新しい教科名（例: 技術）" className="text-sm font-bold p-2.5 rounded-xl border border-slate-300 flex-1 outline-none focus:border-blue-500 bg-white shadow-inner" />
+                      <select id="up-nst" className="text-sm font-bold p-2.5 rounded-xl border border-slate-300 outline-none bg-white shadow-sm">
+                        <option value="auto">自動カウント（単元計画あり）</option>
+                        <option value="history">履歴選択</option>
+                      </select>
+                      <button onClick={() => {
+                        const n = document.getElementById('up-nsn').value.trim();
+                        const t = document.getElementById('up-nst').value;
+                        if (!n) return;
+                        const newS = {id: Date.now().toString(), name: n, type: t, ...(t==='auto'?{units:[],classes:[],classProgress:{},currentUnitIdx:0,currentHour:1,rawText:''}:{history:[]})};
+                        const ns = [...syllabusData, newS];
+                        saveSyllabus(ns);
+                        setUnitPlanSubjIdx(ns.length - 1);
+                        setUnitPlanShowSettings(true);
+                        document.getElementById('up-nsn').value = '';
+                      }} className="bg-blue-600 text-white px-4 py-2.5 rounded-xl font-black text-sm shadow-md hover:bg-blue-700 active:scale-95 shrink-0">＋ 追加</button>
+                    </div>
+
                     {subj && (<>
-                      {clsList.length > 0 && (
-                        <div className="flex flex-wrap gap-2 mb-4">
-                          {clsList.map(cls => {
-                            const prog = getClassProgress(subj, cls);
-                            const unit = subj.units[prog.currentUnitIdx];
-                            const isDone = prog.currentUnitIdx >= subj.units.length;
+                      {/* 教科設定トグル */}
+                      <div className="flex items-center gap-2 mb-3">
+                        <button onClick={() => setUnitPlanShowSettings(!unitPlanShowSettings)}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${unitPlanShowSettings ? 'bg-slate-700 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'}`}>
+                          ⚙️ 教科設定 {unitPlanShowSettings ? '▲' : '▼'}
+                        </button>
+                        <button onClick={() => { if (window.confirm(`「${subj.name}」を削除しますか？`)) { saveSyllabus(syllabusData.filter(x => x.id !== subj.id)); setUnitPlanSubjIdx(Math.max(0, clampedIdx - 1)); setUnitPlanShowSettings(false); }}}
+                          className="text-xs text-rose-600 font-bold border border-rose-200 bg-white px-3 py-1.5 rounded-lg hover:bg-rose-50 shadow-sm">削除</button>
+                      </div>
+
+                      {/* 設定パネル */}
+                      {unitPlanShowSettings && (
+                        <div className="mb-4 bg-white border border-slate-200 rounded-2xl p-4 shadow-sm space-y-4">
+                          {subj.type === 'auto' && (<>
+                            {/* クラス管理 */}
+                            <div className="p-3 bg-indigo-50 rounded-xl border border-indigo-200">
+                              <div className="text-[11px] font-black text-indigo-800 mb-2">🏫 対象クラス（基本設定の教科名と一致させる）</div>
+                              <div className="flex flex-wrap gap-1.5 mb-2">
+                                {(subj.classes||[]).map((cls,ci)=>(
+                                  <span key={ci} className="text-xs font-black bg-white text-indigo-800 px-2.5 py-1 rounded-lg border border-indigo-300 shadow-sm flex items-center gap-1.5">
+                                    {cls}
+                                    <button onClick={()=>{const u=[...syllabusData];u[subjRealIdx]={...u[subjRealIdx],classes:u[subjRealIdx].classes.filter((_,x)=>x!==ci)};const cp={...(u[subjRealIdx].classProgress||{})};delete cp[cls];u[subjRealIdx].classProgress=cp;saveSyllabus(u);}} className="text-indigo-400 hover:text-rose-500 font-black">×</button>
+                                  </span>
+                                ))}
+                                {(!subj.classes||subj.classes.length===0)&&<span className="text-[10px] text-slate-400 italic">未設定（教科名そのままで照合）</span>}
+                              </div>
+                              <div className="flex gap-2 items-center">
+                                <input id={`up-cls-${subj.id}`} placeholder="例: 1-2" className="flex-1 text-sm font-bold p-1.5 border border-slate-300 rounded-lg outline-none focus:border-indigo-500 bg-white"
+                                  onKeyDown={e=>{if(e.key==='Enter'){const el=document.getElementById(`up-cls-${subj.id}`);const v=el.value.trim();if(v&&!(subj.classes||[]).includes(v)){const u=[...syllabusData];u[subjRealIdx]={...u[subjRealIdx],classes:[...(u[subjRealIdx].classes||[]),v],classProgress:{...(u[subjRealIdx].classProgress||{}),[v]:{currentUnitIdx:0,currentHour:1}}};saveSyllabus(u);el.value='';}}}}/>
+                                <button onClick={()=>{const el=document.getElementById(`up-cls-${subj.id}`);const v=el.value.trim();if(v&&!(subj.classes||[]).includes(v)){const u=[...syllabusData];u[subjRealIdx]={...u[subjRealIdx],classes:[...(u[subjRealIdx].classes||[]),v],classProgress:{...(u[subjRealIdx].classProgress||{}),[v]:{currentUnitIdx:0,currentHour:1}}};saveSyllabus(u);el.value='';}}}
+                                  className="bg-indigo-600 text-white px-3 py-1.5 rounded-lg font-black text-xs shadow-sm hover:bg-indigo-700 active:scale-95 shrink-0">追加</button>
+                              </div>
+                            </div>
+                            {/* 進捗バー */}
+                            {subj.units && subj.units.length > 0 && clsListForProg.map(cls => {
+                              const doneHours = calcCompletedHours(subj, cls);
+                              const pct = totalHours > 0 ? Math.min(100, Math.round(doneHours/totalHours*100)) : 0;
+                              return (
+                                <div key={cls||'_'} className="space-y-1">
+                                  <div className="flex items-center justify-between text-xs font-black text-slate-600">
+                                    <span>{cls?<span className="text-indigo-700 mr-1">[{cls}]</span>:''}{doneHours}/{totalHours}時間 ({pct}%)</span>
+                                    <button onClick={()=>{const u=[...syllabusData];u[subjRealIdx]=setClassProgress(u[subjRealIdx],cls,0,1);saveSyllabus(u);}} className="bg-white px-2.5 py-1 border border-slate-300 rounded-lg shadow-sm text-[10px] hover:bg-slate-100">リセット</button>
+                                  </div>
+                                  <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                                    <div className="bg-blue-500 h-full rounded-full transition-all" style={{width:`${pct}%`}}></div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                            {/* 単元管理 */}
+                            <div>
+                              <div className="text-[11px] font-black text-slate-500 mb-2">単元一覧</div>
+                              <div className="space-y-1.5">
+                                {(subj.units||[]).map((unit,ui)=>(
+                                  <div key={ui} className="flex items-center gap-2 p-2 bg-slate-50 rounded-xl border border-slate-200">
+                                    <input value={unit.name} onChange={e=>{const u=[...syllabusData];u[subjRealIdx].units[ui]={...unit,name:e.target.value};setSyllabusData(u);}} onBlur={()=>saveSyllabus(syllabusData)} className="flex-1 min-w-0 text-sm font-black bg-transparent outline-none border-b border-transparent focus:border-blue-400 text-slate-700" />
+                                    <div className="flex items-center gap-1 shrink-0">
+                                      <input type="number" value={unit.hours} min="1" onChange={e=>{const u=[...syllabusData];u[subjRealIdx].units[ui]={...unit,hours:Math.max(1,parseInt(e.target.value)||1)};u[subjRealIdx].rawText=formatUnits(u[subjRealIdx].units);saveSyllabus(u);}} className="w-10 text-center text-xs font-black border border-slate-300 rounded-lg py-1 bg-white outline-none focus:border-blue-400" />
+                                      <span className="text-[10px] font-bold text-slate-500">時間</span>
+                                    </div>
+                                    <button onClick={()=>{const u=[...syllabusData];const curUnits=u[subjRealIdx].units;const newUnits=curUnits.filter((_,x)=>x!==ui);const adjustProg=(cp)=>{let nu=cp.currentUnitIdx;let nh=cp.currentHour;if(ui<nu){nu=Math.max(0,nu-1);}else if(ui===nu){nh=1;if(nu>=newUnits.length)nu=Math.max(0,newUnits.length-1);}return{currentUnitIdx:nu,currentHour:nh};};const newClassProgress={...(u[subjRealIdx].classProgress||{})};Object.keys(newClassProgress).forEach(k=>{newClassProgress[k]=adjustProg(newClassProgress[k]);});const globalProg=adjustProg({currentUnitIdx:u[subjRealIdx].currentUnitIdx||0,currentHour:u[subjRealIdx].currentHour||1});u[subjRealIdx]={...u[subjRealIdx],units:newUnits,rawText:formatUnits(newUnits),classProgress:newClassProgress,currentUnitIdx:globalProg.currentUnitIdx,currentHour:globalProg.currentHour};saveSyllabus(u);}} className="text-slate-400 hover:text-rose-500 text-xs font-black shrink-0">✕</button>
+                                  </div>
+                                ))}
+                              </div>
+                              <div className="flex gap-2 items-center bg-blue-50 p-3 rounded-xl border border-blue-200 mt-2">
+                                <input id={`up-unit-name-${subj.id}`} placeholder="単元名" className="flex-1 text-sm font-bold p-2 border border-slate-300 rounded-lg outline-none focus:border-blue-500 bg-white" />
+                                <input id={`up-unit-hours-${subj.id}`} type="number" min="1" defaultValue="1" placeholder="時数" className="w-16 text-sm font-bold p-2 border border-slate-300 rounded-lg outline-none focus:border-blue-500 bg-white text-center" />
+                                <button onClick={()=>{const nameEl=document.getElementById(`up-unit-name-${subj.id}`);const hoursEl=document.getElementById(`up-unit-hours-${subj.id}`);const nm=nameEl.value.trim();const hr=Math.max(1,parseInt(hoursEl.value)||1);if(nm){const u=[...syllabusData];const newUnits=[...(u[subjRealIdx].units||[]),{name:nm,hours:hr}];u[subjRealIdx]={...u[subjRealIdx],units:newUnits,rawText:formatUnits(newUnits)};saveSyllabus(u);nameEl.value='';hoursEl.value='1';}}} className="bg-blue-600 text-white px-4 py-2 rounded-lg font-black text-sm shadow-sm hover:bg-blue-700 active:scale-95 shrink-0">追加</button>
+                              </div>
+                            </div>
+                          </>)}
+                          {subj.type === 'history' && (
+                            <div className="flex flex-wrap gap-2">
+                              {subj.history?.map((h,hi)=>(
+                                <span key={hi} className="text-sm font-bold bg-white text-teal-800 px-3 py-1.5 rounded-xl border border-teal-300 shadow-sm flex items-center gap-1">
+                                  {h}
+                                  <button onClick={()=>{const u=[...syllabusData];u[subjRealIdx].history=subj.history.filter((_,x)=>x!==hi);saveSyllabus(u);}} className="ml-1 text-teal-500 hover:text-teal-700 font-black">×</button>
+                                </span>
+                              ))}
+                              {(!subj.history||subj.history.length===0)&&<span className="text-sm text-slate-400 italic">履歴なし（授業コマから自動登録されます）</span>}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* 単元計画テーブル（自動カウント型のみ） */}
+                      {subj.type === 'auto' && subj.units?.length > 0 && (<>
+                        {clsList.length > 0 && (
+                          <div className="flex flex-wrap gap-2 mb-4">
+                            {clsList.map(cls => {
+                              const prog = getClassProgress(subj, cls);
+                              const unit = subj.units[prog.currentUnitIdx];
+                              const isDone = prog.currentUnitIdx >= subj.units.length;
+                              return (
+                                <div key={cls} className={`border rounded-xl px-3 py-1.5 text-xs font-bold shadow-sm ${isDone ? 'bg-emerald-50 border-emerald-300 text-emerald-800' : 'bg-white border-indigo-200 text-slate-700'}`}>
+                                  <span className="font-black text-indigo-700">[{cls}]</span> {isDone ? '全単元完了 ✅' : unit ? `${unit.name} ${prog.currentHour}/${unit.hours}時間目` : '—'}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                        <div className="space-y-5">
+                          {subj.units.map((unit, uIdx) => {
+                            const progList = clsList.map(cls => getClassProgress(subj, cls));
+                            const allDone = clsList.length > 0 && progList.every(p => p.currentUnitIdx > uIdx);
+                            const anyActive = progList.some(p => p.currentUnitIdx === uIdx);
+                            const borderCol = allDone ? 'border-emerald-300' : anyActive ? 'border-blue-400' : 'border-slate-200';
+                            const headBg = allDone ? 'bg-emerald-50 border-emerald-200' : anyActive ? 'bg-blue-50 border-blue-200' : 'bg-slate-50 border-slate-200';
                             return (
-                              <div key={cls} className={`border rounded-xl px-3 py-1.5 text-xs font-bold shadow-sm ${isDone ? 'bg-emerald-50 border-emerald-300 text-emerald-800' : 'bg-white border-indigo-200 text-slate-700'}`}>
-                                <span className="font-black text-indigo-700">[{cls}]</span> {isDone ? '全単元完了 ✅' : unit ? `${unit.name} ${prog.currentHour}/${unit.hours}時間目` : '—'}
+                              <div key={uIdx} className={`bg-white border ${borderCol} rounded-2xl shadow-sm overflow-hidden`}>
+                                <div className={`px-4 py-3 flex items-center gap-3 border-b ${headBg}`}>
+                                  <span className="text-base">{allDone ? '✅' : anyActive ? '▶️' : '📖'}</span>
+                                  <span className="font-black text-slate-800 flex-1 text-base">{unit.name}</span>
+                                  <span className="text-xs font-bold text-slate-500 shrink-0">全{unit.hours}時間</span>
+                                </div>
+                                <div className="overflow-x-auto">
+                                  <table className="w-full">
+                                    <thead>
+                                      <tr className="bg-slate-50 border-b border-slate-100 text-left">
+                                        <th className="text-[11px] font-black text-slate-500 px-3 py-2 text-center w-8 shrink-0">時</th>
+                                        <th className="text-[11px] font-black text-slate-500 px-3 py-2 min-w-[200px]">学習活動・内容</th>
+                                        {clsList.map(cls => <th key={cls} className="text-[11px] font-black text-indigo-600 px-2 py-2 text-center min-w-[72px]">{cls}</th>)}
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {Array.from({length: unit.hours}, (_, hIdx) => {
+                                        const h = hIdx + 1;
+                                        const content = (unit.lessonContents || [])[hIdx] || '';
+                                        const anyCurrentRow = progList.some(p => p.currentUnitIdx === uIdx && p.currentHour === h);
+                                        return (
+                                          <tr key={hIdx} className={`border-b border-slate-100 last:border-0 transition-colors ${anyCurrentRow ? 'bg-blue-50/40' : 'hover:bg-slate-50/30'}`}>
+                                            <td className={`text-center text-xs font-black px-3 py-2 ${anyCurrentRow ? 'text-blue-600' : 'text-slate-400'}`}>{h}</td>
+                                            <td className="px-2 py-1.5">
+                                              <textarea
+                                                value={content}
+                                                onChange={e => {
+                                                  const up = [...syllabusData];
+                                                  const unitCopy = {...up[subjRealIdx].units[uIdx]};
+                                                  const lc = [...((unitCopy.lessonContents || Array(unitCopy.hours).fill('')))];
+                                                  while (lc.length < unitCopy.hours) lc.push('');
+                                                  lc[hIdx] = e.target.value;
+                                                  unitCopy.lessonContents = lc;
+                                                  up[subjRealIdx] = {...up[subjRealIdx], units: up[subjRealIdx].units.map((u,ii)=>ii===uIdx?unitCopy:u)};
+                                                  setSyllabusData(up);
+                                                }}
+                                                onBlur={() => saveSyllabus(syllabusData)}
+                                                rows={2}
+                                                placeholder="学習内容を入力..."
+                                                className="w-full min-w-[180px] text-xs text-slate-700 font-medium bg-transparent outline-none resize-none placeholder-slate-300 focus:bg-white focus:rounded-lg focus:border focus:border-blue-300 focus:px-2 py-0.5 transition-all"
+                                              />
+                                            </td>
+                                            {clsList.map((cls, ci) => {
+                                              const prog = progList[ci];
+                                              const dateStr = dateMap[`${uIdx}_${h}_${cls}`];
+                                              const isDone = prog.currentUnitIdx > uIdx || (prog.currentUnitIdx === uIdx && prog.currentHour > h);
+                                              const isCurrent = prog.currentUnitIdx === uIdx && prog.currentHour === h;
+                                              const cellCls = isDone ? 'bg-emerald-100 text-emerald-700' : isCurrent ? 'bg-blue-100 text-blue-700 ring-1 ring-blue-400' : 'bg-slate-100 text-slate-500';
+                                              return (
+                                                <td key={cls} className="text-center px-2 py-2">
+                                                  {dateStr ? (
+                                                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-lg whitespace-nowrap ${cellCls}`}>{fmtDate(dateStr)}</span>
+                                                  ) : (
+                                                    <span className={`text-[11px] font-bold ${isCurrent ? 'text-blue-400' : 'text-slate-200'}`}>{isCurrent ? '▶' : '—'}</span>
+                                                  )}
+                                                </td>
+                                              );
+                                            })}
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
                               </div>
                             );
                           })}
                         </div>
+                        <div className="mt-5 flex justify-end pb-4">
+                          <button onClick={() => { saveSyllabus(syllabusData); showToast('✅ 保存しました'); }}
+                            className="bg-blue-600 text-white px-6 py-2.5 rounded-xl font-black shadow-md hover:bg-blue-700 active:scale-95 transition-all">
+                            保存
+                          </button>
+                        </div>
+                      </>)}
+                      {subj.type === 'auto' && (!subj.units || subj.units.length === 0) && (
+                        <div className="text-center py-10 text-slate-400 text-sm">
+                          ⚙️ 教科設定から単元を追加してください
+                        </div>
                       )}
-                      <div className="space-y-5">
-                        {subj.units.map((unit, uIdx) => {
-                          const progList = clsList.map(cls => getClassProgress(subj, cls));
-                          const allDone = clsList.length > 0 && progList.every(p => p.currentUnitIdx > uIdx);
-                          const anyActive = progList.some(p => p.currentUnitIdx === uIdx);
-                          const borderCol = allDone ? 'border-emerald-300' : anyActive ? 'border-blue-400' : 'border-slate-200';
-                          const headBg = allDone ? 'bg-emerald-50 border-emerald-200' : anyActive ? 'bg-blue-50 border-blue-200' : 'bg-slate-50 border-slate-200';
-                          return (
-                            <div key={uIdx} className={`bg-white border ${borderCol} rounded-2xl shadow-sm overflow-hidden`}>
-                              <div className={`px-4 py-3 flex items-center gap-3 border-b ${headBg}`}>
-                                <span className="text-base">{allDone ? '✅' : anyActive ? '▶️' : '📖'}</span>
-                                <span className="font-black text-slate-800 flex-1 text-base">{unit.name}</span>
-                                <span className="text-xs font-bold text-slate-500 shrink-0">全{unit.hours}時間</span>
-                              </div>
-                              <div className="overflow-x-auto">
-                                <table className="w-full">
-                                  <thead>
-                                    <tr className="bg-slate-50 border-b border-slate-100 text-left">
-                                      <th className="text-[11px] font-black text-slate-500 px-3 py-2 text-center w-8 shrink-0">時</th>
-                                      <th className="text-[11px] font-black text-slate-500 px-3 py-2 min-w-[200px]">学習活動・内容</th>
-                                      {clsList.map(cls => <th key={cls} className="text-[11px] font-black text-indigo-600 px-2 py-2 text-center min-w-[72px]">{cls}</th>)}
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {Array.from({length: unit.hours}, (_, hIdx) => {
-                                      const h = hIdx + 1;
-                                      const content = (unit.lessonContents || [])[hIdx] || '';
-                                      const anyCurrentRow = progList.some(p => p.currentUnitIdx === uIdx && p.currentHour === h);
-                                      return (
-                                        <tr key={hIdx} className={`border-b border-slate-100 last:border-0 transition-colors ${anyCurrentRow ? 'bg-blue-50/40' : 'hover:bg-slate-50/30'}`}>
-                                          <td className={`text-center text-xs font-black px-3 py-2 ${anyCurrentRow ? 'text-blue-600' : 'text-slate-400'}`}>{h}</td>
-                                          <td className="px-2 py-1.5">
-                                            <textarea
-                                              value={content}
-                                              onChange={e => {
-                                                const up = [...syllabusData];
-                                                const unitCopy = {...up[subjRealIdx].units[uIdx]};
-                                                const lc = [...((unitCopy.lessonContents || Array(unitCopy.hours).fill('')))];
-                                                while (lc.length < unitCopy.hours) lc.push('');
-                                                lc[hIdx] = e.target.value;
-                                                unitCopy.lessonContents = lc;
-                                                up[subjRealIdx] = {...up[subjRealIdx], units: up[subjRealIdx].units.map((u,ii)=>ii===uIdx?unitCopy:u)};
-                                                setSyllabusData(up);
-                                              }}
-                                              onBlur={() => saveSyllabus(syllabusData)}
-                                              rows={2}
-                                              placeholder="学習内容を入力..."
-                                              className="w-full min-w-[180px] text-xs text-slate-700 font-medium bg-transparent outline-none resize-none placeholder-slate-300 focus:bg-white focus:rounded-lg focus:border focus:border-blue-300 focus:px-2 py-0.5 transition-all"
-                                            />
-                                          </td>
-                                          {clsList.map((cls, ci) => {
-                                            const prog = progList[ci];
-                                            const dateStr = dateMap[`${uIdx}_${h}_${cls}`];
-                                            const isDone = prog.currentUnitIdx > uIdx || (prog.currentUnitIdx === uIdx && prog.currentHour > h);
-                                            const isCurrent = prog.currentUnitIdx === uIdx && prog.currentHour === h;
-                                            const cellCls = isDone ? 'bg-emerald-100 text-emerald-700' : isCurrent ? 'bg-blue-100 text-blue-700 ring-1 ring-blue-400' : 'bg-slate-100 text-slate-500';
-                                            return (
-                                              <td key={cls} className="text-center px-2 py-2">
-                                                {dateStr ? (
-                                                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-lg whitespace-nowrap ${cellCls}`}>{fmtDate(dateStr)}</span>
-                                                ) : (
-                                                  <span className={`text-[11px] font-bold ${isCurrent ? 'text-blue-400' : 'text-slate-200'}`}>{isCurrent ? '▶' : '—'}</span>
-                                                )}
-                                              </td>
-                                            );
-                                          })}
-                                        </tr>
-                                      );
-                                    })}
-                                  </tbody>
-                                </table>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                      <div className="mt-5 flex justify-end pb-4">
-                        <button onClick={() => { saveSyllabus(syllabusData); showToast('✅ 保存しました'); }}
-                          className="bg-blue-600 text-white px-6 py-2.5 rounded-xl font-black shadow-md hover:bg-blue-700 active:scale-95 transition-all">
-                          保存
-                        </button>
-                      </div>
                     </>)}
+                    {allSubjects.length === 0 && (
+                      <div className="text-center py-10 text-slate-400 text-sm">上のフォームから最初の教科を追加してください</div>
+                    )}
                   </div>
                 </div>
               );
