@@ -1944,7 +1944,9 @@
         const cur = editingCell.isTemplate
           ? (baseTemplate[`${editingCell.dayIndex}-${editingCell.periodId}`] || { subject:'', memo:'' })
           : getCellData(editingCell.dateStr, editingCell.periodId, editingCell.dayIndex);
-        const changed = (cur.subject||'') !== (tempSubject||'') || (cur.memo||'') !== (tempMemo||'') || (cur.startTime||'') !== (tempStartTime||'') || (cur.endTime||'') !== (tempEndTime||'') || (cur.color||'') !== (tempColor||'');
+        // 時刻はopenEditModal内でSCHEDULE_TIMESにより自動補完されるため、変更検出から除外する
+        // （空セルを開いただけで自動補完時刻が「変更あり」と判定され、useTemplate:falseで空subjectが保存されるのを防ぐ）
+        const changed = (cur.subject||'') !== (tempSubject||'') || (cur.memo||'') !== (tempMemo||'') || (cur.color||'') !== (tempColor||'');
         if (changed) {
           const data = { subject: tempSubject, memo: tempMemo, startTime: tempStartTime, endTime: tempEndTime, handwriting: tempHandwriting, color: tempColor || '' };
           if (editingCell.isTemplate) {
@@ -3797,11 +3799,7 @@
                       </div>
                       <div>
                         <div className="text-[11px] font-bold text-slate-400 mb-1">教科・内容</div>
-                        {unitSubj ? (
-                          <div className="text-lg font-black text-slate-800">{unitSubj.name}</div>
-                        ) : (
-                          <input value={tempSubject} onChange={e=>setTempSubject(e.target.value)} placeholder="教科名" className="w-full text-lg font-black text-slate-800 border-b-2 border-slate-200 focus:border-blue-500 outline-none bg-transparent pb-0.5 placeholder-slate-300" />
-                        )}
+                        <input value={tempSubject} onChange={e=>setTempSubject(e.target.value)} placeholder="教科名" className="w-full text-lg font-black text-slate-800 border-b-2 border-slate-200 focus:border-blue-500 outline-none bg-transparent pb-0.5 placeholder-slate-300" />
                       </div>
                     </div>
                     {/* 単元計画との連携 */}
