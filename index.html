@@ -823,6 +823,7 @@
       const [tempHandwriting, setTempHandwriting] = useState(null);
       const [tempColor, setTempColor] = useState('');
       const [tempUnitPickerSel, setTempUnitPickerSel] = useState(null);
+      const [showCellAdvanced, setShowCellAdvanced] = useState(false);
       const [showHandwritingPad, setShowHandwritingPad] = useState(false);
       const [unitPlanSubjIdx, setUnitPlanSubjIdx] = useState(0);
       const [unitPlanShowSettings, setUnitPlanShowSettings] = useState(false);
@@ -1934,7 +1935,44 @@
 
       const openEditModal = (cd, ds, row, di, dn, ih) => { if(row.id==='afterschool'){ let ie=cd.events?.length>0?[...cd.events]:[]; if(ie.length===0&&(cd.subject||cd.memo)) ie=[{startTime:cd.startTime||'',endTime:cd.endTime||'',subject:cd.subject||'',memo:cd.memo||''}]; while(ie.length<5) ie.push({startTime:'',endTime:'',subject:'',memo:''}); setTempEvents(ie); } else if (row.id === 'event' && activeTab !== 'template') { const raw = weeklyData[`${ds}-event`]; setTempSubject(raw?.subject || ''); setTempMemo(cd.memo||''); setTempStartTime(cd.startTime||''); setTempEndTime(cd.endTime||''); } else { setTempSubject(cd.subject||''); setTempMemo(cd.memo||''); let sT=cd.startTime||''; let eT=cd.endTime||''; if(!ih && activeTab!=='template' && row.id!=='event' && row.id!=='diary') { const sc=SCHEDULE_TIMES[getDaySetting(ds,di).type]?.[row.id]; if(sc){ if(!sT) sT=sc.start||''; if(!eT) eT=sc.end||''; } } setTempStartTime(sT); setTempEndTime(eT); } setTempHandwriting(cd.handwriting||null); setTempColor(cd.color||''); setTempUnitPickerSel(null); setEditingCell({dateStr:ds, periodId:row.id, dayIndex:di, dayName:dn, periodName:row.name, isTemplate:activeTab==='template', ih}); };
       const updateTempEvent = (i,f,v) => { const n=[...tempEvents]; n[i][f]=v; setTempEvents(n); };
-      
+
+      // 授業予定モーダル内で曜日・時間タブを押したときのコマ移動（現在の編集内容を自動保存してから移動）
+      const navigateEditCell = (di, pid) => {
+        if (!editingCell) return;
+        // 現在のコマのテキスト編集を保存（進度は「確定する」ボタンでのみ進める）。
+        // 変更が無い場合は保存しない（テンプレートとの連動を不用意に切らないため）
+        const cur = editingCell.isTemplate
+          ? (baseTemplate[`${editingCell.dayIndex}-${editingCell.periodId}`] || { subject:'', memo:'' })
+          : getCellData(editingCell.dateStr, editingCell.periodId, editingCell.dayIndex);
+        const changed = (cur.subject||'') !== (tempSubject||'') || (cur.memo||'') !== (tempMemo||'') || (cur.startTime||'') !== (tempStartTime||'') || (cur.endTime||'') !== (tempEndTime||'') || (cur.color||'') !== (tempColor||'');
+        if (changed) {
+          const data = { subject: tempSubject, memo: tempMemo, startTime: tempStartTime, endTime: tempEndTime, handwriting: tempHandwriting, color: tempColor || '' };
+          if (editingCell.isTemplate) {
+            const n = { ...baseTemplate, [`${editingCell.dayIndex}-${editingCell.periodId}`]: data };
+            saveAll(n, templateSettings, weeklyData, weeklySettings);
+          } else {
+            const n = { ...weeklyData, [`${editingCell.dateStr}-${editingCell.periodId}`]: { ...data, useTemplate: false } };
+            saveAll(baseTemplate, templateSettings, n, weeklySettings);
+          }
+        }
+        // 移動先のコマを読み込む
+        const cd2 = new Date(currentWeekStart); cd2.setDate(cd2.getDate() + di);
+        const ds = formatDate(cd2);
+        const row = ROWS.find(r => r.id === pid);
+        const set = getDaySetting(ds, di);
+        const targetData = editingCell.isTemplate ? (baseTemplate[`${di}-${pid}`] || { subject:'', memo:'' }) : getCellData(ds, pid, di);
+        openEditModal(targetData, ds, row, di, DAYS[di], set.type === 'holiday');
+      };
+
+      // 教科名（接頭辞のクラス＋単元サフィックスを含む）から単元計画の教科を割り出す
+      const matchCellSyllabus = (subjStr) => {
+        const base = (subjStr || '').split('（')[0].trim();
+        if (!base) return null;
+        const m = findSyllabusMatch(base, syllabusData);
+        if (!m) return null;
+        return { ...m, subj: syllabusData[m.idx] };
+      };
+
       const handleSaveNote = () => { if(!editingNote.title.trim()&&!editingNote.content.trim()){ setEditingNote(null); return; } if(editingNote.type==='diary'){ const wk=`${editingNote.dateStr}-diary`; const nd={...weeklyData,[wk]:{...(weeklyData[wk]||{}),memo:editingNote.content,useTemplate:false}}; setWeeklyData(nd); saveAll(baseTemplate,templateSettings,nd,weeklySettings); showToast('メモを更新しました'); } else { const isN=!notesData.some(n=>n.id===editingNote.id); const ts=Date.now(); const nn=isN?[{...editingNote,type:'note',updatedAt:ts},...notesData]:notesData.map(n=>n.id===editingNote.id?{...editingNote,updatedAt:ts}:n); saveNotes(nn); showToast('ノートを保存しました'); } setEditingNote(null); };
       const htmlToFormattedText = (html) => {
         if (!html) return '';
@@ -3683,13 +3721,21 @@
           {editingCell && (
             <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[100] flex items-end sm:items-center justify-center sm:p-4">
               <div className="bg-white w-full sm:max-w-lg rounded-t-[2rem] sm:rounded-[2rem] shadow-2xl p-5 sm:p-8 flex flex-col anim-scale-in max-h-[90dvh] overflow-y-auto">
-                <div className="flex justify-between items-center mb-4 sm:mb-6">
-                  <div>
-                    <div className="text-xs sm:text-sm font-bold text-slate-500 mb-1">{editingCell.dateStr} ({editingCell.dayName}曜) {editingCell.isTemplate?'※基本設定':''}</div>
-                    <h2 className="text-xl sm:text-2xl font-black text-slate-800">{editingCell.periodName}の編集</h2>
+                {editingCell.periodId.startsWith('p') ? (
+                  <div className="flex items-center mb-4">
+                    <button onClick={()=>setEditingCell(null)} className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 text-2xl font-light leading-none transition-colors">×</button>
+                    <div className="flex-1 text-center text-base sm:text-lg font-black text-slate-700 flex items-center justify-center gap-1.5"><span className="text-slate-500">🗂️</span>授業予定</div>
+                    <div className="w-8 shrink-0"></div>
                   </div>
-                </div>
-                
+                ) : (
+                  <div className="flex justify-between items-center mb-4 sm:mb-6">
+                    <div>
+                      <div className="text-xs sm:text-sm font-bold text-slate-500 mb-1">{editingCell.dateStr} ({editingCell.dayName}曜) {editingCell.isTemplate?'※基本設定':''}</div>
+                      <h2 className="text-xl sm:text-2xl font-black text-slate-800">{editingCell.periodName}の編集</h2>
+                    </div>
+                  </div>
+                )}
+
                 {editingCell.periodId === 'afterschool' ? (
                   <div className="space-y-4 max-h-[50vh] overflow-y-auto hide-scrollbar pr-2 bg-slate-50 p-3 rounded-2xl border border-slate-300 shadow-inner">
                     {tempEvents.map((ev,idx) => (
@@ -3703,7 +3749,160 @@
                       </div>
                     ))}
                   </div>
-                ) : (
+                ) : editingCell.periodId.startsWith('p') ? (() => {
+                  // ===== 写真ベースの新しい授業予定UI（p1〜p6コマ） =====
+                  const match = matchCellSyllabus(tempSubject);
+                  const unitSubj = match && match.subj?.type === 'auto' && match.subj.units?.length > 0 ? match.subj : null;
+                  const clsLabel = match ? (match.cls || '全クラス') : '';
+                  // 単元の各時間をフラット化して通し番号を付与
+                  let lessons = [];
+                  if (unitSubj) { let n = 0; unitSubj.units.forEach((u, ui) => { for (let h = 1; h <= u.hours; h++) { n++; lessons.push({ n, ui, h, unit: u, content: (u.lessonContents || [])[h-1] || '' }); } }); }
+                  // 現在の選択を tempSubject のサフィックス（単元名 h/H）から復元
+                  let selUi = -1, selH = -1;
+                  const mm = (tempSubject || '').match(/（(.+?)\s+(\d+)\/(\d+)）\s*$/);
+                  if (unitSubj && mm) { const ui = unitSubj.units.findIndex(u => u.name === mm[1]); if (ui >= 0) { selUi = ui; selH = parseInt(mm[2]); } }
+                  const selValue = selUi >= 0 ? `${selUi}-${selH}` : '';
+                  const selLesson = lessons.find(l => l.ui === selUi && l.h === selH);
+                  return (
+                  <div className="space-y-4">
+                    {/* 曜日タブ */}
+                    {!editingCell.isTemplate && (
+                      <div className="flex items-center gap-3">
+                        <span className="text-[11px] font-black text-slate-400 w-7 shrink-0">曜日</span>
+                        <div className="flex gap-1.5 flex-1">
+                          {[0,1,2,3,4].map(di => { const sel = di === editingCell.dayIndex; return (
+                            <button key={di} type="button" onClick={()=>navigateEditCell(di, editingCell.periodId)} className={`flex-1 py-2 rounded-lg text-sm font-black border transition-all active:scale-95 ${sel ? 'bg-blue-500 text-white border-blue-600 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>{DAYS[di]}</button>
+                          ); })}
+                        </div>
+                      </div>
+                    )}
+                    {/* 時間タブ */}
+                    <div className="flex items-center gap-3">
+                      <span className="text-[11px] font-black text-slate-400 w-7 shrink-0">時間</span>
+                      <div className="flex gap-1.5 flex-1">
+                        {[1,2,3,4,5,6].map(num => { const pid = 'p'+num; const sel = editingCell.periodId === pid; return (
+                          <button key={num} type="button" onClick={()=>navigateEditCell(editingCell.dayIndex, pid)} className={`flex-1 py-2 rounded-lg text-sm font-black border transition-all active:scale-95 ${sel ? 'bg-blue-500 text-white border-blue-600 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>{num}</button>
+                        ); })}
+                      </div>
+                    </div>
+                    {/* コンテキスト */}
+                    <div className="text-center text-sm font-bold text-slate-600 border-y border-slate-200 py-2.5 flex items-center justify-center gap-1.5">
+                      <span className="text-slate-400">ⓘ</span> 通常の授業（{DAYS[editingCell.dayIndex]}曜{editingCell.periodId.replace('p','')}限）
+                    </div>
+                    {/* クラス / 教科・内容 */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <div className="text-[11px] font-bold text-slate-400 mb-1">クラス</div>
+                        <div className="text-lg font-black text-slate-800">{clsLabel || '—'}</div>
+                      </div>
+                      <div>
+                        <div className="text-[11px] font-bold text-slate-400 mb-1">教科・内容</div>
+                        {unitSubj ? (
+                          <div className="text-lg font-black text-slate-800">{unitSubj.name}</div>
+                        ) : (
+                          <input value={tempSubject} onChange={e=>setTempSubject(e.target.value)} placeholder="教科名" className="w-full text-lg font-black text-slate-800 border-b-2 border-slate-200 focus:border-blue-500 outline-none bg-transparent pb-0.5 placeholder-slate-300" />
+                        )}
+                      </div>
+                    </div>
+                    {/* 単元計画との連携 */}
+                    {unitSubj && (
+                      <div>
+                        <div className="text-[11px] font-bold text-slate-500 mb-1.5 flex items-center gap-1"><span className="text-slate-400">🔗</span> 単元計画との連携</div>
+                        <div className="relative">
+                          <select value={selValue} onChange={e=>{ const v=e.target.value; if(!v){ setTempSubject(unitSubj.name); setTempUnitPickerSel(null); return; } const [ui,h]=v.split('-').map(Number); const unit=unitSubj.units[ui]; const prefix=match.cls||''; setTempSubject(`${prefix}${unitSubj.name}（${unit.name} ${h}/${unit.hours}）`); setTempUnitPickerSel({ subjIdx: match.idx, cls: match.cls, unitIdx: ui, hour: h }); }} className="w-full appearance-none border border-slate-300 rounded-lg pl-3 pr-9 py-2.5 text-sm font-bold text-slate-800 bg-white outline-none focus:border-blue-500 shadow-sm">
+                            <option value="">（単元と連携しない）</option>
+                            {lessons.map(l => { const label = l.content ? l.content.split('\n')[0] : l.unit.name; return <option key={`${l.ui}-${l.h}`} value={`${l.ui}-${l.h}`}>{`第${l.n}時：${label.length > 22 ? label.slice(0,22)+'…' : label}`}</option>; })}
+                          </select>
+                          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs">▼</span>
+                        </div>
+                        {selLesson && selLesson.content && (
+                          <div className="mt-2 bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs text-slate-600 leading-relaxed whitespace-pre-wrap">{selLesson.content}</div>
+                        )}
+                      </div>
+                    )}
+                    {/* 授業メモ・予定 */}
+                    <div>
+                      <div className="text-[11px] font-bold text-slate-500 mb-1.5">授業メモ・予定</div>
+                      <textarea value={tempMemo} onChange={e=>setTempMemo(e.target.value)} placeholder="単元名や連絡事項など..." className="w-full h-24 p-3 bg-white border border-slate-300 rounded-lg outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 text-sm font-bold text-slate-700 shadow-sm placeholder-slate-400" />
+                    </div>
+                    {/* 詳細設定（時刻・色・自動入力）アコーディオン */}
+                    <div className="border-t border-slate-200 pt-3">
+                      <button type="button" onClick={()=>setShowCellAdvanced(v=>!v)} className="w-full flex items-center justify-between text-[11px] font-black text-slate-500 hover:text-slate-700 transition-colors">
+                        <span>⚙️ 詳細設定（時刻・セルの色・自動入力）</span>
+                        <span className="text-[10px]">{showCellAdvanced ? '▲' : '▼'}</span>
+                      </button>
+                      {showCellAdvanced && (
+                        <div className="space-y-4 mt-3">
+                          {/* 時刻 */}
+                          <div className="flex gap-2 items-center">
+                            <input type="time" value={tempStartTime} onChange={e=>setTempStartTime(e.target.value)} className="w-28 bg-white border border-slate-400 rounded-lg px-3 py-2 text-sm font-mono font-bold outline-none focus:border-blue-500 shadow-sm" />
+                            <span className="text-slate-400 font-bold">〜</span>
+                            <input type="time" value={tempEndTime} onChange={e=>setTempEndTime(e.target.value)} className="w-28 bg-white border border-slate-400 rounded-lg px-3 py-2 text-sm font-mono font-bold outline-none focus:border-blue-500 shadow-sm" />
+                          </div>
+                          {/* 教科を自由入力（単元連携時の上書き用） */}
+                          <input value={tempSubject} onChange={e=>setTempSubject(e.target.value)} className="w-full text-base font-black p-2 border-b-2 border-slate-300 outline-none focus:border-blue-600 bg-transparent text-slate-800 placeholder-slate-400 transition-colors" placeholder="教科名・活動内容（自由入力）" />
+                          {/* 今週を自動入力 */}
+                          {!editingCell.isTemplate && syllabusData.length > 0 && (
+                            <div className="bg-blue-50/50 p-3 rounded-xl border border-blue-200 max-h-52 overflow-y-auto hide-scrollbar space-y-2 shadow-inner">
+                              <div className="text-[11px] font-black text-blue-800 mb-1">📚 今週を自動入力</div>
+                              <div className="text-[10px] text-blue-600 mb-2">ボタンで現在コマ〜週末まで空きコマに連続入力　▸ 1コマのみは右ボタン</div>
+                              {syllabusData.map((subj, subjIdx) => {
+                                if(subj.type==='auto') {
+                                  const clsList = subj.classes && subj.classes.length > 0 ? subj.classes : [null];
+                                  return clsList.map(cls => {
+                                    const prog = getClassProgress(subj, cls);
+                                    const unit = subj.units?.[prog.currentUnitIdx];
+                                    const isFinished = subj.units?.length > 0 && !unit;
+                                    const prefix = cls || '';
+                                    const text = isFinished ? `${prefix}${subj.name}（終了）` : (unit ? `${prefix}${subj.name}（${unit.name} ${prog.currentHour}/${unit.hours}）` : `${prefix}${subj.name}`);
+                                    return (
+                                      <div key={`${subj.id}-${cls||'_'}`} className="space-y-1">
+                                        <div className="flex gap-1.5 items-center">
+                                          <button type="button" onClick={()=>handleSmartAutoFill(subjIdx, cls)} disabled={isFinished} className="flex-1 bg-blue-600 text-white text-sm font-bold py-2 px-3 rounded-lg shadow-sm text-left truncate active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-blue-700 transition-colors">{text}</button>
+                                          <button type="button" onClick={()=>{setTempSubject(text); setTempUnitPickerSel({ subjIdx, cls, unitIdx: prog.currentUnitIdx, hour: prog.currentHour });}} title="単元・時間目を選んで入力" className="shrink-0 bg-indigo-50 text-indigo-600 text-[10px] font-bold py-2 px-2 rounded-lg border border-indigo-300 shadow-sm active:scale-95 hover:bg-indigo-100 transition-colors whitespace-nowrap">単元選択</button>
+                                        </div>
+                                        <div className="flex gap-1 pl-0.5">
+                                          <button type="button" onClick={()=>handleInsertSpecial('test', subjIdx, cls)} className="flex-1 bg-rose-50 text-rose-700 text-[11px] font-black py-1.5 px-2 rounded-md border border-rose-300 shadow-sm hover:bg-rose-100 active:scale-95 transition-all">🧪 単元テスト</button>
+                                          <button type="button" onClick={()=>handleInsertSpecial('self', subjIdx, cls)} className="flex-1 bg-amber-50 text-amber-800 text-[11px] font-black py-1.5 px-2 rounded-md border border-amber-300 shadow-sm hover:bg-amber-100 active:scale-95 transition-all">📖 自習</button>
+                                          <button type="button" onClick={()=>handleInsertSpecial('repeat', subjIdx, cls)} className="flex-1 bg-slate-50 text-slate-700 text-[11px] font-black py-1.5 px-2 rounded-md border border-slate-300 shadow-sm hover:bg-slate-100 active:scale-95 transition-all">🔁 もう1時間</button>
+                                        </div>
+                                      </div>
+                                    );
+                                  });
+                                } else {
+                                  return (
+                                    <div key={subj.id}>
+                                      <button type="button" onClick={()=>setTempSubject(subj.name)} className="w-full bg-white text-teal-900 text-sm font-bold py-2 px-3 rounded-lg border border-teal-300 shadow-sm text-left active:scale-95">{subj.name}</button>
+                                    </div>
+                                  );
+                                }
+                              })}
+                            </div>
+                          )}
+                          {/* セルの色 */}
+                          <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 shadow-inner">
+                            <div className="text-[11px] font-black text-slate-600 mb-2">🎨 セルの色</div>
+                            <div className="flex flex-wrap gap-2">
+                              <button type="button" onClick={()=>setTempColor('')} className={`px-3 py-1.5 rounded-lg text-[11px] font-bold border transition-all ${tempColor===''?'border-blue-500 ring-2 ring-blue-200 bg-white shadow-md scale-105':'border-slate-300 bg-white hover:bg-slate-50'}`}>自動</button>
+                              {[
+                                {key:'lesson',label:'授業',swatch:'bg-blue-400'},
+                                {key:'practical',label:'実技',swatch:'bg-violet-400'},
+                                {key:'meeting',label:'会議',swatch:'bg-orange-400'},
+                                {key:'special',label:'特別活動',swatch:'bg-emerald-400'},
+                                {key:'test',label:'テスト',swatch:'bg-rose-400'},
+                              ].map(c=>(
+                                <button key={c.key} type="button" onClick={()=>setTempColor(c.key)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold border transition-all ${tempColor===c.key?'border-blue-500 ring-2 ring-blue-200 bg-white shadow-md scale-105':'border-slate-300 bg-white hover:bg-slate-50'}`}>
+                                  <span className={`w-3 h-3 rounded-full ${c.swatch}`}></span>{c.label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  );
+                })() : (
                   <div className="space-y-5">
                     {editingCell.periodId!=='event'&&editingCell.periodId!=='diary'&&(
                       <div className="flex gap-2 items-center">
@@ -3893,6 +4092,18 @@
                   </div>
                 )}
                 
+                {editingCell.periodId.startsWith('p') ? (
+                  <div className="mt-5 sm:mt-6 pt-4 border-t border-slate-200 space-y-2.5 pb-[env(safe-area-inset-bottom)]">
+                    <button onClick={()=>{const data={subject:tempSubject,memo:tempMemo,startTime:tempStartTime,endTime:tempEndTime,handwriting:tempHandwriting,color:tempColor||''}; handleSaveCell(data); showToast('✅ 確定しました');}} className="w-full py-3.5 bg-slate-800 text-white rounded-xl font-black text-sm sm:text-base shadow-md active:scale-[0.98] transition-transform hover:bg-slate-900">確定する</button>
+                    <div className="flex gap-2">
+                      <button onClick={()=>{ const m=matchCellSyllabus(tempSubject); const base = m && m.subj ? `${m.cls||''}${m.subj.name}` : (tempSubject.split('（')[0] || ''); const text = base ? `自習（${base}）` : '自習'; handleSaveCell({subject:text,memo:tempMemo,startTime:tempStartTime,endTime:tempEndTime,handwriting:tempHandwriting,color:'special'}); showToast('📖 自習にしました'); }} className="flex-1 py-2.5 bg-amber-50 border border-amber-300 text-amber-700 rounded-xl font-black text-xs sm:text-sm shadow-sm active:scale-95 transition-transform hover:bg-amber-100">自習</button>
+                      <button onClick={()=>{handleSaveCell({subject:'',memo:'',startTime:'',endTime:'',events:[],color:''}); showToast('⬜ 空きコマにしました');}} className="flex-1 py-2.5 bg-rose-50 border border-rose-200 text-rose-600 rounded-xl font-black text-xs sm:text-sm shadow-sm active:scale-95 transition-transform hover:bg-rose-100">空きコマ</button>
+                      {!editingCell.isTemplate && (
+                        <button onClick={()=>{ const wk=`${editingCell.dateStr}-${editingCell.periodId}`; const n={...weeklyData, [wk]:{...(weeklyData[wk]||{}), useTemplate:true, subject:'', memo:'', startTime:'', endTime:''}}; saveAll(baseTemplate,templateSettings,n,weeklySettings); setEditingCell(null); showToast('↩️ 基本設定に戻しました'); }} className="flex-1 py-2.5 bg-slate-100 border border-slate-300 text-slate-600 rounded-xl font-black text-xs sm:text-sm shadow-sm active:scale-95 transition-transform hover:bg-slate-200">元に戻す</button>
+                      )}
+                    </div>
+                  </div>
+                ) : (
                 <div className="flex justify-between mt-6 sm:mt-8 pt-4 sm:pt-5 border-t border-slate-200 pb-[env(safe-area-inset-bottom)]">
                   <button onClick={()=>{handleSaveCell({subject:'',memo:'',startTime:'',endTime:'',events:[],color:''}); showToast('🧹 クリアしました');}} className="px-3 sm:px-5 py-3 bg-rose-50 border border-rose-200 text-rose-600 rounded-xl font-bold text-xs sm:text-sm shadow-sm active:scale-95 transition-colors hover:bg-rose-100">クリア</button>
                   <div className="flex gap-2 sm:gap-3">
@@ -3900,6 +4111,7 @@
                     <button onClick={()=>{const subj=editingCell.periodId==='event'?tempSubject.split('\n').filter(s=>s.trim()!=='').join('\n'):tempSubject; const data={subject:subj,memo:tempMemo,startTime:tempStartTime,endTime:tempEndTime,handwriting:tempHandwriting,color:tempColor||''}; if(editingCell.periodId==='afterschool') data.events=tempEvents.filter(ev=>ev.subject.trim()!==''); handleSaveCell(data);}} className="px-6 sm:px-8 py-3 bg-blue-600 text-white rounded-xl font-black text-sm sm:text-base shadow-md active:scale-95 transition-transform hover:bg-blue-700">保存</button>
                   </div>
                 </div>
+                )}
               </div>
             </div>
           )}
