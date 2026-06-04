@@ -1957,12 +1957,12 @@
             saveAll(baseTemplate, templateSettings, n, weeklySettings);
           }
         }
-        // 移動先のコマを読み込む
+        // 移動先のコマを読み込む（タブ移動では常に基本タブのテンプレートから引用する）
         const cd2 = new Date(currentWeekStart); cd2.setDate(cd2.getDate() + di);
         const ds = formatDate(cd2);
         const row = ROWS.find(r => r.id === pid);
         const set = getDaySetting(ds, di);
-        const targetData = editingCell.isTemplate ? (baseTemplate[`${di}-${pid}`] || { subject:'', memo:'' }) : getCellData(ds, pid, di);
+        const targetData = baseTemplate[`${di}-${pid}`] || { subject:'', memo:'' };
         openEditModal(targetData, ds, row, di, DAYS[di], set.type === 'holiday');
       };
 
