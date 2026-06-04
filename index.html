@@ -822,6 +822,8 @@
       const [tempEvents, setTempEvents] = useState([]);
       const [tempHandwriting, setTempHandwriting] = useState(null);
       const [tempColor, setTempColor] = useState('');
+      const [navTabDay, setNavTabDay] = useState(null);   // タブ操作で参照中のテンプレート曜日
+      const [navTabPeriod, setNavTabPeriod] = useState(null); // タブ操作で参照中のテンプレート時限
       const [tempUnitPickerSel, setTempUnitPickerSel] = useState(null);
       const [showCellAdvanced, setShowCellAdvanced] = useState(false);
       const [showHandwritingPad, setShowHandwritingPad] = useState(false);
@@ -1933,37 +1935,20 @@
         setViewingCell({ data, dateStr: ds, row, dayIndex: di, dayName: day, isH });
       };
 
-      const openEditModal = (cd, ds, row, di, dn, ih) => { if(row.id==='afterschool'){ let ie=cd.events?.length>0?[...cd.events]:[]; if(ie.length===0&&(cd.subject||cd.memo)) ie=[{startTime:cd.startTime||'',endTime:cd.endTime||'',subject:cd.subject||'',memo:cd.memo||''}]; while(ie.length<5) ie.push({startTime:'',endTime:'',subject:'',memo:''}); setTempEvents(ie); } else if (row.id === 'event' && activeTab !== 'template') { const raw = weeklyData[`${ds}-event`]; setTempSubject(raw?.subject || ''); setTempMemo(cd.memo||''); setTempStartTime(cd.startTime||''); setTempEndTime(cd.endTime||''); } else { setTempSubject(cd.subject||''); setTempMemo(cd.memo||''); let sT=cd.startTime||''; let eT=cd.endTime||''; if(!ih && activeTab!=='template' && row.id!=='event' && row.id!=='diary') { const sc=SCHEDULE_TIMES[getDaySetting(ds,di).type]?.[row.id]; if(sc){ if(!sT) sT=sc.start||''; if(!eT) eT=sc.end||''; } } setTempStartTime(sT); setTempEndTime(eT); } setTempHandwriting(cd.handwriting||null); setTempColor(cd.color||''); setTempUnitPickerSel(null); setEditingCell({dateStr:ds, periodId:row.id, dayIndex:di, dayName:dn, periodName:row.name, isTemplate:activeTab==='template', ih}); };
+      const openEditModal = (cd, ds, row, di, dn, ih) => { if(row.id==='afterschool'){ let ie=cd.events?.length>0?[...cd.events]:[]; if(ie.length===0&&(cd.subject||cd.memo)) ie=[{startTime:cd.startTime||'',endTime:cd.endTime||'',subject:cd.subject||'',memo:cd.memo||''}]; while(ie.length<5) ie.push({startTime:'',endTime:'',subject:'',memo:''}); setTempEvents(ie); } else if (row.id === 'event' && activeTab !== 'template') { const raw = weeklyData[`${ds}-event`]; setTempSubject(raw?.subject || ''); setTempMemo(cd.memo||''); setTempStartTime(cd.startTime||''); setTempEndTime(cd.endTime||''); } else { setTempSubject(cd.subject||''); setTempMemo(cd.memo||''); let sT=cd.startTime||''; let eT=cd.endTime||''; if(!ih && activeTab!=='template' && row.id!=='event' && row.id!=='diary') { const sc=SCHEDULE_TIMES[getDaySetting(ds,di).type]?.[row.id]; if(sc){ if(!sT) sT=sc.start||''; if(!eT) eT=sc.end||''; } } setTempStartTime(sT); setTempEndTime(eT); } setTempHandwriting(cd.handwriting||null); setTempColor(cd.color||''); setTempUnitPickerSel(null); setNavTabDay(null); setNavTabPeriod(null); setEditingCell({dateStr:ds, periodId:row.id, dayIndex:di, dayName:dn, periodName:row.name, isTemplate:activeTab==='template', ih}); };
       const updateTempEvent = (i,f,v) => { const n=[...tempEvents]; n[i][f]=v; setTempEvents(n); };
 
-      // 授業予定モーダル内で曜日・時間タブを押したときのコマ移動（現在の編集内容を自動保存してから移動）
+      // 授業予定モーダル内で曜日・時間タブを押したとき：
+      // 保存先（editingCell）は変えず、選択したタブのテンプレートデータを表示する。
+      // これにより「金曜1限を開いて水曜1限のテンプレートを参照し、確定するで金曜1限に保存」という操作が可能になる。
       const navigateEditCell = (di, pid) => {
         if (!editingCell) return;
-        // 現在のコマのテキスト編集を保存（進度は「確定する」ボタンでのみ進める）。
-        // 変更が無い場合は保存しない（テンプレートとの連動を不用意に切らないため）
-        const cur = editingCell.isTemplate
-          ? (baseTemplate[`${editingCell.dayIndex}-${editingCell.periodId}`] || { subject:'', memo:'' })
-          : getCellData(editingCell.dateStr, editingCell.periodId, editingCell.dayIndex);
-        // 時刻はopenEditModal内でSCHEDULE_TIMESにより自動補完されるため、変更検出から除外する
-        // （空セルを開いただけで自動補完時刻が「変更あり」と判定され、useTemplate:falseで空subjectが保存されるのを防ぐ）
-        const changed = (cur.subject||'') !== (tempSubject||'') || (cur.memo||'') !== (tempMemo||'') || (cur.color||'') !== (tempColor||'');
-        if (changed) {
-          const data = { subject: tempSubject, memo: tempMemo, startTime: tempStartTime, endTime: tempEndTime, handwriting: tempHandwriting, color: tempColor || '' };
-          if (editingCell.isTemplate) {
-            const n = { ...baseTemplate, [`${editingCell.dayIndex}-${editingCell.periodId}`]: data };
-            saveAll(n, templateSettings, weeklyData, weeklySettings);
-          } else {
-            const n = { ...weeklyData, [`${editingCell.dateStr}-${editingCell.periodId}`]: { ...data, useTemplate: false } };
-            saveAll(baseTemplate, templateSettings, n, weeklySettings);
-          }
-        }
-        // 移動先のコマを読み込む（タブ移動では常に基本タブのテンプレートから引用する）
-        const cd2 = new Date(currentWeekStart); cd2.setDate(cd2.getDate() + di);
-        const ds = formatDate(cd2);
-        const row = ROWS.find(r => r.id === pid);
-        const set = getDaySetting(ds, di);
         const targetData = baseTemplate[`${di}-${pid}`] || { subject:'', memo:'' };
-        openEditModal(targetData, ds, row, di, DAYS[di], set.type === 'holiday');
+        setNavTabDay(di);
+        setNavTabPeriod(pid);
+        setTempSubject(targetData.subject || '');
+        setTempMemo(targetData.memo || '');
+        setTempColor(targetData.color || '');
       };
 
       // 教科名（接頭辞のクラス＋単元サフィックスを含む）から単元計画の教科を割り出す
@@ -3767,29 +3752,33 @@
                   const selLesson = lessons.find(l => l.ui === selUi && l.h === selH);
                   return (
                   <div className="space-y-4">
-                    {/* 曜日タブ */}
+                    {/* 曜日タブ（参照するテンプレートの曜日選択） */}
                     {!editingCell.isTemplate && (
                       <div className="flex items-center gap-3">
                         <span className="text-[11px] font-black text-slate-400 w-7 shrink-0">曜日</span>
                         <div className="flex gap-1.5 flex-1">
-                          {[0,1,2,3,4].map(di => { const sel = di === editingCell.dayIndex; return (
-                            <button key={di} type="button" onClick={()=>navigateEditCell(di, editingCell.periodId)} className={`flex-1 py-2 rounded-lg text-sm font-black border transition-all active:scale-95 ${sel ? 'bg-blue-500 text-white border-blue-600 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>{DAYS[di]}</button>
+                          {[0,1,2,3,4].map(di => { const curTabDay = navTabDay ?? editingCell.dayIndex; const sel = di === curTabDay; return (
+                            <button key={di} type="button" onClick={()=>navigateEditCell(di, navTabPeriod ?? editingCell.periodId)} className={`flex-1 py-2 rounded-lg text-sm font-black border transition-all active:scale-95 ${sel ? 'bg-blue-500 text-white border-blue-600 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>{DAYS[di]}</button>
                           ); })}
                         </div>
                       </div>
                     )}
-                    {/* 時間タブ */}
+                    {/* 時間タブ（参照するテンプレートの時限選択） */}
                     <div className="flex items-center gap-3">
                       <span className="text-[11px] font-black text-slate-400 w-7 shrink-0">時間</span>
                       <div className="flex gap-1.5 flex-1">
-                        {[1,2,3,4,5,6].map(num => { const pid = 'p'+num; const sel = editingCell.periodId === pid; return (
-                          <button key={num} type="button" onClick={()=>navigateEditCell(editingCell.dayIndex, pid)} className={`flex-1 py-2 rounded-lg text-sm font-black border transition-all active:scale-95 ${sel ? 'bg-blue-500 text-white border-blue-600 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>{num}</button>
+                        {[1,2,3,4,5,6].map(num => { const pid = 'p'+num; const curTabPeriod = navTabPeriod ?? editingCell.periodId; const sel = curTabPeriod === pid; return (
+                          <button key={num} type="button" onClick={()=>navigateEditCell(navTabDay ?? editingCell.dayIndex, pid)} className={`flex-1 py-2 rounded-lg text-sm font-black border transition-all active:scale-95 ${sel ? 'bg-blue-500 text-white border-blue-600 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>{num}</button>
                         ); })}
                       </div>
                     </div>
-                    {/* コンテキスト */}
+                    {/* コンテキスト：保存先と参照テンプレートを表示 */}
                     <div className="text-center text-sm font-bold text-slate-600 border-y border-slate-200 py-2.5 flex items-center justify-center gap-1.5">
-                      <span className="text-slate-400">ⓘ</span> 通常の授業（{DAYS[editingCell.dayIndex]}曜{editingCell.periodId.replace('p','')}限）
+                      {navTabDay !== null || navTabPeriod !== null ? (
+                        <><span className="text-slate-400">📋</span> {DAYS[navTabDay ?? editingCell.dayIndex]}曜{(navTabPeriod ?? editingCell.periodId).replace('p','')}限のテンプレート → <span className="text-blue-600">{DAYS[editingCell.dayIndex]}曜{editingCell.periodId.replace('p','')}限</span>に保存</>
+                      ) : (
+                        <><span className="text-slate-400">ⓘ</span> 通常の授業（{DAYS[editingCell.dayIndex]}曜{editingCell.periodId.replace('p','')}限）</>
+                      )}
                     </div>
                     {/* クラス / 教科・内容 */}
                     <div className="grid grid-cols-2 gap-4">
