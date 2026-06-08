@@ -2498,7 +2498,7 @@
                             ))}
                           </div>
                         ) : (
-                          <div className={`flex flex-col ${row.id === 'morning' || row.id === 'lunch' ? 'justify-center' : 'justify-center h-full'}`}>
+                          <div className={`flex flex-col min-w-0 ${row.id === 'morning' || row.id === 'lunch' ? 'justify-center' : activeTab === 'weekly' ? 'justify-start' : 'justify-center h-full'}`}>
                             {(data.startTime || data.endTime) && row.id !== 'lunch' && row.id !== 'morning' && (
                               <div className={`text-[6px] sm:text-[9px] font-mono font-bold opacity-90 shrink-0 ${blockText} mb-0.5`}>
                                 {data.startTime}{data.startTime && data.endTime ? '-' : ''}{data.endTime}
