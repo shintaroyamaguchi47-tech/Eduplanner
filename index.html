@@ -950,7 +950,7 @@
       const schoolYear = currentMonth.getMonth() < 3 ? currentMonth.getFullYear() - 1 : currentMonth.getFullYear();
 
       const getDynamicFontSize = (text, isMobile, isWeekly = false) => {
-        if (!text) return isMobile ? 'text-[11px]' : isWeekly ? 'text-xs' : 'text-sm';
+        if (!text) return isMobile ? 'text-[11px]' : isWeekly ? 'text-[11px]' : 'text-sm';
         const len = text.length;
         if (isMobile) {
           if (len < 6) return 'text-[13px]';
@@ -960,11 +960,11 @@
           return 'text-[9px] leading-tight';
         } else {
           if (isWeekly) {
-            if (len < 8) return 'text-xs leading-tight';
-            if (len < 16) return 'text-[11px] leading-tight';
-            if (len < 25) return 'text-[10px] leading-tight';
-            if (len < 35) return 'text-[9px] leading-tight';
-            return 'text-[9px] leading-tight';
+            if (len < 8) return 'text-[11px] leading-tight';
+            if (len < 16) return 'text-[10px] leading-tight';
+            if (len < 25) return 'text-[9px] leading-tight';
+            if (len < 35) return 'text-[8px] leading-tight';
+            return 'text-[8px] leading-tight';
           }
           if (len < 8) return 'text-base';
           if (len < 16) return 'text-sm';
