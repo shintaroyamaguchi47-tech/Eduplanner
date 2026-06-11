@@ -1551,10 +1551,31 @@
         return result; 
       };
 
-      // 累計時数サマリー：年度開始(4/1)から今日までのp1〜p6を教科名（単元表記を除く）ごとに集計
+      // 時数の集計対象：単元計画に登録した教科（クラス接頭辞つきで展開）＋ 総合・学活・道徳
+      const getCountTargets = () => {
+        const targets = [];
+        syllabusData.forEach(s => {
+          if (s.classes && s.classes.length > 0) s.classes.forEach(cls => { if (!targets.includes(cls + s.name)) targets.push(cls + s.name); });
+          else if (!targets.includes(s.name)) targets.push(s.name);
+        });
+        ['総合', '学活', '道徳'].forEach(n => { if (!targets.includes(n)) targets.push(n); });
+        return targets;
+      };
+      // コマの教科表示（例: 22社会（歴史4（3） 1/7））がどの集計対象に当たるか判定（先頭一致・長い名前を優先）
+      const matchCountTarget = (raw, targetsByLength) => {
+        const line = raw.split('\n')[0].trim();
+        for (const t of targetsByLength) {
+          if (line === t || line.startsWith(t + '（') || line.startsWith(t + '(') || line.startsWith(t + ' ') || line.startsWith(t + '　')) return t;
+        }
+        return null;
+      };
+
+      // 累計時数サマリー：年度開始(4/1)から今日までのp1〜p6を集計対象の教科ごとにカウント
       // 週案の入力値と基本時間割（テンプレート）を合わせた表示上のコマが対象。休日日課の日は除外
       const getCumulativeSubjectSummary = () => {
-        const counts = {};
+        const targets = getCountTargets();
+        const targetsByLength = [...targets].sort((a, b) => b.length - a.length);
+        const counts = {}; targets.forEach(t => { counts[t] = 0; });
         const periodIds = ['p1','p2','p3','p4','p5','p6'];
         const today = getJSTDate(); today.setHours(0, 0, 0, 0);
         const sy = (today.getMonth() + 1) < 4 ? today.getFullYear() - 1 : today.getFullYear();
@@ -1567,19 +1588,21 @@
             for (const pid of periodIds) {
               const raw = (getCellData(ds, pid, di).subject || '').trim();
               if (raw) {
-                const name = raw.split('\n')[0].replace(/（[^）]*）\s*$/, '').trim();
-                if (name) { counts[name] = (counts[name] || 0) + 1; total++; }
+                const t = matchCountTarget(raw, targetsByLength);
+                if (t) { counts[t]++; total++; }
               }
             }
           }
           cur.setDate(cur.getDate() + 1);
         }
-        return { list: Object.entries(counts).sort((a, b) => b[1] - a[1]), total, startLabel: `${sy}/4/1` };
+        return { list: targets.map(t => [t, counts[t]]), total, startLabel: `${sy}/4/1` };
       };
 
-      // 基本時間割（テンプレート）の週あたりコマ数を教科ごとに集計（休日日課の曜日は除外）
+      // 基本時間割（テンプレート）の週あたりコマ数を集計対象の教科ごとにカウント（休日日課の曜日は除外）
       const getTemplateSubjectSummary = () => {
-        const counts = {};
+        const targets = getCountTargets();
+        const targetsByLength = [...targets].sort((a, b) => b.length - a.length);
+        const counts = {}; targets.forEach(t => { counts[t] = 0; });
         const periodIds = ['p1','p2','p3','p4','p5','p6'];
         let total = 0;
         for (let di = 0; di < 7; di++) {
@@ -1588,11 +1611,11 @@
           for (const pid of periodIds) {
             const raw = (baseTemplate[`${di}-${pid}`]?.subject || '').trim();
             if (!raw) continue;
-            const name = raw.split('\n')[0].replace(/（[^）]*）\s*$/, '').trim();
-            if (name) { counts[name] = (counts[name] || 0) + 1; total++; }
+            const t = matchCountTarget(raw, targetsByLength);
+            if (t) { counts[t]++; total++; }
           }
         }
-        return { list: Object.entries(counts).sort((a, b) => b[1] - a[1]), total };
+        return { list: targets.map(t => [t, counts[t]]), total };
       };
 
       // ===== 予定表の取り込み（AIチャットで読み取ったデータの貼り付け） =====
@@ -3126,7 +3149,7 @@
                             <h2 className="text-xl font-black text-slate-800 flex items-center gap-2">📊 週あたりのコマ数</h2>
                             <span className="text-sm font-black text-blue-700">計{tpl.total}コマ</span>
                           </div>
-                          <p className="text-xs text-slate-600 font-bold mb-4">基本時間割（1〜6限）に設定した教科ごとの週あたりコマ数です。休日日課の曜日は含みません。コマを編集するとすぐに反映されます。</p>
+                          <p className="text-xs text-slate-600 font-bold mb-4">基本時間割（1〜6限）に設定した授業の週あたりコマ数です。単元計画に登録した教科と総合・学活・道徳のみを集計し、休日日課の曜日は含みません。</p>
                           {tpl.list.length === 0 ? (
                             <p className="text-xs font-bold text-slate-400">まだ授業コマが設定されていません</p>
                           ) : (
@@ -3370,7 +3393,7 @@
                       <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
                         <h3 className="text-sm font-black text-slate-700 dark:text-slate-200">
                           📊 今年度の実施時数
-                          <span className="ml-2 text-[10px] font-bold text-slate-400 dark:text-slate-500">{cumSummary.startLabel}〜今日・週案と基本時間割から集計</span>
+                          <span className="ml-2 text-[10px] font-bold text-slate-400 dark:text-slate-500">{cumSummary.startLabel}〜今日・単元計画の教科＋総合/学活/道徳のみ集計</span>
                         </h3>
                         <span className="text-sm font-black text-blue-700 dark:text-blue-300">計{cumSummary.total}コマ</span>
                       </div>
