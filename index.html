@@ -840,10 +840,6 @@
 
       const [editingWeekMemo, setEditingWeekMemo] = useState(null);
       const [showWeekMemoPad, setShowWeekMemoPad] = useState(false);
-      const [showWeekSummary, setShowWeekSummary] = useState(() => {
-        try { return localStorage.getItem('ep_show_week_summary') !== '0'; }
-        catch (e) { return true; }
-      });
       const [showAiImport, setShowAiImport] = useState(false);
       const [aiImportText, setAiImportText] = useState('');
       const [aiImportError, setAiImportError] = useState('');
@@ -1555,29 +1551,30 @@
         return result; 
       };
 
-      // 週間時数サマリー：今週のp1〜p6を教科名（単元表記を除く）ごとに集計
-      const getWeekSubjectSummary = () => {
+      // 累計時数サマリー：年度開始(4/1)から今日までのp1〜p6を教科名（単元表記を除く）ごとに集計
+      // 週案の入力値と基本時間割（テンプレート）を合わせた表示上のコマが対象。休日日課の日は除外
+      const getCumulativeSubjectSummary = () => {
         const counts = {};
         const periodIds = ['p1','p2','p3','p4','p5','p6'];
-        for (let i = 0; i < 7; i++) {
-          const cd = new Date(currentWeekStart); cd.setDate(cd.getDate() + i);
-          const ds = formatDate(cd);
-          if (getDaySetting(ds, i).type === 'holiday') continue;
-          for (const pid of periodIds) {
-            const raw = (getCellData(ds, pid, i).subject || '').trim();
-            if (!raw) continue;
-            const name = raw.split('\n')[0].replace(/（[^）]*）\s*$/, '').trim();
-            if (!name) continue;
-            counts[name] = (counts[name] || 0) + 1;
+        const today = getJSTDate(); today.setHours(0, 0, 0, 0);
+        const sy = (today.getMonth() + 1) < 4 ? today.getFullYear() - 1 : today.getFullYear();
+        const cur = new Date(sy, 3, 1);
+        let total = 0;
+        while (cur <= today) {
+          const ds = formatDate(cur);
+          let di = cur.getDay() - 1; if (di === -1) di = 6;
+          if (getDaySetting(ds, di).type !== 'holiday') {
+            for (const pid of periodIds) {
+              const raw = (getCellData(ds, pid, di).subject || '').trim();
+              if (raw) {
+                const name = raw.split('\n')[0].replace(/（[^）]*）\s*$/, '').trim();
+                if (name) { counts[name] = (counts[name] || 0) + 1; total++; }
+              }
+            }
           }
+          cur.setDate(cur.getDate() + 1);
         }
-        return Object.entries(counts).sort((a, b) => b[1] - a[1]);
-      };
-      const toggleWeekSummary = () => {
-        setShowWeekSummary(v => {
-          try { localStorage.setItem('ep_show_week_summary', v ? '0' : '1'); } catch (e) {}
-          return !v;
-        });
+        return { list: Object.entries(counts).sort((a, b) => b[1] - a[1]), total, startLabel: `${sy}/4/1` };
       };
 
       // ===== 予定表の取り込み（AIチャットで読み取ったデータの貼り付け） =====
@@ -2918,7 +2915,6 @@
                           <button onClick={() => changeWeek(1)} className="px-2 sm:px-2.5 py-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-r-lg transition-colors font-bold text-xs">▶</button>
                         </div>
                         <button onClick={() => { setCurrentWeekStart(getMonday(getJSTDate())); }} className="text-[10px] sm:text-xs font-black text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 px-2.5 py-1.5 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors shrink-0 whitespace-nowrap">今週</button>
-                        <button onClick={toggleWeekSummary} className={`text-[10px] sm:text-xs font-black px-2 py-1.5 rounded-lg border transition-colors shrink-0 whitespace-nowrap ${showWeekSummary ? 'text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/30 border-emerald-200 dark:border-emerald-700 hover:bg-emerald-100 dark:hover:bg-emerald-900/50' : 'text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700'}`} title="今週の教科ごとの時数を表示/非表示">📊</button>
 
                         {!isMobile && (
                           <div className="flex gap-1.5 ml-auto">
@@ -2960,26 +2956,6 @@
                       </div>
                     )}
                   </div>
-
-                  {activeTab === 'weekly' && showWeekSummary && (() => {
-                    const summary = getWeekSubjectSummary();
-                    const total = summary.reduce((s, [, c]) => s + c, 0);
-                    return (
-                      <div className="flex items-center gap-1.5 px-2 py-1 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 overflow-x-auto hide-scrollbar shrink-0">
-                        <span className="text-[9px] sm:text-[10px] font-black text-slate-400 dark:text-slate-500 shrink-0 whitespace-nowrap">📊 計{total}コマ</span>
-                        {summary.length === 0 ? (
-                          <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 dark:text-slate-500 whitespace-nowrap">今週はまだ入力がありません</span>
-                        ) : summary.map(([name, c]) => {
-                          const color = CONTENT_COLORS[getContentType(name, 'p1')];
-                          return (
-                            <span key={name} className={`text-[9px] sm:text-[10px] font-black px-1.5 py-0.5 rounded-md border whitespace-nowrap shrink-0 ${color.tlBg} ${color.tlText}`}>
-                              {name} <span className="opacity-70">{c}</span>
-                            </span>
-                          );
-                        })}
-                      </div>
-                    );
-                  })()}
 
                   <div className={`flex-1 flex flex-col relative min-h-0 hide-scrollbar overflow-y-auto`}>
                     <div className={`flex bg-slate-100 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-30 shrink-0 ${isMobile && activeTab === 'weekly' ? 'min-h-0 py-0.5' : 'min-h-[3rem]'}`} style={{boxShadow:'0 2px 6px rgba(0,0,0,0.06)'}}>
@@ -3330,6 +3306,7 @@
               const totalHours = subj?.type === 'auto' && subj.units ? subj.units.reduce((sum,u)=>sum+u.hours,0) : 0;
               const clsListForProg = subj?.type === 'auto' && subj.classes?.length > 0 ? subj.classes : [null];
               const fmtDate = (ds) => { if (!ds) return ''; const d = new Date(ds+'T00:00:00'); return `${d.getMonth()+1}/${d.getDate()}(${['日','月','火','水','木','金','土'][d.getDay()]})`; };
+              const cumSummary = getCumulativeSubjectSummary();
               return (
                 <div className="p-4 flex-1 overflow-y-auto bg-[var(--paper)]">
                   <div className="max-w-5xl mx-auto">
@@ -3342,6 +3319,31 @@
                           {s.name}{s.type === 'history' ? <span className="ml-1 text-[9px] opacity-60">履歴</span> : ''}
                         </button>
                       ))}
+                    </div>
+
+                    {/* 今年度の累計実施時数 */}
+                    <div className="mb-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 shadow-sm">
+                      <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
+                        <h3 className="text-sm font-black text-slate-700 dark:text-slate-200">
+                          📊 今年度の実施時数
+                          <span className="ml-2 text-[10px] font-bold text-slate-400 dark:text-slate-500">{cumSummary.startLabel}〜今日・週案と基本時間割から集計</span>
+                        </h3>
+                        <span className="text-sm font-black text-blue-700 dark:text-blue-300">計{cumSummary.total}コマ</span>
+                      </div>
+                      {cumSummary.list.length === 0 ? (
+                        <p className="text-xs font-bold text-slate-400 dark:text-slate-500">まだ実施したコマがありません</p>
+                      ) : (
+                        <div className="flex flex-wrap gap-1.5">
+                          {cumSummary.list.map(([name, c]) => {
+                            const color = CONTENT_COLORS[getContentType(name, 'p1')];
+                            return (
+                              <span key={name} className={`text-xs font-black px-2 py-1 rounded-lg border ${color.tlBg} ${color.tlText}`}>
+                                {name} <span className="opacity-70">{c}</span>
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
 
                     {/* 新規教科追加フォーム */}
