@@ -1577,6 +1577,24 @@
         return { list: Object.entries(counts).sort((a, b) => b[1] - a[1]), total, startLabel: `${sy}/4/1` };
       };
 
+      // 基本時間割（テンプレート）の週あたりコマ数を教科ごとに集計（休日日課の曜日は除外）
+      const getTemplateSubjectSummary = () => {
+        const counts = {};
+        const periodIds = ['p1','p2','p3','p4','p5','p6'];
+        let total = 0;
+        for (let di = 0; di < 7; di++) {
+          const set = templateSettings[di] || DEFAULT_TEMPLATE_SETTINGS[di];
+          if (set && set.type === 'holiday') continue;
+          for (const pid of periodIds) {
+            const raw = (baseTemplate[`${di}-${pid}`]?.subject || '').trim();
+            if (!raw) continue;
+            const name = raw.split('\n')[0].replace(/（[^）]*）\s*$/, '').trim();
+            if (name) { counts[name] = (counts[name] || 0) + 1; total++; }
+          }
+        }
+        return { list: Object.entries(counts).sort((a, b) => b[1] - a[1]), total };
+      };
+
       // ===== 予定表の取り込み（AIチャットで読み取ったデータの貼り付け） =====
       const closeAiImport = () => { setShowAiImport(false); setAiImportText(''); setAiImportResult(null); setAiImportError(''); };
 
@@ -3100,6 +3118,32 @@
                 {/* 基本設定の追加設定項目 (templateのみ) */}
                 {activeTab === 'template' && (
                   <div className="w-full max-w-[1000px] md:w-[40%] md:max-w-md shrink-0 flex flex-col gap-4 md:h-full md:overflow-y-auto hide-scrollbar">
+                    {(() => {
+                      const tpl = getTemplateSubjectSummary();
+                      return (
+                        <div className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-300 shadow-sm">
+                          <div className="flex items-center justify-between gap-2 flex-wrap mb-1">
+                            <h2 className="text-xl font-black text-slate-800 flex items-center gap-2">📊 週あたりのコマ数</h2>
+                            <span className="text-sm font-black text-blue-700">計{tpl.total}コマ</span>
+                          </div>
+                          <p className="text-xs text-slate-600 font-bold mb-4">基本時間割（1〜6限）に設定した教科ごとの週あたりコマ数です。休日日課の曜日は含みません。コマを編集するとすぐに反映されます。</p>
+                          {tpl.list.length === 0 ? (
+                            <p className="text-xs font-bold text-slate-400">まだ授業コマが設定されていません</p>
+                          ) : (
+                            <div className="flex flex-wrap gap-1.5">
+                              {tpl.list.map(([name, c]) => {
+                                const color = CONTENT_COLORS[getContentType(name, 'p1')];
+                                return (
+                                  <span key={name} className={`text-xs font-black px-2 py-1 rounded-lg border ${color.tlBg} ${color.tlText}`}>
+                                    {name} <span className="opacity-70">{c}</span>
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                     <div className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-300 shadow-sm">
                       <h2 className="text-xl font-black mb-4 text-slate-800 flex items-center gap-2">🌴 長期休業・休暇期間の設定</h2>
                       <p className="text-xs text-slate-600 font-bold mb-4">期間を設定すると、月間や週案で自動的に「休日日課」になります。</p>
