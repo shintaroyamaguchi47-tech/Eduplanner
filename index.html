@@ -228,6 +228,24 @@
     const parseUnits = (text) => { if(!text) return []; return text.split('\n').filter(l=>l.trim()!=='').map(l => { const p=l.split(','); return {name:p[0]?.trim()||'',hours:parseInt(p[1])||1}; }); };
     const formatUnits = (units) => { if(!units) return ''; return units.map(u=>`${u.name},${u.hours}`).join('\n'); };
 
+    // AI画像読み取り（Claude API 構造化出力）で使うJSONスキーマ
+    const AI_EXTRACT_SCHEMA = {
+      type: 'object',
+      properties: {
+        events: { type: 'array', items: { type: 'object', properties: {
+          date: { type: 'string', description: 'YYYY-MM-DD形式の日付' },
+          title: { type: 'string', description: '行事・予定の名前' }
+        }, required: ['date', 'title'], additionalProperties: false } },
+        timetable: { type: 'array', items: { type: 'object', properties: {
+          date: { type: 'string', description: 'YYYY-MM-DD形式の日付' },
+          period: { type: 'integer', description: '時限（1〜6）' },
+          subject: { type: 'string', description: '教科名' }
+        }, required: ['date', 'period', 'subject'], additionalProperties: false } }
+      },
+      required: ['events', 'timetable'],
+      additionalProperties: false
+    };
+
     // 内容に基づく色分け（授業/会議/特別活動/テスト等）
     const CONTENT_COLORS = {
       lesson:  { bg: 'bg-blue-50 hover:bg-blue-100', border: 'border-blue-500', text: 'text-blue-900',
@@ -843,6 +861,15 @@
         try { return localStorage.getItem('ep_show_week_summary') !== '0'; }
         catch (e) { return true; }
       });
+      const [aiApiKey, setAiApiKey] = useState(() => {
+        try { return localStorage.getItem('ep_anthropic_key') || ''; }
+        catch (e) { return ''; }
+      });
+      const [showAiImport, setShowAiImport] = useState(false);
+      const [aiImportImage, setAiImportImage] = useState(null);
+      const [aiImportLoading, setAiImportLoading] = useState(false);
+      const [aiImportError, setAiImportError] = useState('');
+      const [aiImportResult, setAiImportResult] = useState(null);
       const savedRangeRef = useRef(null);
 
       const [penColor, setPenColor] = useState('#0f172a');
@@ -1573,6 +1600,116 @@
           try { localStorage.setItem('ep_show_week_summary', v ? '0' : '1'); } catch (e) {}
           return !v;
         });
+      };
+
+      // ===== AI画像読み取り（月報・週報の写真 → 行事予定・時間割） =====
+      const saveAiApiKey = (k) => {
+        setAiApiKey(k);
+        try { k ? localStorage.setItem('ep_anthropic_key', k) : localStorage.removeItem('ep_anthropic_key'); } catch (e) {}
+      };
+      const closeAiImport = () => { setShowAiImport(false); setAiImportImage(null); setAiImportResult(null); setAiImportError(''); };
+
+      // 画像を長辺1568pxに縮小してJPEG base64化（APIのトークン消費と通信量を抑える）
+      const prepareAiImage = (file) => new Promise((resolve, reject) => {
+        const img = new Image();
+        const url = URL.createObjectURL(file);
+        img.onload = () => {
+          URL.revokeObjectURL(url);
+          const scale = Math.min(1, 1568 / Math.max(img.width, img.height));
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.round(img.width * scale);
+          canvas.height = Math.round(img.height * scale);
+          canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+          resolve({ dataUrl, base64: dataUrl.split(',')[1], mediaType: 'image/jpeg' });
+        };
+        img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('画像を読み込めませんでした')); };
+        img.src = url;
+      });
+
+      const runAiExtract = async () => {
+        if (!aiImportImage || !aiApiKey) return;
+        setAiImportLoading(true); setAiImportError(''); setAiImportResult(null);
+        try {
+          const today = formatDate(getJSTDate());
+          const res = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+              'content-type': 'application/json',
+              'x-api-key': aiApiKey,
+              'anthropic-version': '2023-06-01',
+              'anthropic-dangerous-direct-browser-access': 'true'
+            },
+            body: JSON.stringify({
+              model: 'claude-opus-4-8',
+              max_tokens: 8192,
+              output_config: { format: { type: 'json_schema', schema: AI_EXTRACT_SCHEMA } },
+              messages: [{ role: 'user', content: [
+                { type: 'image', source: { type: 'base64', media_type: aiImportImage.mediaType, data: aiImportImage.base64 } },
+                { type: 'text', text: `これは日本の学校の月行事予定表または週報（週予定・時間割）の写真です。記載内容を読み取ってください。\n- events: 日付が特定できる行事・予定（テスト、保護者会、式典など）。date は YYYY-MM-DD 形式。年の記載がない場合は今日（${today}）を基準に、学校の年度内で最も自然な日付に補完してください。\n- timetable: 日付と時限（1〜6）が特定できる授業（教科名）があれば抽出。なければ空配列。\n- 判読できない項目や日付が特定できない項目は含めないでください。` }
+              ]}]
+            })
+          });
+          const data = await res.json().catch(() => null);
+          if (!res.ok) {
+            const msg = data?.error?.message || '';
+            if (res.status === 401) throw new Error('APIキーが正しくありません。設定タブで確認してください');
+            if (res.status === 429) throw new Error('利用上限に達しています。しばらく待ってからお試しください');
+            throw new Error(msg ? `APIエラー: ${msg}` : `APIエラー (${res.status})`);
+          }
+          if (data.stop_reason === 'refusal') throw new Error('この画像は読み取りできませんでした。別の画像でお試しください');
+          const textBlock = (data.content || []).find(b => b.type === 'text');
+          if (!textBlock) throw new Error('読み取り結果が空でした');
+          const parsed = JSON.parse(textBlock.text);
+          const events = (parsed.events || [])
+            .filter(e => /^\d{4}-\d{2}-\d{2}$/.test(e.date) && e.title && e.title.trim())
+            .map(e => ({ date: e.date, title: e.title.trim(), checked: true }));
+          const timetable = (parsed.timetable || [])
+            .filter(t => /^\d{4}-\d{2}-\d{2}$/.test(t.date) && t.period >= 1 && t.period <= 6 && t.subject && t.subject.trim())
+            .map(t => ({ date: t.date, period: t.period, subject: t.subject.trim(), checked: true }));
+          if (events.length === 0 && timetable.length === 0) throw new Error('予定や時間割を読み取れませんでした。明るい場所で正面から撮った写真でお試しください');
+          setAiImportResult({ events, timetable });
+        } catch (err) {
+          setAiImportError(err.message || '読み取りに失敗しました');
+        } finally {
+          setAiImportLoading(false);
+        }
+      };
+
+      const applyAiImport = () => {
+        if (!aiImportResult) return;
+        const selEvents = aiImportResult.events.filter(e => e.checked);
+        const selTT = aiImportResult.timetable.filter(t => t.checked);
+        if (selEvents.length > 0) {
+          const ny = JSON.parse(JSON.stringify(yearlyData));
+          selEvents.forEach(ev => {
+            const [y, m, d] = ev.date.split('-').map(Number);
+            const sy = m < 4 ? y - 1 : y;
+            if (!ny[sy]) ny[sy] = {};
+            const key = `${m}-${d}`;
+            const lines = (ny[sy][key] || '').split('\n').map(s => s.trim()).filter(Boolean);
+            if (!lines.includes(ev.title)) lines.push(ev.title);
+            ny[sy][key] = lines.join('\n');
+          });
+          saveExtraData(ny, documents, vacations);
+        }
+        let ttApplied = 0;
+        if (selTT.length > 0) {
+          const n = { ...weeklyData };
+          selTT.forEach(t => {
+            const wk = `${t.date}-p${t.period}`;
+            const existing = n[wk];
+            if (existing && !existing.useTemplate && existing.subject) return; // 手入力済みは上書きしない
+            n[wk] = { subject: t.subject, memo: '', useTemplate: false };
+            ttApplied++;
+          });
+          saveAll(baseTemplate, templateSettings, n, weeklySettings);
+        }
+        closeAiImport();
+        const parts = [];
+        if (selEvents.length > 0) parts.push(`行事${selEvents.length}件`);
+        if (ttApplied > 0) parts.push(`授業${ttApplied}コマ`);
+        showToast(parts.length > 0 ? `✅ ${parts.join('・')}を取り込みました` : '取り込む項目がありませんでした');
       };
 
       const getAvailablePid = (dateStr, dayIdx) => {
@@ -2839,6 +2976,11 @@
                             <button onClick={exportToGoogleCalendar} className="action-btn text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1.5 rounded-lg hover:bg-emerald-100 transition-colors flex items-center gap-1 whitespace-nowrap" title="週案をGoogleカレンダーにエクスポート (.icsファイル)">
                               📅 カレンダー出力
                             </button>
+                            {aiApiKey && (
+                              <button onClick={() => setShowAiImport(true)} className="action-btn text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-1.5 rounded-lg hover:bg-indigo-100 transition-colors flex items-center gap-1 whitespace-nowrap" title="月報・週報の写真から予定と時間割をAIで読み取り">
+                                📷 AI読取
+                              </button>
+                            )}
                           </div>
                         )}
                         {isMobile && syllabusData.some(s => s.type === 'auto' && s.units?.length > 0) && (
@@ -3551,6 +3693,20 @@
                         </div>
                       </div>
 
+                      {/* AI画像読み取り（Claude API） */}
+                      <div className="border border-indigo-200 bg-indigo-50/50 rounded-2xl p-5 shadow-sm md:col-span-2 dark:bg-indigo-900/20 dark:border-indigo-800">
+                        <h3 className="text-lg font-black text-indigo-900 dark:text-indigo-300 mb-2 flex items-center gap-2">🤖 AI画像読み取り（Claude API）</h3>
+                        <p className="text-xs text-slate-600 dark:text-slate-400 mb-4 font-bold">月行事予定表や週報の写真から、行事予定・時間割を自動で読み取って取り込めます。利用には Anthropic のAPIキーが必要です（従量課金・写真1枚あたり数円程度）。キーはこの端末のブラウザ内のみに保存され、読み取り時にAnthropicのAPIへ直接送信されます。</p>
+                        <div className="space-y-3">
+                          <input type="password" value={aiApiKey} onChange={(e) => saveAiApiKey(e.target.value.trim())} placeholder="sk-ant-api03-..." autoComplete="off"
+                            className="w-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 dark:text-slate-100 rounded-xl px-3 py-2.5 text-sm font-mono outline-none focus:border-indigo-400" />
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <span className={`text-xs font-black ${aiApiKey ? 'text-emerald-600' : 'text-slate-400'}`}>{aiApiKey ? '✅ キー設定済み' : 'キー未設定（console.anthropic.com で取得できます）'}</span>
+                            <button disabled={!aiApiKey} onClick={() => setShowAiImport(true)} className="bg-indigo-600 text-white px-4 py-2 rounded-xl text-xs font-black shadow-md disabled:opacity-40 hover:bg-indigo-700 transition-colors">📷 読み取りを開く</button>
+                          </div>
+                        </div>
+                      </div>
+
                     </div>
                   </div>
                 </div>
@@ -3558,6 +3714,77 @@
             )}
 
           </div>
+
+          {/* AI画像読み取りモーダル */}
+          {showAiImport && (
+            <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100] flex items-center justify-center p-3" onClick={() => { if (!aiImportLoading) closeAiImport(); }}>
+              <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+                <div className="px-5 py-3.5 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-900/60 shrink-0">
+                  <span className="font-black text-slate-800 dark:text-slate-100">📷 予定表のAI読み取り</span>
+                  <button onClick={closeAiImport} disabled={aiImportLoading} className="text-slate-400 hover:text-slate-600 text-2xl font-black disabled:opacity-40">&times;</button>
+                </div>
+                <div className="p-5 overflow-y-auto space-y-4">
+                  {!aiApiKey ? (
+                    <div className="text-center space-y-3 py-4">
+                      <p className="text-sm font-bold text-slate-600 dark:text-slate-300">この機能を使うには Claude APIキーの登録が必要です。</p>
+                      <button onClick={() => { closeAiImport(); setActiveTab('settings'); }} className="bg-blue-600 text-white px-4 py-2 rounded-xl font-black shadow-md hover:bg-blue-700 transition-colors">⚙️ 設定タブで登録する</button>
+                    </div>
+                  ) : !aiImportResult ? (
+                    <React.Fragment>
+                      <p className="text-xs font-bold text-slate-500 dark:text-slate-400">月行事予定表や週報の写真から、行事予定と時間割を自動で読み取ります（写真1枚あたり数円のAPI利用料がかかります）。</p>
+                      <label className="block border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-2xl p-5 text-center cursor-pointer hover:border-indigo-400 hover:bg-indigo-50/50 dark:hover:bg-indigo-900/20 transition-colors">
+                        <input type="file" accept="image/*" className="hidden" disabled={aiImportLoading}
+                          onChange={async (e) => { const f = e.target.files && e.target.files[0]; e.target.value = ''; if (!f) return; try { setAiImportError(''); setAiImportImage(await prepareAiImage(f)); } catch (err) { setAiImportError(err.message); } }} />
+                        {aiImportImage
+                          ? <img src={aiImportImage.dataUrl} className="max-h-48 mx-auto rounded-lg shadow" alt="読み取る画像" />
+                          : <span className="text-sm font-black text-slate-500 dark:text-slate-400">📂 写真を選択 / 撮影</span>}
+                      </label>
+                      {aiImportError && <p className="text-xs font-bold text-rose-600 bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 rounded-lg p-2.5">⚠️ {aiImportError}</p>}
+                      <button disabled={!aiImportImage || aiImportLoading} onClick={runAiExtract} className="w-full bg-indigo-600 text-white py-2.5 rounded-xl font-black shadow-md disabled:opacity-40 hover:bg-indigo-700 transition-colors">
+                        {aiImportLoading ? '🔍 読み取り中…（10〜30秒ほどかかります）' : '🔍 読み取り開始'}
+                      </button>
+                    </React.Fragment>
+                  ) : (
+                    <React.Fragment>
+                      <p className="text-xs font-bold text-slate-500 dark:text-slate-400">読み取り結果を確認し、取り込む項目にチェックを入れてください。取り込み後も各画面で編集できます。</p>
+                      {aiImportResult.events.length > 0 && (
+                        <div>
+                          <div className="text-sm font-black text-slate-700 dark:text-slate-200 mb-1.5">🚩 行事・予定（年間カレンダーへ {aiImportResult.events.filter(e=>e.checked).length}件）</div>
+                          <div className="space-y-0.5 max-h-44 overflow-y-auto border border-slate-200 dark:border-slate-700 rounded-xl p-2">
+                            {aiImportResult.events.map((ev, i) => (
+                              <label key={i} className="flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-200 px-1 py-1 rounded hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer">
+                                <input type="checkbox" checked={ev.checked} onChange={() => setAiImportResult(r => ({ ...r, events: r.events.map((x, xi) => xi === i ? { ...x, checked: !x.checked } : x) }))} />
+                                <span className="font-mono text-slate-500 dark:text-slate-400 shrink-0">{ev.date}</span>
+                                <span className="truncate">{ev.title}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {aiImportResult.timetable.length > 0 && (
+                        <div>
+                          <div className="text-sm font-black text-slate-700 dark:text-slate-200 mb-1.5">📚 時間割（週案へ {aiImportResult.timetable.filter(t=>t.checked).length}コマ・手入力済みのコマは上書きしません）</div>
+                          <div className="space-y-0.5 max-h-44 overflow-y-auto border border-slate-200 dark:border-slate-700 rounded-xl p-2">
+                            {aiImportResult.timetable.map((t, i) => (
+                              <label key={i} className="flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-200 px-1 py-1 rounded hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer">
+                                <input type="checkbox" checked={t.checked} onChange={() => setAiImportResult(r => ({ ...r, timetable: r.timetable.map((x, xi) => xi === i ? { ...x, checked: !x.checked } : x) }))} />
+                                <span className="font-mono text-slate-500 dark:text-slate-400 shrink-0">{t.date} {t.period}限</span>
+                                <span className="truncate">{t.subject}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      <div className="flex gap-2 pt-1">
+                        <button onClick={() => { setAiImportResult(null); setAiImportError(''); }} className="flex-1 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 py-2.5 rounded-xl font-black hover:bg-slate-50 dark:hover:bg-slate-600 transition-colors">← やり直す</button>
+                        <button onClick={applyAiImport} disabled={aiImportResult.events.every(e=>!e.checked) && aiImportResult.timetable.every(t=>!t.checked)} className="flex-1 bg-emerald-600 text-white py-2.5 rounded-xl font-black shadow-md hover:bg-emerald-700 transition-colors disabled:opacity-40">✅ 取り込む</button>
+                      </div>
+                    </React.Fragment>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* クイックメモ サイドバー */}
           {showQuickMemoList && <div className="fixed inset-0 bg-slate-900/20 backdrop-blur-sm z-[40]" onClick={() => setShowQuickMemoList(false)}></div>}
