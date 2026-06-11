@@ -228,6 +228,7 @@
     const parseUnits = (text) => { if(!text) return []; return text.split('\n').filter(l=>l.trim()!=='').map(l => { const p=l.split(','); return {name:p[0]?.trim()||'',hours:parseInt(p[1])||1}; }); };
     const formatUnits = (units) => { if(!units) return ''; return units.map(u=>`${u.name},${u.hours}`).join('\n'); };
 
+
     // 内容に基づく色分け（授業/会議/特別活動/テスト等）
     const CONTENT_COLORS = {
       lesson:  { bg: 'bg-blue-50 hover:bg-blue-100', border: 'border-blue-500', text: 'text-blue-900',
@@ -839,6 +840,14 @@
 
       const [editingWeekMemo, setEditingWeekMemo] = useState(null);
       const [showWeekMemoPad, setShowWeekMemoPad] = useState(false);
+      const [showWeekSummary, setShowWeekSummary] = useState(() => {
+        try { return localStorage.getItem('ep_show_week_summary') !== '0'; }
+        catch (e) { return true; }
+      });
+      const [showAiImport, setShowAiImport] = useState(false);
+      const [aiImportText, setAiImportText] = useState('');
+      const [aiImportError, setAiImportError] = useState('');
+      const [aiImportResult, setAiImportResult] = useState(null);
       const savedRangeRef = useRef(null);
 
       const [penColor, setPenColor] = useState('#0f172a');
@@ -1544,6 +1553,125 @@
         } 
 
         return result; 
+      };
+
+      // 週間時数サマリー：今週のp1〜p6を教科名（単元表記を除く）ごとに集計
+      const getWeekSubjectSummary = () => {
+        const counts = {};
+        const periodIds = ['p1','p2','p3','p4','p5','p6'];
+        for (let i = 0; i < 7; i++) {
+          const cd = new Date(currentWeekStart); cd.setDate(cd.getDate() + i);
+          const ds = formatDate(cd);
+          if (getDaySetting(ds, i).type === 'holiday') continue;
+          for (const pid of periodIds) {
+            const raw = (getCellData(ds, pid, i).subject || '').trim();
+            if (!raw) continue;
+            const name = raw.split('\n')[0].replace(/（[^）]*）\s*$/, '').trim();
+            if (!name) continue;
+            counts[name] = (counts[name] || 0) + 1;
+          }
+        }
+        return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+      };
+      const toggleWeekSummary = () => {
+        setShowWeekSummary(v => {
+          try { localStorage.setItem('ep_show_week_summary', v ? '0' : '1'); } catch (e) {}
+          return !v;
+        });
+      };
+
+      // ===== 予定表の取り込み（AIチャットで読み取ったデータの貼り付け） =====
+      const closeAiImport = () => { setShowAiImport(false); setAiImportText(''); setAiImportResult(null); setAiImportError(''); };
+
+      // ClaudeなどのAIチャットに写真と一緒に貼り付けてもらうプロンプト
+      const buildAiPrompt = () => {
+        const today = formatDate(getJSTDate());
+        return `この画像は日本の学校の月行事予定表または週報（週予定・時間割）です。記載内容を読み取り、次のJSON形式だけを出力してください（説明文は不要です）。
+
+{"events":[{"date":"YYYY-MM-DD","title":"行事名"}],"timetable":[{"date":"YYYY-MM-DD","period":1,"subject":"教科名"}]}
+
+- events: 日付が特定できる行事・予定（テスト、保護者会、式典など）
+- timetable: 日付と時限（1〜6）が特定できる授業の教科名。なければ空配列 []
+- 今日は${today}です。年の記載がない場合は学校の年度内で最も自然な年に補完してください
+- 判読できない項目や日付が特定できない項目は含めないでください`;
+      };
+
+      const copyAiPrompt = async () => {
+        const text = buildAiPrompt();
+        try {
+          await navigator.clipboard.writeText(text);
+          showToast('📋 プロンプトをコピーしました。AIチャットに写真と一緒に貼り付けてください');
+        } catch (e) {
+          try {
+            const ta = document.createElement('textarea');
+            ta.value = text; document.body.appendChild(ta); ta.select();
+            document.execCommand('copy'); document.body.removeChild(ta);
+            showToast('📋 プロンプトをコピーしました。AIチャットに写真と一緒に貼り付けてください');
+          } catch (e2) { showToast('⚠️ コピーできませんでした。手動で選択してコピーしてください'); }
+        }
+      };
+
+      // AIチャットの返答テキストからJSONを取り出して検証
+      const parseAiImportText = () => {
+        setAiImportError('');
+        try {
+          let s = aiImportText.trim();
+          if (!s) throw new Error('AIチャットの返答を貼り付けてください');
+          const fence = s.match(/```(?:json)?\s*([\s\S]*?)```/);
+          if (fence) s = fence[1].trim();
+          const start = s.indexOf('{');
+          const end = s.lastIndexOf('}');
+          if (start === -1 || end <= start) throw new Error('JSONデータが見つかりませんでした。AIの返答全体をそのまま貼り付けてください');
+          let parsed;
+          try { parsed = JSON.parse(s.slice(start, end + 1)); }
+          catch (e) { throw new Error('データの形式を読み取れませんでした。AIに「JSON形式だけで出力して」と伝え直してください'); }
+          const events = (Array.isArray(parsed.events) ? parsed.events : [])
+            .filter(e => e && /^\d{4}-\d{2}-\d{2}$/.test(e.date) && e.title && String(e.title).trim())
+            .map(e => ({ date: e.date, title: String(e.title).trim(), checked: true }));
+          const timetable = (Array.isArray(parsed.timetable) ? parsed.timetable : [])
+            .filter(t => t && /^\d{4}-\d{2}-\d{2}$/.test(t.date) && Number(t.period) >= 1 && Number(t.period) <= 6 && t.subject && String(t.subject).trim())
+            .map(t => ({ date: t.date, period: Number(t.period), subject: String(t.subject).trim(), checked: true }));
+          if (events.length === 0 && timetable.length === 0) throw new Error('取り込める予定・時間割がデータに含まれていませんでした');
+          setAiImportResult({ events, timetable });
+        } catch (err) {
+          setAiImportError(err.message || '読み取りに失敗しました');
+        }
+      };
+
+      const applyAiImport = () => {
+        if (!aiImportResult) return;
+        const selEvents = aiImportResult.events.filter(e => e.checked);
+        const selTT = aiImportResult.timetable.filter(t => t.checked);
+        if (selEvents.length > 0) {
+          const ny = JSON.parse(JSON.stringify(yearlyData));
+          selEvents.forEach(ev => {
+            const [y, m, d] = ev.date.split('-').map(Number);
+            const sy = m < 4 ? y - 1 : y;
+            if (!ny[sy]) ny[sy] = {};
+            const key = `${m}-${d}`;
+            const lines = (ny[sy][key] || '').split('\n').map(s => s.trim()).filter(Boolean);
+            if (!lines.includes(ev.title)) lines.push(ev.title);
+            ny[sy][key] = lines.join('\n');
+          });
+          saveExtraData(ny, documents, vacations);
+        }
+        let ttApplied = 0;
+        if (selTT.length > 0) {
+          const n = { ...weeklyData };
+          selTT.forEach(t => {
+            const wk = `${t.date}-p${t.period}`;
+            const existing = n[wk];
+            if (existing && !existing.useTemplate && existing.subject) return; // 手入力済みは上書きしない
+            n[wk] = { subject: t.subject, memo: '', useTemplate: false };
+            ttApplied++;
+          });
+          saveAll(baseTemplate, templateSettings, n, weeklySettings);
+        }
+        closeAiImport();
+        const parts = [];
+        if (selEvents.length > 0) parts.push(`行事${selEvents.length}件`);
+        if (ttApplied > 0) parts.push(`授業${ttApplied}コマ`);
+        showToast(parts.length > 0 ? `✅ ${parts.join('・')}を取り込みました` : '取り込む項目がありませんでした');
       };
 
       const getAvailablePid = (dateStr, dayIdx) => {
@@ -2790,6 +2918,7 @@
                           <button onClick={() => changeWeek(1)} className="px-2 sm:px-2.5 py-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-r-lg transition-colors font-bold text-xs">▶</button>
                         </div>
                         <button onClick={() => { setCurrentWeekStart(getMonday(getJSTDate())); }} className="text-[10px] sm:text-xs font-black text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 px-2.5 py-1.5 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors shrink-0 whitespace-nowrap">今週</button>
+                        <button onClick={toggleWeekSummary} className={`text-[10px] sm:text-xs font-black px-2 py-1.5 rounded-lg border transition-colors shrink-0 whitespace-nowrap ${showWeekSummary ? 'text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/30 border-emerald-200 dark:border-emerald-700 hover:bg-emerald-100 dark:hover:bg-emerald-900/50' : 'text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700'}`} title="今週の教科ごとの時数を表示/非表示">📊</button>
 
                         {!isMobile && (
                           <div className="flex gap-1.5 ml-auto">
@@ -2808,6 +2937,9 @@
                             </button>
                             <button onClick={exportToGoogleCalendar} className="action-btn text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1.5 rounded-lg hover:bg-emerald-100 transition-colors flex items-center gap-1 whitespace-nowrap" title="週案をGoogleカレンダーにエクスポート (.icsファイル)">
                               📅 カレンダー出力
+                            </button>
+                            <button onClick={() => setShowAiImport(true)} className="action-btn text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-1.5 rounded-lg hover:bg-indigo-100 transition-colors flex items-center gap-1 whitespace-nowrap" title="AIチャットで読み取った月報・週報のデータを貼り付けて取り込み">
+                              📋 予定取込
                             </button>
                           </div>
                         )}
@@ -2828,7 +2960,27 @@
                       </div>
                     )}
                   </div>
-                  
+
+                  {activeTab === 'weekly' && showWeekSummary && (() => {
+                    const summary = getWeekSubjectSummary();
+                    const total = summary.reduce((s, [, c]) => s + c, 0);
+                    return (
+                      <div className="flex items-center gap-1.5 px-2 py-1 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 overflow-x-auto hide-scrollbar shrink-0">
+                        <span className="text-[9px] sm:text-[10px] font-black text-slate-400 dark:text-slate-500 shrink-0 whitespace-nowrap">📊 計{total}コマ</span>
+                        {summary.length === 0 ? (
+                          <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 dark:text-slate-500 whitespace-nowrap">今週はまだ入力がありません</span>
+                        ) : summary.map(([name, c]) => {
+                          const color = CONTENT_COLORS[getContentType(name, 'p1')];
+                          return (
+                            <span key={name} className={`text-[9px] sm:text-[10px] font-black px-1.5 py-0.5 rounded-md border whitespace-nowrap shrink-0 ${color.tlBg} ${color.tlText}`}>
+                              {name} <span className="opacity-70">{c}</span>
+                            </span>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+
                   <div className={`flex-1 flex flex-col relative min-h-0 hide-scrollbar overflow-y-auto`}>
                     <div className={`flex bg-slate-100 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-30 shrink-0 ${isMobile && activeTab === 'weekly' ? 'min-h-0 py-0.5' : 'min-h-[3rem]'}`} style={{boxShadow:'0 2px 6px rgba(0,0,0,0.06)'}}>
                       <div className="w-10 sm:w-16 lg:w-20 border-r border-slate-200 dark:border-slate-700 shrink-0 bg-slate-100 dark:bg-slate-900 sticky left-0 z-40 flex flex-col items-center justify-center gap-0.5">
@@ -3501,6 +3653,13 @@
                         </div>
                       </div>
 
+                      {/* 予定表の取り込み（AIチャット活用） */}
+                      <div className="border border-indigo-200 bg-indigo-50/50 rounded-2xl p-5 shadow-sm md:col-span-2 dark:bg-indigo-900/20 dark:border-indigo-800">
+                        <h3 className="text-lg font-black text-indigo-900 dark:text-indigo-300 mb-2 flex items-center gap-2">📋 予定表の取り込み（AIチャット活用）</h3>
+                        <p className="text-xs text-slate-600 dark:text-slate-400 mb-4 font-bold">月行事予定表や週報の写真を Claude などのAIチャット（無料で利用可）に読み取らせ、返ってきたデータを貼り付けるだけで、行事予定と時間割をまとめて取り込めます。週案タブの「📋 予定取込」ボタンからも開けます。</p>
+                        <button onClick={() => setShowAiImport(true)} className="w-full bg-indigo-600 text-white py-2.5 rounded-xl font-black shadow-md hover:bg-indigo-700 transition-colors">📋 取り込みを開く</button>
+                      </div>
+
                     </div>
                   </div>
                 </div>
@@ -3508,6 +3667,76 @@
             )}
 
           </div>
+
+          {/* 予定表取り込みモーダル（AIチャットの返答を貼り付け） */}
+          {showAiImport && (
+            <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100] flex items-center justify-center p-3" onClick={closeAiImport}>
+              <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+                <div className="px-5 py-3.5 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-900/60 shrink-0">
+                  <span className="font-black text-slate-800 dark:text-slate-100">📋 予定表の取り込み</span>
+                  <button onClick={closeAiImport} className="text-slate-400 hover:text-slate-600 text-2xl font-black">&times;</button>
+                </div>
+                <div className="p-5 overflow-y-auto space-y-4">
+                  {!aiImportResult ? (
+                    <React.Fragment>
+                      <div className="text-xs font-bold text-slate-600 dark:text-slate-300 space-y-1.5">
+                        <p><span className="inline-block w-5 h-5 bg-indigo-600 text-white rounded-full text-center font-black mr-1">1</span>下のプロンプトをコピーする</p>
+                        <p><span className="inline-block w-5 h-5 bg-indigo-600 text-white rounded-full text-center font-black mr-1">2</span>Claude などのAIチャットに<b>月報・週報の写真と一緒に</b>貼り付けて送信する</p>
+                        <p><span className="inline-block w-5 h-5 bg-indigo-600 text-white rounded-full text-center font-black mr-1">3</span>AIの返答（JSONデータ）を下の欄に貼り付けて「読み取る」を押す</p>
+                      </div>
+                      <div className="relative">
+                        <pre className="text-[10px] font-mono text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-xl p-3 pr-20 max-h-32 overflow-y-auto whitespace-pre-wrap">{buildAiPrompt()}</pre>
+                        <button onClick={copyAiPrompt} className="absolute top-2 right-2 bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-black shadow-md hover:bg-indigo-700 transition-colors active:scale-95">📋 コピー</button>
+                      </div>
+                      <textarea value={aiImportText} onChange={(e) => setAiImportText(e.target.value)} rows={5}
+                        placeholder={'AIチャットの返答をここに貼り付け…\n例: {"events":[{"date":"2026-06-15","title":"中間テスト"}],"timetable":[]}'}
+                        className="w-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900/60 dark:text-slate-100 rounded-xl px-3 py-2.5 text-xs font-mono outline-none focus:border-indigo-400 resize-none" />
+                      {aiImportError && <p className="text-xs font-bold text-rose-600 bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 rounded-lg p-2.5">⚠️ {aiImportError}</p>}
+                      <button disabled={!aiImportText.trim()} onClick={parseAiImportText} className="w-full bg-indigo-600 text-white py-2.5 rounded-xl font-black shadow-md disabled:opacity-40 hover:bg-indigo-700 transition-colors">
+                        🔍 読み取る
+                      </button>
+                    </React.Fragment>
+                  ) : (
+                    <React.Fragment>
+                      <p className="text-xs font-bold text-slate-500 dark:text-slate-400">読み取り結果を確認し、取り込む項目にチェックを入れてください。取り込み後も各画面で編集できます。</p>
+                      {aiImportResult.events.length > 0 && (
+                        <div>
+                          <div className="text-sm font-black text-slate-700 dark:text-slate-200 mb-1.5">🚩 行事・予定（年間カレンダーへ {aiImportResult.events.filter(e=>e.checked).length}件）</div>
+                          <div className="space-y-0.5 max-h-44 overflow-y-auto border border-slate-200 dark:border-slate-700 rounded-xl p-2">
+                            {aiImportResult.events.map((ev, i) => (
+                              <label key={i} className="flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-200 px-1 py-1 rounded hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer">
+                                <input type="checkbox" checked={ev.checked} onChange={() => setAiImportResult(r => ({ ...r, events: r.events.map((x, xi) => xi === i ? { ...x, checked: !x.checked } : x) }))} />
+                                <span className="font-mono text-slate-500 dark:text-slate-400 shrink-0">{ev.date}</span>
+                                <span className="truncate">{ev.title}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {aiImportResult.timetable.length > 0 && (
+                        <div>
+                          <div className="text-sm font-black text-slate-700 dark:text-slate-200 mb-1.5">📚 時間割（週案へ {aiImportResult.timetable.filter(t=>t.checked).length}コマ・手入力済みのコマは上書きしません）</div>
+                          <div className="space-y-0.5 max-h-44 overflow-y-auto border border-slate-200 dark:border-slate-700 rounded-xl p-2">
+                            {aiImportResult.timetable.map((t, i) => (
+                              <label key={i} className="flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-200 px-1 py-1 rounded hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer">
+                                <input type="checkbox" checked={t.checked} onChange={() => setAiImportResult(r => ({ ...r, timetable: r.timetable.map((x, xi) => xi === i ? { ...x, checked: !x.checked } : x) }))} />
+                                <span className="font-mono text-slate-500 dark:text-slate-400 shrink-0">{t.date} {t.period}限</span>
+                                <span className="truncate">{t.subject}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      <div className="flex gap-2 pt-1">
+                        <button onClick={() => { setAiImportResult(null); setAiImportError(''); }} className="flex-1 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 py-2.5 rounded-xl font-black hover:bg-slate-50 dark:hover:bg-slate-600 transition-colors">← やり直す</button>
+                        <button onClick={applyAiImport} disabled={aiImportResult.events.every(e=>!e.checked) && aiImportResult.timetable.every(t=>!t.checked)} className="flex-1 bg-emerald-600 text-white py-2.5 rounded-xl font-black shadow-md hover:bg-emerald-700 transition-colors disabled:opacity-40">✅ 取り込む</button>
+                      </div>
+                    </React.Fragment>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* クイックメモ サイドバー */}
           {showQuickMemoList && <div className="fixed inset-0 bg-slate-900/20 backdrop-blur-sm z-[40]" onClick={() => setShowQuickMemoList(false)}></div>}
