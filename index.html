@@ -987,19 +987,20 @@
         }
       };
 
-      const getEventFontSize = (text, isMobile) => {
+      const getEventFontSize = (text, isMobile, noClamp = false) => {
+        const clamp = (cls) => noClamp ? '' : ` ${cls}`;
         if (!text) return isMobile ? 'text-[10px]' : 'text-xs';
         const len = text.length;
         if (isMobile) {
           if (len < 6) return 'text-[12px] leading-tight';
           if (len < 12) return 'text-[11px] leading-tight';
-          if (len < 20) return 'text-[10px] leading-tight line-clamp-2';
-          return 'text-[9px] leading-tight line-clamp-3';
+          if (len < 20) return `text-[10px] leading-tight${clamp('line-clamp-2')}`;
+          return `text-[9px] leading-tight${clamp('line-clamp-3')}`;
         } else {
           if (len < 8) return 'text-sm leading-tight';
-          if (len < 16) return 'text-xs leading-tight line-clamp-2';
-          if (len < 25) return 'text-[11px] leading-tight line-clamp-3';
-          return 'text-[10px] leading-tight line-clamp-4';
+          if (len < 16) return `text-xs leading-tight${clamp('line-clamp-2')}`;
+          if (len < 25) return `text-[11px] leading-tight${clamp('line-clamp-3')}`;
+          return `text-[10px] leading-tight${clamp('line-clamp-4')}`;
         }
       };
 
@@ -2647,14 +2648,14 @@
                   }
                 }
 
-                const fontSizeClass = row.id === 'event' ? getEventFontSize(data.subject, isMobile) : (row.id === 'lunch' || row.id === 'morning') ? getEventFontSize(data.subject, isMobile) : getDynamicFontSize(data.subject, isMobile, activeTab === 'weekly');
+                const fontSizeClass = row.id === 'event' ? getEventFontSize(data.subject, isMobile, true) : (row.id === 'lunch' || row.id === 'morning') ? getEventFontSize(data.subject, isMobile) : getDynamicFontSize(data.subject, isMobile, activeTab === 'weekly');
 
                 return (
                   <div key={i} onClick={()=>{if(isMobile && activeTab==='weekly' && hasData) openViewModal(data,ds,row,i,day,isH); else openEditModal(data,ds,row,i,day,isH,null);}} className={`min-w-0 ${cf} border-r border-slate-200 dark:border-slate-700 last:border-r-0 p-0.5 sm:p-1 cursor-pointer flex flex-col justify-start relative ${overflowClass} ${activeTab==='weekly'&&isT?'bg-blue-50/30 dark:bg-blue-900/10':''} ${cellBg} hover:bg-slate-100/80 dark:hover:bg-slate-700/30 transition-colors h-full`}>
                     {hasData && (
-                      <div className={`cell-card ${blockClasses} rounded-md sm:rounded-lg flex flex-col px-0.5 py-0.5 sm:px-1 sm:py-1 border-l-[3px] sm:border-l-[4px] transition-colors ${row.id === 'event' ? 'overflow-hidden' : row.id === 'morning' ? 'overflow-visible' : 'overflow-y-auto'} ${row.id !== 'afterschool' ? 'hide-scrollbar' : ''} ${blockBg} ${blockBorder}`} style={{...blockStyle, boxShadow:'0 1px 3px rgba(0,0,0,0.08), 0 1px 1px rgba(0,0,0,0.04)'}}>
+                      <div className={`cell-card ${blockClasses} rounded-md sm:rounded-lg flex flex-col px-0.5 py-0.5 sm:px-1 sm:py-1 border-l-[3px] sm:border-l-[4px] transition-colors ${row.id === 'morning' ? 'overflow-visible' : 'overflow-y-auto'} ${row.id !== 'afterschool' ? 'hide-scrollbar' : ''} ${blockBg} ${blockBorder}`} style={{...blockStyle, boxShadow:'0 1px 3px rgba(0,0,0,0.08), 0 1px 1px rgba(0,0,0,0.04)'}}>
                         {row.id === 'event' ? (
-                          <div className="flex flex-col justify-center h-full space-y-0.5">
+                          <div className="flex flex-col w-full my-auto space-y-0.5">
                             {data.subject.split('\n').filter(s => s.trim() !== '').map((s, idx) => (
                               <div key={idx} className={`${fontSizeClass} font-black break-words ${blockText} leading-tight border-b border-pink-200/50 last:border-0 pb-0.5 last:pb-0`} title={s}>
                                 {s}
