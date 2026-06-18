@@ -825,6 +825,8 @@
       const [notesData, setNotesData] = useState([]);
       const [noteSearchQuery, setNoteSearchQuery] = useState('');
       const [editingNote, setEditingNote] = useState(null);
+      const [noteAutoSaveStatus, setNoteAutoSaveStatus] = useState('');
+      const noteAutoSaveTimerRef = useRef(null);
       const [quickMemos, setQuickMemos] = useState([]);
       const [showQuickMemoList, setShowQuickMemoList] = useState(false);
       const [handwritingMode, setHandwritingMode] = useState('cell');
@@ -2149,7 +2151,9 @@
         return { ...m, subj: syllabusData[m.idx] };
       };
 
-      const handleSaveNote = () => { if(!editingNote.title.trim()&&!editingNote.content.trim()){ setEditingNote(null); return; } if(editingNote.type==='diary'){ const wk=`${editingNote.dateStr}-diary`; const nd={...weeklyData,[wk]:{...(weeklyData[wk]||{}),memo:editingNote.content,useTemplate:false}}; setWeeklyData(nd); saveAll(baseTemplate,templateSettings,nd,weeklySettings); showToast('メモを更新しました'); } else { const isN=!notesData.some(n=>n.id===editingNote.id); const ts=Date.now(); const nn=isN?[{...editingNote,type:'note',updatedAt:ts},...notesData]:notesData.map(n=>n.id===editingNote.id?{...editingNote,updatedAt:ts}:n); saveNotes(nn); showToast('ノートを保存しました'); } setEditingNote(null); };
+      const saveNoteQuietly = (note) => { if(!note) return; const editor = document.getElementById('note-editor'); const currentContent = editor ? editor.innerHTML : note.content || ''; const noteToSave = {...note, content: currentContent}; if(!noteToSave.title.trim()&&!noteToSave.content.trim()) return; if(noteToSave.type==='diary'){ const wk=`${noteToSave.dateStr}-diary`; const nd={...weeklyData,[wk]:{...(weeklyData[wk]||{}),memo:noteToSave.content,useTemplate:false}}; setWeeklyData(nd); saveAll(baseTemplate,templateSettings,nd,weeklySettings); } else { const isN=!notesData.some(n=>n.id===noteToSave.id); const ts=Date.now(); const nn=isN?[{...noteToSave,type:'note',updatedAt:ts},...notesData]:notesData.map(n=>n.id===noteToSave.id?{...noteToSave,updatedAt:ts}:n); saveNotes(nn); } };
+      const triggerNoteAutoSave = (note) => { if(noteAutoSaveTimerRef.current) clearTimeout(noteAutoSaveTimerRef.current); setNoteAutoSaveStatus('editing'); noteAutoSaveTimerRef.current = setTimeout(() => { saveNoteQuietly(note); setNoteAutoSaveStatus('saved'); setTimeout(() => setNoteAutoSaveStatus(''), 2000); }, 1000); };
+      const handleSaveNote = () => { if(noteAutoSaveTimerRef.current) clearTimeout(noteAutoSaveTimerRef.current); if(!editingNote.title.trim()&&!editingNote.content.trim()){ setEditingNote(null); return; } const editor = document.getElementById('note-editor'); const currentContent = editor ? editor.innerHTML : editingNote.content || ''; const noteToSave = {...editingNote, content: currentContent}; if(noteToSave.type==='diary'){ const wk=`${noteToSave.dateStr}-diary`; const nd={...weeklyData,[wk]:{...(weeklyData[wk]||{}),memo:noteToSave.content,useTemplate:false}}; setWeeklyData(nd); saveAll(baseTemplate,templateSettings,nd,weeklySettings); showToast('メモを更新しました'); } else { const isN=!notesData.some(n=>n.id===noteToSave.id); const ts=Date.now(); const nn=isN?[{...noteToSave,type:'note',updatedAt:ts},...notesData]:notesData.map(n=>n.id===noteToSave.id?{...noteToSave,updatedAt:ts}:n); saveNotes(nn); showToast('ノートを保存しました'); } setEditingNote(null); };
       const htmlToFormattedText = (html) => {
         if (!html) return '';
         const div = document.createElement('div');
@@ -3223,7 +3227,7 @@
                 <div className="max-w-4xl mx-auto w-full flex-1 bg-white rounded-2xl p-4 sm:p-6 flex flex-col min-h-0 border border-slate-400 shadow-sm">
                   {editingNote ? (
                     <div className="flex-1 flex flex-col gap-4 anim-fade-up min-h-0">
-                      <input value={editingNote.title} onChange={e=>setEditingNote({...editingNote,title:e.target.value})} className="text-xl font-black p-2 border-b border-slate-400 outline-none text-slate-800" placeholder="タイトル" />
+                      <input value={editingNote.title} onChange={e=>{const updated={...editingNote,title:e.target.value};setEditingNote(updated);triggerNoteAutoSave(updated);}} className="text-xl font-black p-2 border-b border-slate-400 outline-none text-slate-800" placeholder="タイトル" />
                       
                       {/* 書式設定ツールバー */}
                       <div className="flex items-center gap-3 p-2 bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 shrink-0 flex-wrap rounded-xl">
@@ -3257,8 +3261,12 @@
                           data-placeholder="ノートの内容..."
                           onBlur={e => {
                             const html = e.currentTarget.innerHTML;
-                            setEditingNote(prev => ({...prev, content: html}));
+                            setEditingNote(prev => {const updated={...prev, content: html}; triggerNoteAutoSave(updated); return updated;});
                             saveSelection();
+                          }}
+                          onInput={e => {
+                            const html = e.currentTarget.innerHTML;
+                            setEditingNote(prev => {const updated={...prev, content: html}; triggerNoteAutoSave(updated); return updated;});
                           }}
                           onKeyUp={saveSelection}
                           onMouseUp={saveSelection}
@@ -3282,7 +3290,7 @@
                           const html = editor ? editor.innerHTML : editingNote.content || '';
                           shareNoteText({...editingNote, content: html});
                         }} className="px-4 py-2 bg-slate-50 hover:bg-blue-50 text-slate-600 hover:text-blue-700 border border-slate-300 rounded-lg font-bold text-xs transition-colors shadow-sm">📤 共有・コピー</button>
-                        <div className="flex gap-3"><button onClick={()=>setEditingNote(null)} className="px-5 py-2 bg-slate-100 border border-slate-300 rounded-lg font-bold text-xs text-slate-700 shadow-sm">戻る</button><button onClick={handleSaveNote} className="px-8 py-2 bg-blue-600 text-white rounded-lg font-bold text-xs shadow-md active:scale-95">保存</button></div>
+                        <div className="flex gap-3 items-center">{noteAutoSaveStatus === 'editing' && <span className="text-xs text-slate-400 font-medium">保存中...</span>}{noteAutoSaveStatus === 'saved' && <span className="text-xs text-green-500 font-medium">✓ 保存済み</span>}<button onClick={()=>{if(noteAutoSaveTimerRef.current){clearTimeout(noteAutoSaveTimerRef.current);saveNoteQuietly(editingNote);}setEditingNote(null);}} className="px-5 py-2 bg-slate-100 border border-slate-300 rounded-lg font-bold text-xs text-slate-700 shadow-sm">戻る</button></div>
                       </div>
                     </div>
                   ) : (
