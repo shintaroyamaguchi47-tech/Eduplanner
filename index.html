@@ -173,6 +173,8 @@
       normal: { id: 'normal', label: '通常', color: 'bg-blue-50 text-blue-600 border-blue-300' },
       short: { id: 'short', label: '短縮', color: 'bg-amber-50 text-amber-600 border-amber-300' },
       special: { id: 'special', label: '特別短縮', color: 'bg-fuchsia-50 text-fuchsia-600 border-fuchsia-300' },
+      morning_only: { id: 'morning_only', label: '午前授業', color: 'bg-teal-50 text-teal-600 border-teal-300' },
+      assembly: { id: 'assembly', label: '集会', color: 'bg-violet-50 text-violet-600 border-violet-300' },
       holiday: { id: 'holiday', label: '休日', color: 'bg-rose-50 text-rose-600 border-rose-300' },
     };
 
@@ -180,6 +182,8 @@
       normal: { event:null, morning:{start:'08:15',end:'08:30'}, p1:{start:'08:40',end:'09:30'}, p2:{start:'09:40',end:'10:30'}, p3:{start:'10:40',end:'11:30'}, p4:{start:'11:40',end:'12:30'}, lunch:{start:'12:30',end:'13:35'}, p5:{start:'13:35',end:'14:25'}, p6:{start:'14:35',end:'15:25'}, afterschool:{start:'16:00',end:''} },
       short: { event:null, morning:{start:'08:15',end:'08:30'}, p1:{start:'08:40',end:'09:25'}, p2:{start:'09:35',end:'10:20'}, p3:{start:'10:30',end:'11:15'}, p4:{start:'11:25',end:'12:10'}, lunch:{start:'12:10',end:'13:15'}, p5:{start:'13:15',end:'14:00'}, p6:{start:'14:10',end:'14:55'}, afterschool:{start:'15:30',end:''} },
       special: { event:null, morning:{start:'08:15',end:'08:20'}, p1:{start:'08:30',end:'09:15'}, p2:{start:'09:25',end:'10:10'}, p3:{start:'10:20',end:'11:05'}, p4:{start:'11:15',end:'12:00'}, lunch:{start:'12:00',end:'13:05'}, p5:{start:'13:05',end:'13:50'}, p6:{start:'14:00',end:'14:45'}, afterschool:{start:'15:10',end:''} },
+      morning_only: { event:null, morning:{start:'08:15',end:'08:30'}, p1:{start:'08:40',end:'09:30'}, p2:{start:'09:40',end:'10:30'}, p3:{start:'10:40',end:'11:30'}, p4:{start:'11:40',end:'12:30'}, lunch:null, p5:null, p6:null, afterschool:{start:'12:30',end:''} },
+      assembly: { event:null, morning:{start:'08:20',end:'08:50'}, p1:{start:'09:00',end:'09:45'}, p2:{start:'09:55',end:'10:40'}, p3:{start:'10:50',end:'11:35'}, p4:{start:'11:45',end:'12:30'}, lunch:{start:'12:30',end:'13:35'}, p5:{start:'13:35',end:'14:25'}, p6:{start:'14:35',end:'15:25'}, afterschool:{start:'16:00',end:''} },
       holiday: { event:null, morning:null, p1:null, p2:null, p3:null, p4:null, lunch:null, p5:null, p6:null, afterschool:null }
     };
 
@@ -205,7 +209,8 @@
       if (/入試|テスト|試験|考査|学調|学力/.test(s)) return { kind:'test', label:'テスト', scheduleType:/入試/.test(s)?'special':'short', badge:'bg-rose-100 text-rose-700 border-rose-300' };
       if (/始業式|終業式|修了式|卒業|入学式|離任式|式/.test(s)) return { kind:'ceremony', label:'式', scheduleType:'special', badge:'bg-purple-100 text-purple-700 border-purple-300' };
       if (/保護者|参観|面談|懇談/.test(s)) return { kind:'parent', label:'保護者', scheduleType:'short', badge:'bg-amber-100 text-amber-700 border-amber-300' };
-      if (/体育祭|合唱|文化祭|生徒総会|集会/.test(s)) return { kind:'event', label:'行事', scheduleType:'special', badge:'bg-pink-100 text-pink-700 border-pink-300' };
+      if (/集会/.test(s)) return { kind:'event', label:'集会', scheduleType:'assembly', badge:'bg-violet-100 text-violet-700 border-violet-300' };
+      if (/体育祭|合唱|文化祭|生徒総会/.test(s)) return { kind:'event', label:'行事', scheduleType:'special', badge:'bg-pink-100 text-pink-700 border-pink-300' };
       if (/会議|研修|委員会|協議会/.test(s)) return { kind:'meeting', label:'会議', scheduleType:null, badge:'bg-orange-100 text-orange-700 border-orange-300' };
       return { kind:'event', label:'行事', scheduleType:null, badge:'bg-slate-100 text-slate-700 border-slate-300' };
     };
