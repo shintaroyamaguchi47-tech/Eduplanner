@@ -269,6 +269,8 @@
                  tlBg: 'bg-yellow-100 border-yellow-400', tlText: 'text-yellow-900', tlBar: 'bg-yellow-500' },
       afterschool: { bg: 'bg-teal-50 hover:bg-teal-100', border: 'border-teal-500', text: 'text-teal-900',
                      tlBg: 'bg-teal-100 border-teal-400', tlText: 'text-teal-900', tlBar: 'bg-teal-500' },
+      private: { bg: 'bg-fuchsia-50 hover:bg-fuchsia-100', border: 'border-fuchsia-500', text: 'text-fuchsia-900',
+                 tlBg: 'bg-fuchsia-100 border-fuchsia-400', tlText: 'text-fuchsia-900', tlBar: 'bg-fuchsia-500' },
     };
     const getContentType = (subject, rowId) => {
       if (rowId === 'event') return 'event';
@@ -3228,7 +3230,7 @@
 
             {/* 週予定（Googleカレンダー風タイムライン） */}
             {activeTab === 'schedule' && (() => {
-              const SH = 8, EH = 19, HH = isMobile ? 44 : 58;
+              const SH = 0, EH = 24, HH = isMobile ? 44 : 58;
               const TOTAL = (EH - SH) * HH;
               const t2y = (t) => { if(!t) return null; const [h,m]=t.split(':').map(Number); return ((h-SH)*60+m)/60*HH; };
               const tlColor = (subject, rowId, custom) => { const ct = custom && CONTENT_COLORS[custom] ? custom : getContentType(subject, rowId); const cc = CONTENT_COLORS[ct] || CONTENT_COLORS.lesson; return { bg: cc.tlBg, text: cc.tlText, bar: cc.tlBar }; };
@@ -3260,6 +3262,7 @@
                         <button onClick={()=>changeWeek(1)} className="px-2.5 py-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 font-black text-slate-600 dark:text-slate-300">›</button>
                       </div>
                       <button onClick={()=>setCurrentWeekStart(getMonday(getJSTDate()))} className="font-bold text-blue-700 dark:text-blue-400 bg-white dark:bg-slate-800 rounded-xl border border-slate-300 dark:border-slate-600 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-xs px-2.5 py-1.5 sm:text-sm sm:px-4 sm:py-2">今週へ</button>
+                      <button onClick={exportToGoogleCalendar} className="font-bold text-emerald-700 dark:text-emerald-400 bg-white dark:bg-slate-800 rounded-xl border border-slate-300 dark:border-slate-600 shadow-sm hover:bg-emerald-50 dark:hover:bg-slate-700 transition-colors text-xs px-2.5 py-1.5 sm:text-sm sm:px-3 sm:py-2 flex items-center gap-1" title="この週の予定を.icsファイルでエクスポート（スマホカレンダーに取り込めます）">📅 <span className="hidden sm:inline">カレンダー共有</span></button>
                     </div>
                   </div>
 
@@ -3294,7 +3297,7 @@
                     </div>
 
                     {/* タイムライン本体 */}
-                    <div className="flex-1 overflow-y-auto overflow-x-hidden">
+                    <div className="flex-1 overflow-y-auto overflow-x-hidden" ref={(el) => { if (el && !el._scrolled) { el._scrolled = true; const target = Math.max(0, (nowY > 0 ? now.getHours() - 1 : 7)); el.scrollTop = target * HH; } }}>
                       <div className="flex relative" style={{height: TOTAL+'px'}}>
                         <div className="w-10 sm:w-14 shrink-0 relative border-r border-slate-200 dark:border-slate-700">
                           {Array.from({length:EH-SH},(_,i)=>SH+i).map(h=>(<div key={h} className="absolute right-1 text-[9px] sm:text-[11px] font-bold text-slate-400 dark:text-slate-500" style={{top:((h-SH)*HH-6)+'px'}}>{h}:00</div>))}
@@ -3303,11 +3306,35 @@
                           {Array.from({length:EH-SH+1},(_,i)=>i).map(i=>(<div key={'l'+i} className="absolute left-0 right-0 border-t border-slate-100 dark:border-slate-700/50 pointer-events-none" style={{top:(i*HH)+'px'}}></div>))}
                           {days.map((d,i)=>{ const ds=formatDate(d); const di=i; const setting=getDaySetting(ds,di); const isH=setting.type==='holiday'; const isT=ds===nowStr; const blocks=buildBlocks(ds,di);
                             return (
-                              <div key={i} className={`relative border-r border-slate-200 dark:border-slate-700 last:border-0 ${isH?'bg-rose-50/30 dark:bg-rose-900/5':isT?'bg-blue-50/20 dark:bg-blue-900/5':''}`}>
+                              <div key={i} className={`relative border-r border-slate-200 dark:border-slate-700 last:border-0 cursor-pointer ${isH?'bg-rose-50/30 dark:bg-rose-900/5':isT?'bg-blue-50/20 dark:bg-blue-900/5':''}`}
+                                onClick={(e) => {
+                                  if (e.target !== e.currentTarget) return;
+                                  const rect = e.currentTarget.getBoundingClientRect();
+                                  const y = e.clientY - rect.top;
+                                  const totalMin = Math.floor(y / HH * 60) + SH * 60;
+                                  const h = Math.floor(totalMin / 60);
+                                  const m = Math.round((totalMin % 60) / 15) * 15;
+                                  const sm = m >= 60 ? 0 : m; const sh = m >= 60 ? h + 1 : h;
+                                  const em = (sm + 60) % 60; const eh = sm + 60 >= 60 ? sh + 1 : sh;
+                                  const startTime = `${String(Math.min(sh,EH-1)).padStart(2,'0')}:${String(sm).padStart(2,'0')}`;
+                                  const endTime = `${String(Math.min(eh,EH)).padStart(2,'0')}:${String(em).padStart(2,'0')}`;
+                                  const aRow = ROWS.find(r => r.id === 'afterschool');
+                                  const cd = getCellData(ds, 'afterschool', di);
+                                  let ie = cd.events?.length > 0 ? [...cd.events] : [];
+                                  if (ie.length === 0 && (cd.subject || cd.memo)) ie = [{startTime: cd.startTime||'', endTime: cd.endTime||'', subject: cd.subject||'', memo: cd.memo||''}];
+                                  while (ie.length < 5) ie.push({startTime: '', endTime: '', subject: '', memo: ''});
+                                  const emptyIdx = ie.findIndex(ev => !ev.subject);
+                                  if (emptyIdx >= 0) ie[emptyIdx] = {...ie[emptyIdx], startTime, endTime};
+                                  setTempEvents(ie);
+                                  setTempHandwriting(cd.handwriting || null);
+                                  setTempColor(cd.color || 'private');
+                                  setEditingCell({dateStr: ds, periodId: 'afterschool', dayIndex: di, dayName: DAYS[di], periodName: '放課後・個人予定', isTemplate: false, ih: isH});
+                                }}
+                                title="クリックして予定を追加">
                                 {isT && nowY>=0 && nowY<=TOTAL && (<div className="absolute left-0 right-0 z-30 border-t-2 border-rose-500 pointer-events-none" style={{top:nowY+'px'}}><div className="w-1.5 h-1.5 bg-rose-500 rounded-full -mt-1 -ml-0.5"></div></div>)}
                                 {blocks.map(b=>{ const top=t2y(b.startTime); const bot=t2y(b.endTime); if(top===null) return null; const h=bot?Math.max(bot-top,18):28;
                                   return (
-                                    <div key={b.key} onClick={()=>openEditModal(b.data,ds,b.row,di,DAYS[di],isH)} className={`absolute left-0.5 right-0.5 rounded border shadow-sm flex overflow-hidden cursor-pointer hover:brightness-95 z-10 ${b.color.bg}`} style={{top:top+'px',height:h+'px'}} title={b.subject}>
+                                    <div key={b.key} onClick={(e)=>{e.stopPropagation();openEditModal(b.data,ds,b.row,di,DAYS[di],isH);}} className={`absolute left-0.5 right-0.5 rounded border shadow-sm flex overflow-hidden cursor-pointer hover:brightness-95 z-10 ${b.color.bg}`} style={{top:top+'px',height:h+'px'}} title={b.subject}>
                                       <div className={`w-0.5 sm:w-1 shrink-0 ${b.color.bar}`}></div>
                                       <div className="flex-1 px-0.5 sm:px-1 py-0.5 overflow-hidden leading-tight">
                                         <div className={`text-[7px] sm:text-[9px] font-bold opacity-70 ${b.color.text}`}>{b.startTime}</div>
@@ -4316,6 +4343,7 @@
                                 {key:'meeting',label:'会議',swatch:'bg-orange-400'},
                                 {key:'special',label:'特別活動',swatch:'bg-emerald-400'},
                                 {key:'test',label:'テスト',swatch:'bg-rose-400'},
+                                {key:'private',label:'プライベート',swatch:'bg-fuchsia-400'},
                               ].map(c=>(
                                 <button key={c.key} type="button" onClick={()=>setTempColor(c.key)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold border transition-all ${tempColor===c.key?'border-blue-500 ring-2 ring-blue-200 bg-white shadow-md scale-105':'border-slate-300 bg-white hover:bg-slate-50'}`}>
                                   <span className={`w-3 h-3 rounded-full ${c.swatch}`}></span>{c.label}
@@ -4506,6 +4534,7 @@
                             {key:'meeting',label:'会議',swatch:'bg-orange-400'},
                             {key:'special',label:'特別活動',swatch:'bg-emerald-400'},
                             {key:'test',label:'テスト',swatch:'bg-rose-400'},
+                            {key:'private',label:'プライベート',swatch:'bg-fuchsia-400'},
                           ].map(c=>(
                             <button key={c.key} type="button" onClick={()=>setTempColor(c.key)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold border transition-all ${tempColor===c.key?'border-blue-500 ring-2 ring-blue-200 bg-white shadow-md scale-105':'border-slate-300 bg-white hover:bg-slate-50'}`}>
                               <span className={`w-3 h-3 rounded-full ${c.swatch}`}></span>{c.label}
