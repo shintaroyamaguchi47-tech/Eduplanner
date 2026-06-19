@@ -3267,10 +3267,12 @@
                   </div>
 
                   <div className="flex-1 min-h-0 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden flex flex-col">
+                    <div className="flex-1 min-h-0 overflow-x-auto flex flex-col">
+                    <div className="flex flex-col flex-1 min-h-0" style={{minWidth:'400px'}}>
                     {/* 曜日ヘッダー */}
                     <div className="flex border-b border-slate-200 dark:border-slate-700 shrink-0 bg-slate-50 dark:bg-slate-900/60">
-                      <div className="w-10 sm:w-14 shrink-0 border-r border-slate-200 dark:border-slate-700"></div>
-                      <div className="flex-1 grid grid-cols-7 min-w-0">
+                      <div className="w-10 sm:w-14 shrink-0 border-r border-slate-200 dark:border-slate-700 sticky left-0 bg-slate-50 dark:bg-slate-900/60 z-10"></div>
+                      <div className="flex-1 grid grid-cols-7" style={{minWidth:'350px'}}>
                         {days.map((d,i)=>{ const ds=formatDate(d); const isT=ds===nowStr; const setting=getDaySetting(ds,i); const isH=setting.type==='holiday';
                           return (
                             <button key={i} onClick={()=>setSelectedDateDetails({dateStr:ds,dateObj:d})} title="タイムライン表示" className={`min-w-0 flex flex-col items-center justify-center py-1 sm:py-1.5 border-r border-slate-200 dark:border-slate-700 last:border-0 hover:bg-slate-100 dark:hover:bg-slate-700/40 transition-colors ${isH?'bg-rose-50/60 dark:bg-rose-900/10':isT?'bg-blue-50/60 dark:bg-blue-900/10':''}`}>
@@ -3284,8 +3286,8 @@
 
                     {/* 行事（終日）行 */}
                     <div className="flex border-b border-slate-200 dark:border-slate-700 shrink-0 bg-white dark:bg-slate-800">
-                      <div className="w-10 sm:w-14 shrink-0 border-r border-slate-200 dark:border-slate-700 flex items-center justify-center text-[8px] sm:text-[10px] font-black text-slate-400 dark:text-slate-500">🚩行事</div>
-                      <div className="flex-1 grid grid-cols-7 min-w-0">
+                      <div className="w-10 sm:w-14 shrink-0 border-r border-slate-200 dark:border-slate-700 flex items-center justify-center text-[8px] sm:text-[10px] font-black text-slate-400 dark:text-slate-500 sticky left-0 bg-white dark:bg-slate-800 z-10">🚩行事</div>
+                      <div className="flex-1 grid grid-cols-7" style={{minWidth:'350px'}}>
                         {days.map((d,i)=>{ const ds=formatDate(d); const di=i; const ev=getCellData(ds,'event',di); const lines=(ev.subject||'').split('\n').filter(s=>s.trim()); const isH=getDaySetting(ds,di).type==='holiday';
                           return (
                             <div key={i} onClick={()=>openEditModal(getCellData(ds,'event',di),ds,eventRow,di,DAYS[di],isH)} className="min-w-0 border-r border-slate-200 dark:border-slate-700 last:border-0 p-0.5 min-h-[1.4rem] space-y-0.5 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/30">
@@ -3297,12 +3299,12 @@
                     </div>
 
                     {/* タイムライン本体 */}
-                    <div className="flex-1 overflow-y-auto overflow-x-hidden" ref={(el) => { if (el && !el._scrolled) { el._scrolled = true; const target = Math.max(0, (nowY > 0 ? now.getHours() - 1 : 7)); el.scrollTop = target * HH; } }}>
-                      <div className="flex relative" style={{height: TOTAL+'px'}}>
-                        <div className="w-10 sm:w-14 shrink-0 relative border-r border-slate-200 dark:border-slate-700">
+                    <div className="flex-1 overflow-y-auto" ref={(el) => { if (el && !el._scrolled) { el._scrolled = true; const target = Math.max(0, (nowY > 0 ? now.getHours() - 1 : 7)); el.scrollTop = target * HH; } }}>
+                      <div className="flex relative" style={{height: TOTAL+'px', minWidth:'400px'}}>
+                        <div className="w-10 sm:w-14 shrink-0 relative border-r border-slate-200 dark:border-slate-700 sticky left-0 bg-white dark:bg-slate-800 z-10">
                           {Array.from({length:EH-SH},(_,i)=>SH+i).map(h=>(<div key={h} className="absolute right-1 text-[9px] sm:text-[11px] font-bold text-slate-400 dark:text-slate-500" style={{top:((h-SH)*HH-6)+'px'}}>{h}:00</div>))}
                         </div>
-                        <div className="flex-1 grid grid-cols-7 min-w-0 relative">
+                        <div className="flex-1 grid grid-cols-7 relative" style={{minWidth:'350px'}}>
                           {Array.from({length:EH-SH+1},(_,i)=>i).map(i=>(<div key={'l'+i} className="absolute left-0 right-0 border-t border-slate-100 dark:border-slate-700/50 pointer-events-none" style={{top:(i*HH)+'px'}}></div>))}
                           {days.map((d,i)=>{ const ds=formatDate(d); const di=i; const setting=getDaySetting(ds,di); const isH=setting.type==='holiday'; const isT=ds===nowStr; const blocks=buildBlocks(ds,di);
                             return (
@@ -3350,6 +3352,8 @@
                         </div>
                       </div>
                     </div>
+                    </div>{/* min-width inner */}
+                    </div>{/* overflow-x-auto */}
                   </div>
                 </div>
               );
