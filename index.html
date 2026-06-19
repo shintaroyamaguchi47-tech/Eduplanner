@@ -3336,12 +3336,21 @@
                                 {isT && nowY>=0 && nowY<=TOTAL && (<div className="absolute left-0 right-0 z-30 border-t-2 border-rose-500 pointer-events-none" style={{top:nowY+'px'}}><div className="w-1.5 h-1.5 bg-rose-500 rounded-full -mt-1 -ml-0.5"></div></div>)}
                                 {blocks.map(b=>{ const top=t2y(b.startTime); const bot=t2y(b.endTime); if(top===null) return null; const h=bot?Math.max(bot-top,18):28;
                                   return (
-                                    <div key={b.key} onClick={(e)=>{e.stopPropagation();openEditModal(b.data,ds,b.row,di,DAYS[di],isH);}} className={`absolute left-0.5 right-0.5 rounded border shadow-sm flex overflow-hidden cursor-pointer hover:brightness-95 z-10 ${b.color.bg}`} style={{top:top+'px',height:h+'px'}} title={b.subject}>
-                                      <div className={`w-0.5 sm:w-1 shrink-0 ${b.color.bar}`}></div>
-                                      <div className="flex-1 px-0.5 sm:px-1 py-0.5 overflow-hidden leading-tight">
-                                        <div className={`text-[7px] sm:text-[9px] font-bold opacity-70 ${b.color.text}`}>{b.startTime}</div>
-                                        <div className={`text-[8px] sm:text-[11px] font-black break-words whitespace-pre-wrap ${b.color.text}`}>{b.subject}</div>
-                                        {b.memo && h>34 && <div className={`text-[7px] sm:text-[9px] font-bold opacity-70 line-clamp-1 ${b.color.text}`}>{b.memo}</div>}
+                                    <div key={b.key} onClick={(e)=>{e.stopPropagation();openEditModal(b.data,ds,b.row,di,DAYS[di],isH);}} className={`absolute left-0.5 right-0.5 rounded border shadow-sm cursor-pointer hover:brightness-95 z-10 group/ev ${b.color.bg}`} style={{top:top+'px',height:h+'px',overflow:'visible'}}>
+                                      <div className={`flex h-full rounded overflow-hidden`}>
+                                        <div className={`w-0.5 sm:w-1 shrink-0 ${b.color.bar}`}></div>
+                                        <div className="flex-1 px-0.5 sm:px-1 py-0.5 overflow-hidden leading-tight">
+                                          <div className={`text-[7px] sm:text-[9px] font-bold opacity-70 ${b.color.text}`}>{b.startTime}</div>
+                                          <div className={`text-[8px] sm:text-[11px] font-black break-words whitespace-pre-wrap ${b.color.text}`}>{b.subject}</div>
+                                          {b.memo && h>34 && <div className={`text-[7px] sm:text-[9px] font-bold opacity-70 line-clamp-1 ${b.color.text}`}>{b.memo}</div>}
+                                        </div>
+                                      </div>
+                                      <div className="absolute left-0 bottom-full mb-1 z-[60] hidden group-hover/ev:block pointer-events-none" style={{minWidth:'130px',maxWidth:'200px'}}>
+                                        <div className={`rounded-lg shadow-xl border-2 p-2 text-xs ${b.color.bg.replace('hover:bg-','').split(' ')[0]} ${b.color.border}`}>
+                                          <div className={`font-black text-[11px] ${b.color.text}`}>{b.subject}</div>
+                                          <div className={`text-[10px] mt-0.5 opacity-70 ${b.color.text}`}>{b.startTime}{b.endTime?'〜'+b.endTime:''}</div>
+                                          {b.memo && <div className={`text-[10px] mt-1 opacity-80 whitespace-pre-wrap ${b.color.text}`}>{b.memo}</div>}
+                                        </div>
                                       </div>
                                     </div>
                                   );
