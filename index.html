@@ -1399,6 +1399,35 @@
         }
         return { currentUnitIdx: units.length, currentHour: 1 };
       };
+      // 編集中コマより前に週案へ実際に入力された「教科（単元 h/H）」の最後のコマから次の時間を導出する。
+      // 保存済みの進度カウンタは自動入力や手動編集でずれることがあるため、週案の実データを優先する。
+      const getCellRelativeProgress = (subj, cls, editDateStr, editPid) => {
+        if (subj.type !== 'auto' || !subj.units || subj.units.length === 0) return getClassProgress(subj, cls);
+        const periodIds = ['p1','p2','p3','p4','p5','p6'];
+        const prefix = cls || '';
+        const esc = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const pat = new RegExp(`^${esc(prefix)}${esc(subj.name)}（(.+) (\\d+)/(\\d+)）$`);
+        const editPIdx = periodIds.indexOf(editPid);
+        let last = null;
+        for (const key of Object.keys(weeklyData)) {
+          const ds = key.substring(0, 10);
+          const pid = key.substring(11);
+          const pIdx = periodIds.indexOf(pid);
+          if (pIdx < 0) continue;
+          if (editDateStr && (ds > editDateStr || (ds === editDateStr && editPIdx >= 0 && pIdx >= editPIdx))) continue;
+          const cell = weeklyData[key];
+          if (!cell?.subject || cell.useTemplate) continue;
+          const m = cell.subject.match(pat);
+          if (!m) continue;
+          const ui = subj.units.findIndex(u => u.name === m[1]);
+          if (ui < 0) continue;
+          if (!last || ds > last.ds || (ds === last.ds && pIdx > last.pIdx)) last = { ds, pIdx, ui, h: parseInt(m[2]) };
+        }
+        if (!last) return getClassProgress(subj, cls);
+        let ui = last.ui, h = last.h + 1;
+        if (h > (subj.units[ui]?.hours || 0)) { ui++; h = 1; }
+        return { currentUnitIdx: ui, currentHour: h };
+      };
       const saveExtraData = (ny,nd,nv) => { setYearlyData(ny); setDocuments(nd); setVacations(nv); saveToFirestore('extra',{yearlyData:ny,documents:nd,vacations:nv}); saveToLocal({yearlyData:ny,documents:nd,vacations:nv}); };
       const saveQuickMemos = (nm) => { setQuickMemos(nm); saveToFirestore('quickMemos',{memos:nm}); saveToLocal({quickMemos:nm}); };
 
@@ -2707,7 +2736,8 @@
                           </div>
                         ) : (
                           <div className={`flex flex-col min-w-0 ${row.id === 'morning' || row.id === 'lunch' ? 'justify-center' : activeTab === 'weekly' ? 'justify-start' : 'justify-center h-full'}`}>
-                            {(data.startTime || data.endTime) && row.id !== 'lunch' && row.id !== 'morning' && (
+                            {/* 授業コマ（p1〜p6）の時刻表示は不要。休日の予定は時間帯が本質なので表示を残す */}
+                            {(data.startTime || data.endTime) && row.id !== 'lunch' && row.id !== 'morning' && (!row.id.startsWith('p') || isH) && (
                               <div className={`text-[6px] sm:text-[9px] font-mono font-bold opacity-90 shrink-0 ${blockText} mb-0.5`}>
                                 {data.startTime}{data.startTime && data.endTime ? '-' : ''}{data.endTime}
                               </div>
@@ -4334,7 +4364,7 @@
                         if (subj.type === 'auto') {
                           const clsList = subj.classes && subj.classes.length > 0 ? subj.classes : [null];
                           clsList.forEach(cls => {
-                            const prog = getClassProgress(subj, cls);
+                            const prog = editingCell.isTemplate ? getClassProgress(subj, cls) : getCellRelativeProgress(subj, cls, editingCell.dateStr, editingCell.periodId);
                             const unit = subj.units?.[prog.currentUnitIdx];
                             const isFinished = subj.units?.length > 0 && !unit;
                             const label = `${cls || ''}${subj.name}`;
@@ -4420,7 +4450,7 @@
                                 if(subj.type==='auto') {
                                   const clsList = subj.classes && subj.classes.length > 0 ? subj.classes : [null];
                                   return clsList.map(cls => {
-                                    const prog = getClassProgress(subj, cls);
+                                    const prog = getCellRelativeProgress(subj, cls, editingCell.dateStr, editingCell.periodId);
                                     const unit = subj.units?.[prog.currentUnitIdx];
                                     const isFinished = subj.units?.length > 0 && !unit;
                                     const prefix = cls || '';
@@ -4428,7 +4458,7 @@
                                     return (
                                       <div key={`${subj.id}-${cls||'_'}`} className="space-y-1">
                                         <div className="flex gap-1.5 items-center">
-                                          <button type="button" onClick={()=>handleSmartAutoFill(subjIdx, cls)} disabled={isFinished} className="flex-1 bg-blue-600 text-white text-sm font-bold py-2 px-3 rounded-lg shadow-sm text-left truncate active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-blue-700 transition-colors">{text}</button>
+                                          <button type="button" onClick={()=>handleSmartAutoFillFrom(subjIdx, cls, prog.currentUnitIdx, prog.currentHour)} disabled={isFinished} className="flex-1 bg-blue-600 text-white text-sm font-bold py-2 px-3 rounded-lg shadow-sm text-left truncate active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-blue-700 transition-colors">{text}</button>
                                           <button type="button" onClick={()=>{setTempSubject(text); setTempUnitPickerSel({ subjIdx, cls, unitIdx: prog.currentUnitIdx, hour: prog.currentHour });}} title="単元・時間目を選んで入力" className="shrink-0 bg-indigo-50 text-indigo-600 text-[10px] font-bold py-2 px-2 rounded-lg border border-indigo-300 shadow-sm active:scale-95 hover:bg-indigo-100 transition-colors whitespace-nowrap">単元選択</button>
                                         </div>
                                         <div className="flex gap-1 pl-0.5">
