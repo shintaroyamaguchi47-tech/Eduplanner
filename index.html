@@ -1537,20 +1537,18 @@
         const mergedLines = [...keptLines];
         nextLines.forEach(line => { if (!mergedLines.includes(line)) mergedLines.push(line); });
         const nextYear = { ...(yearlyData[sy] || {}) };
-        if (mergedLines.length > 0) nextYear[md] = mergedLines.join('\n');
-        else delete nextYear[md];
+        // 空でもキーを残す（初期データとのマージで削除済み行事が復活するのを防ぐ）
+        nextYear[md] = mergedLines.join('\n');
         saveExtraData({ ...yearlyData, [sy]: nextYear }, documents, vacations);
       };
       const getMergedYearlyEventText = (dateStr) => {
         const yearlyText = getYearlyEventText(yearlyData, dateStr);
         const weeklyText = weeklyData[`${dateStr}-event`]?.subject || '';
-        const lines = [];
-        [yearlyText, weeklyText].forEach(text => {
-          text.split('\n').map(s => s.trim()).filter(Boolean).forEach(line => {
-            if (!lines.includes(line)) lines.push(line);
-          });
-        });
-        return lines.join('\n');
+        const yearlyLines = yearlyText.split('\n').map(s => s.trim()).filter(Boolean);
+        const extraLines = weeklyText.split('\n').map(s => s.trim()).filter(Boolean).filter(line => !yearlyLines.includes(line));
+        if (yearlyLines.length === 0) return extraLines.join('\n');
+        if (extraLines.length === 0) return yearlyText;
+        return yearlyText.replace(/\n+$/, '') + '\n' + extraLines.join('\n');
       };
       
       const getCellData = (ds, pid, di) => { 
@@ -3529,6 +3527,16 @@
                                   const val = e.target.value;
                                   const lines = val.split('\n');
                                   if (lines.length > 3) return;
+                                  const newLines = lines.map(s=>s.trim()).filter(Boolean);
+                                  const removed = ut.split('\n').map(s=>s.trim()).filter(Boolean).filter(l=>!newLines.includes(l));
+                                  if (removed.length > 0) {
+                                    const wk = `${ds}-event`;
+                                    const wLines = (weeklyData[wk]?.subject || '').split('\n').filter(s=>s.trim());
+                                    const keptW = wLines.filter(l=>!removed.includes(l.trim()));
+                                    if (keptW.length !== wLines.length) {
+                                      saveAll(baseTemplate, templateSettings, { ...weeklyData, [wk]: { ...(weeklyData[wk]||{}), subject: keptW.join('\n'), useTemplate: false } }, weeklySettings);
+                                    }
+                                  }
                                   saveExtraData({...yearlyData,[schoolYear]:{...(yearlyData[schoolYear]||{}),[`${m}-${d}`]:val}},documents,vacations);
                                 }}
                                 rows={ut.split('\n').filter(s=>s.trim()!=='').length||1}
@@ -4189,8 +4197,7 @@
                 const yearlyLines = (yearlyData[sy]?.[md] || '').split('\n').filter(s => s.trim());
                 const newYearlyLines = yearlyLines.filter(l => l.trim() !== eventText.trim());
                 const nextYear = { ...(yearlyData[sy] || {}) };
-                if (newYearlyLines.length > 0) nextYear[md] = newYearlyLines.join('\n');
-                else delete nextYear[md];
+                nextYear[md] = newYearlyLines.join('\n');
                 saveExtraData({ ...yearlyData, [sy]: nextYear }, documents, vacations);
                 const wk = `${ds}-event`;
                 const weeklySubject = weeklyData[wk]?.subject || '';
@@ -4439,9 +4446,16 @@
                                   if(!confirm('「'+line.trim()+'」を削除しますか？')) return;
                                   const newLines = yeLines.filter((_,idx)=>idx!==li);
                                   const nextYear = { ...(yearlyData[esy] || {}) };
-                                  if(newLines.length>0) nextYear[`${em}-${ed}`] = newLines.join('\n');
-                                  else delete nextYear[`${em}-${ed}`];
+                                  nextYear[`${em}-${ed}`] = newLines.join('\n');
                                   saveExtraData({ ...yearlyData, [esy]: nextYear }, documents, vacations);
+                                  // 週データと編集中の入力欄からも同じ行を消す（保存時に再同期で復活するのを防ぐ）
+                                  const wk = `${editingCell.dateStr}-event`;
+                                  const wLines = (weeklyData[wk]?.subject || '').split('\n').filter(s=>s.trim());
+                                  const keptW = wLines.filter(l=>l.trim()!==line.trim());
+                                  if (keptW.length !== wLines.length) {
+                                    saveAll(baseTemplate, templateSettings, { ...weeklyData, [wk]: { ...(weeklyData[wk]||{}), subject: keptW.join('\n'), useTemplate: false } }, weeklySettings);
+                                  }
+                                  setTempSubject(prev => prev.split('\n').filter(l2=>l2.trim()!==line.trim()).join('\n'));
                                   showToast('🗑 予定を削除しました');
                                 }} className="shrink-0 text-[10px] font-bold text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-2 py-1 hover:bg-rose-100 active:scale-95 transition-all">削除</button>
                               </div>
