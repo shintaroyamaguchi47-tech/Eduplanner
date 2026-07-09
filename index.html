@@ -22,6 +22,7 @@
   <script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -888,6 +889,16 @@
         catch (e) { return 'light'; }
       });
 
+      const [googleClientId, setGoogleClientId] = useState(() => { try { return localStorage.getItem('eduplanner_googleClientId') || ''; } catch (e) { return ''; } });
+      const [googleCalConnected, setGoogleCalConnected] = useState(() => { try { return localStorage.getItem('eduplanner_googleCalConnected') === '1'; } catch (e) { return false; } });
+      const [googleCalAutoSync, setGoogleCalAutoSync] = useState(() => { try { return localStorage.getItem('eduplanner_googleCalAutoSync') !== '0'; } catch (e) { return true; } });
+      const [googleCalLastSync, setGoogleCalLastSync] = useState(() => { try { return localStorage.getItem('eduplanner_googleCalLastSync') || ''; } catch (e) { return ''; } });
+      const [googleCalSyncing, setGoogleCalSyncing] = useState(false);
+      const gisTokenClientRef = useRef(null);
+      const gisTokenClientIdRef = useRef('');
+      const gisTokenResolveRef = useRef(null);
+      const googleCalAutoSyncFiredRef = useRef(false);
+
       const [isOnline, setIsOnline] = useState(navigator.onLine);
       const quickCanvasRef = useRef(null);
       const isDrawingRef = useRef(false);
@@ -990,6 +1001,210 @@
           ctz: 'Asia/Tokyo'
         });
         window.open(`https://calendar.google.com/calendar/render?${params.toString()}`, '_blank');
+      };
+
+      // Googleカレンダー自動同期: アプリを開いたときに今日から1週間の予定と未完了TODOを反映
+      const GCAL_SYNC_TAG = 'eduplannerSync';
+
+      const waitForGis = (timeoutMs = 6000) => new Promise((resolve) => {
+        const start = Date.now();
+        const check = () => {
+          if (window.google?.accounts?.oauth2) resolve(true);
+          else if (Date.now() - start > timeoutMs) resolve(false);
+          else setTimeout(check, 150);
+        };
+        check();
+      });
+
+      const getGisTokenClient = () => {
+        if (gisTokenClientRef.current && gisTokenClientIdRef.current === googleClientId) return gisTokenClientRef.current;
+        if (!window.google?.accounts?.oauth2 || !googleClientId) return null;
+        const client = window.google.accounts.oauth2.initTokenClient({
+          client_id: googleClientId,
+          scope: 'https://www.googleapis.com/auth/calendar.events',
+          callback: (resp) => {
+            const resolve = gisTokenResolveRef.current;
+            gisTokenResolveRef.current = null;
+            if (resolve) resolve(resp);
+          },
+        });
+        gisTokenClientRef.current = client;
+        gisTokenClientIdRef.current = googleClientId;
+        return client;
+      };
+
+      const requestGoogleToken = async (prompt) => {
+        const ready = await waitForGis();
+        if (!ready) return { error: 'gis_not_ready' };
+        const client = getGisTokenClient();
+        if (!client) return { error: 'no_client_id' };
+        return new Promise((resolve) => {
+          gisTokenResolveRef.current = resolve;
+          client.requestAccessToken({ prompt });
+        });
+      };
+
+      const buildScheduleEventsForSync = (startDate, days) => {
+        const events = [];
+        const periodIds = ['p1','p2','p3','p4','p5','p6','morning','afterschool'];
+        for (let i = 0; i < days; i++) {
+          const cd = new Date(startDate);
+          cd.setDate(cd.getDate() + i);
+          const ds = formatDate(cd);
+          const di = (cd.getDay() + 6) % 7;
+          const setting = getDaySetting(ds, di);
+          if (setting.type === 'holiday') continue;
+
+          for (const pid of periodIds) {
+            const data = getCellData(ds, pid, di);
+            if (!data.subject?.trim()) {
+              if (pid === 'afterschool' && data.events?.length > 0) {
+                data.events.forEach((ev, idx) => {
+                  if (ev.subject?.trim()) {
+                    events.push({ key: `sched-${ds}-${pid}-${idx}`, date: ds, subject: ev.subject.trim(), memo: '', startTime: ev.startTime, endTime: ev.endTime });
+                  }
+                });
+              }
+              continue;
+            }
+            events.push({ key: `sched-${ds}-${pid}`, date: ds, subject: data.subject.trim(), memo: data.memo || '', startTime: data.startTime, endTime: data.endTime });
+          }
+
+          const eventData = getCellData(ds, 'event', di);
+          if (eventData.subject?.trim()) {
+            eventData.subject.trim().split('\n').filter(s => s.trim()).forEach((line, idx) => {
+              events.push({ key: `sched-${ds}-event-${idx}`, date: ds, subject: `🚩 ${line.trim()}`, memo: '', startTime: null, endTime: null });
+            });
+          }
+        }
+        return events;
+      };
+
+      const buildTodoEventsForSync = () => {
+        return todos.filter(t => !t.completed).map(t => ({
+          key: `todo-${t.id}`,
+          date: t.dueDate || todayStr,
+          subject: `📝 ${t.text}`,
+          memo: '',
+          startTime: null,
+          endTime: null,
+        }));
+      };
+
+      const fetchSyncedGcalEvents = async (token, timeMinISO, timeMaxISO) => {
+        const map = {};
+        let pageToken = '';
+        do {
+          const params = new URLSearchParams({
+            timeMin: timeMinISO, timeMax: timeMaxISO, singleEvents: 'true', maxResults: '2500',
+            privateExtendedProperty: `${GCAL_SYNC_TAG}=1`,
+          });
+          if (pageToken) params.set('pageToken', pageToken);
+          const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events?${params.toString()}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (!res.ok) throw new Error(`gcal_list_${res.status}`);
+          const data = await res.json();
+          (data.items || []).forEach(ev => {
+            const key = ev.extendedProperties?.private?.eduplannerKey;
+            if (key) map[key] = ev.id;
+          });
+          pageToken = data.nextPageToken || '';
+        } while (pageToken);
+        return map;
+      };
+
+      const upsertGcalEvent = async (token, existingMap, item) => {
+        const body = {
+          summary: item.subject,
+          extendedProperties: { private: { [GCAL_SYNC_TAG]: '1', eduplannerKey: item.key } },
+        };
+        if (item.memo) body.description = item.memo;
+        if (item.startTime && item.endTime) {
+          body.start = { dateTime: `${item.date}T${item.startTime}:00`, timeZone: 'Asia/Tokyo' };
+          body.end = { dateTime: `${item.date}T${item.endTime}:00`, timeZone: 'Asia/Tokyo' };
+        } else {
+          body.start = { date: item.date };
+          body.end = { date: item.date };
+        }
+        const existingId = existingMap[item.key];
+        const url = existingId
+          ? `https://www.googleapis.com/calendar/v3/calendars/primary/events/${existingId}`
+          : `https://www.googleapis.com/calendar/v3/calendars/primary/events`;
+        const res = await fetch(url, {
+          method: existingId ? 'PATCH' : 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) throw new Error(`gcal_upsert_${res.status}`);
+      };
+
+      const runGoogleCalendarSync = async ({ silent = false } = {}) => {
+        if (!googleClientId.trim()) {
+          if (!silent) showToast('先にGoogle OAuthクライアントIDを入力してください');
+          return false;
+        }
+        setGoogleCalSyncing(true);
+        try {
+          let tokenResp = await requestGoogleToken(silent ? '' : 'consent');
+          if (!tokenResp || tokenResp.error || !tokenResp.access_token) {
+            if (!silent) showToast('Googleカレンダーとの連携に失敗しました。もう一度お試しください');
+            return false;
+          }
+          const token = tokenResp.access_token;
+
+          const startDate = getJSTDate();
+          const rangeEnd = new Date(startDate); rangeEnd.setDate(rangeEnd.getDate() + 7);
+          const timeMin = new Date(`${formatDate(startDate)}T00:00:00+09:00`).toISOString();
+          const timeMax = new Date(`${formatDate(rangeEnd)}T00:00:00+09:00`).toISOString();
+
+          const scheduleEvents = buildScheduleEventsForSync(startDate, 7);
+          const todoEvents = buildTodoEventsForSync();
+          const existingMap = await fetchSyncedGcalEvents(token, timeMin, timeMax);
+
+          for (const item of [...scheduleEvents, ...todoEvents]) {
+            await upsertGcalEvent(token, existingMap, item);
+          }
+
+          const nowIso = new Date().toISOString();
+          setGoogleCalLastSync(nowIso);
+          try { localStorage.setItem('eduplanner_googleCalLastSync', nowIso); } catch (e) {}
+          if (!silent) showToast(`Googleカレンダーに${scheduleEvents.length + todoEvents.length}件を同期しました`);
+          return true;
+        } catch (e) {
+          console.error('Google Calendar sync error:', e);
+          if (!silent) showToast('カレンダー同期中にエラーが発生しました');
+          return false;
+        } finally {
+          setGoogleCalSyncing(false);
+        }
+      };
+
+      const handleConnectGoogleCalendar = async () => {
+        const trimmed = googleClientId.trim();
+        if (!trimmed) { showToast('Google OAuthクライアントIDを入力してください'); return; }
+        try { localStorage.setItem('eduplanner_googleClientId', trimmed); } catch (e) {}
+        gisTokenClientRef.current = null;
+        const ok = await runGoogleCalendarSync({ silent: false });
+        if (ok) {
+          setGoogleCalConnected(true);
+          try { localStorage.setItem('eduplanner_googleCalConnected', '1'); } catch (e) {}
+        }
+      };
+
+      const handleDisconnectGoogleCalendar = () => {
+        setGoogleCalConnected(false);
+        gisTokenClientRef.current = null;
+        try {
+          localStorage.setItem('eduplanner_googleCalConnected', '0');
+        } catch (e) {}
+        showToast('Googleカレンダー連携を解除しました（Google側の許可を完全に取り消すには、Googleアカウントの設定からもアプリ連携を削除してください）');
+      };
+
+      const toggleGoogleCalAutoSync = () => {
+        const next = !googleCalAutoSync;
+        setGoogleCalAutoSync(next);
+        try { localStorage.setItem('eduplanner_googleCalAutoSync', next ? '1' : '0'); } catch (e) {}
       };
 
       const todayStr = formatDate(getJSTDate());
@@ -1297,6 +1512,16 @@
         };
         listen(); return () => { clearTimeout(timeout); unsubs.forEach(u=>u()); cloudDataLoaded.current = false; };
       }, [cloudUser]);
+
+      // データ読み込み完了後、Googleカレンダー連携済みなら今日まだ同期していない場合に自動で1回だけ同期する
+      useEffect(() => {
+        if (dataLoadStatus !== 'loaded' && dataLoadStatus !== 'local') return;
+        if (googleCalAutoSyncFiredRef.current) return;
+        if (!googleCalConnected || !googleCalAutoSync) return;
+        if (googleCalLastSync && formatDate(new Date(googleCalLastSync)) === todayStr) return;
+        googleCalAutoSyncFiredRef.current = true;
+        runGoogleCalendarSync({ silent: true });
+      }, [dataLoadStatus, googleCalConnected, googleCalAutoSync]);
 
       const cleanData = (obj) => { if(obj===undefined) return null; if(obj===null||typeof obj!=='object') return obj; const n=Array.isArray(obj)?[]:{}; for(const k in obj) n[k]=cleanData(obj[k]); return n; };
 
@@ -3946,6 +4171,59 @@
                         <h3 className="text-lg font-black text-indigo-900 dark:text-indigo-300 mb-2 flex items-center gap-2">📋 予定表の取り込み（AIチャット活用）</h3>
                         <p className="text-xs text-slate-600 dark:text-slate-400 mb-4 font-bold">月行事予定表や週報の写真を Claude などのAIチャット（無料で利用可）に読み取らせ、返ってきたデータを貼り付けるだけで、行事予定と時間割をまとめて取り込めます。週案タブの「📋 予定取込」ボタンからも開けます。</p>
                         <button onClick={() => setShowAiImport(true)} className="w-full bg-indigo-600 text-white py-2.5 rounded-xl font-black shadow-md hover:bg-indigo-700 transition-colors">📋 取り込みを開く</button>
+                      </div>
+
+                      {/* Googleカレンダー自動同期 */}
+                      <div className="border border-emerald-200 bg-emerald-50/50 rounded-2xl p-5 shadow-sm md:col-span-2 dark:bg-emerald-900/20 dark:border-emerald-800">
+                        <h3 className="text-lg font-black text-emerald-900 dark:text-emerald-300 mb-2 flex items-center gap-2">📅 Googleカレンダー自動同期</h3>
+                        <p className="text-xs text-slate-600 dark:text-slate-400 mb-4 font-bold">
+                          アプリを開いたときに、今日から1週間分の予定と未完了のTODOを自動でGoogleカレンダーに反映します（アプリを開いていない間は同期されません）。EduPlanner側で作成・更新した予定のみを対象とし、あなたがGoogleカレンダー側で直接追加した予定は削除されません。
+                        </p>
+
+                        <div className="space-y-3">
+                          <div>
+                            <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 block mb-1">Google OAuth クライアントID</label>
+                            <input type="text" value={googleClientId} onChange={(e) => setGoogleClientId(e.target.value)}
+                              placeholder="xxxxxxxx.apps.googleusercontent.com"
+                              className="w-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900/60 dark:text-slate-100 rounded-xl px-3 py-2 text-xs font-mono outline-none focus:border-emerald-400" />
+                            <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 font-bold">Google Cloud Console でOAuthクライアントID（ウェブアプリケーション、承認済みJavaScript生成元にこのサイトのURLを登録）を作成し、貼り付けてください。</p>
+                          </div>
+
+                          <div className="flex items-center justify-between pt-2 border-t border-emerald-100 dark:border-emerald-800">
+                            <div>
+                              <div className="font-bold text-slate-800 dark:text-slate-200 text-sm">連携状況</div>
+                              <div className="text-xs text-slate-500 dark:text-slate-400 font-bold">
+                                {googleCalConnected ? '✅ 連携済み' : '未連携'}
+                                {googleCalLastSync && ` ・最終同期: ${new Date(googleCalLastSync).toLocaleString('ja-JP')}`}
+                              </div>
+                            </div>
+                            {googleCalConnected ? (
+                              <button onClick={handleDisconnectGoogleCalendar} className="text-xs font-bold bg-white dark:bg-slate-800 text-rose-600 border border-rose-300 dark:border-rose-700 px-3 py-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-900/30">解除</button>
+                            ) : (
+                              <button onClick={handleConnectGoogleCalendar} disabled={googleCalSyncing} className="text-xs font-bold bg-emerald-600 text-white px-3 py-1.5 rounded-lg shadow-sm hover:bg-emerald-700 disabled:opacity-40">
+                                {googleCalSyncing ? '連携中...' : '連携する'}
+                              </button>
+                            )}
+                          </div>
+
+                          {googleCalConnected && (
+                            <React.Fragment>
+                              <div className="flex items-center justify-between pt-2 border-t border-emerald-100 dark:border-emerald-800">
+                                <div>
+                                  <div className="font-bold text-slate-800 dark:text-slate-200 text-sm">毎朝アプリを開いたときに自動同期</div>
+                                  <div className="text-xs text-slate-500 dark:text-slate-400 font-bold">オフにすると「今すぐ同期」からの手動同期のみになります</div>
+                                </div>
+                                <button onClick={toggleGoogleCalAutoSync} className={`w-14 h-8 rounded-full transition-colors relative shadow-inner shrink-0 ${googleCalAutoSync ? 'bg-emerald-600' : 'bg-slate-300'}`}>
+                                  <div className={`absolute top-1 left-1 w-6 h-6 rounded-full bg-white shadow-sm transition-transform ${googleCalAutoSync ? 'translate-x-6' : 'translate-x-0'}`}></div>
+                                </button>
+                              </div>
+                              <button onClick={() => runGoogleCalendarSync({ silent: false })} disabled={googleCalSyncing}
+                                className="w-full bg-white dark:bg-slate-800 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700 py-2.5 rounded-xl font-black shadow-sm hover:bg-emerald-50 dark:hover:bg-emerald-900/30 transition-colors disabled:opacity-40">
+                                {googleCalSyncing ? '同期中...' : '🔄 今すぐ同期'}
+                              </button>
+                            </React.Fragment>
+                          )}
+                        </div>
                       </div>
 
                     </div>
