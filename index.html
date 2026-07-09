@@ -1236,6 +1236,7 @@
         if (ok) {
           setGoogleCalConnected(true);
           try { localStorage.setItem('eduplanner_googleCalConnected', '1'); } catch (e) {}
+          saveToFirestore('extra', { googleCalSettings: { clientId: trimmed, connected: true } });
         }
       };
 
@@ -1245,6 +1246,7 @@
         try {
           localStorage.setItem('eduplanner_googleCalConnected', '0');
         } catch (e) {}
+        saveToFirestore('extra', { googleCalSettings: { connected: false } });
         showToast('Googleカレンダー連携を解除しました（Google側の許可を完全に取り消すには、Googleアカウントの設定からもアプリ連携を削除してください）');
       };
 
@@ -1252,6 +1254,7 @@
         const next = !googleCalAutoSync;
         setGoogleCalAutoSync(next);
         try { localStorage.setItem('eduplanner_googleCalAutoSync', next ? '1' : '0'); } catch (e) {}
+        saveToFirestore('extra', { googleCalSettings: { autoSync: next } });
       };
 
       const todayStr = formatDate(getJSTDate());
@@ -1552,6 +1555,13 @@
                       }
                   });
                   setVacations(mergedVacations);
+              }
+              // Googleカレンダー連携設定をクラウドから復元（localStorageが消えても連携が維持される）
+              if (d.googleCalSettings && typeof d.googleCalSettings === 'object') {
+                const g = d.googleCalSettings;
+                if (typeof g.clientId === 'string' && g.clientId) { setGoogleClientId(g.clientId); try { localStorage.setItem('eduplanner_googleClientId', g.clientId); } catch(e) {} }
+                if (typeof g.connected === 'boolean') { setGoogleCalConnected(g.connected); try { localStorage.setItem('eduplanner_googleCalConnected', g.connected ? '1' : '0'); } catch(e) {} }
+                if (typeof g.autoSync === 'boolean') { setGoogleCalAutoSync(g.autoSync); try { localStorage.setItem('eduplanner_googleCalAutoSync', g.autoSync ? '1' : '0'); } catch(e) {} }
               }
             }
             markLoaded('extra', s.exists());
