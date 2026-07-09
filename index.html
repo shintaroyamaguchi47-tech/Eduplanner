@@ -898,6 +898,7 @@
       const gisTokenClientIdRef = useRef('');
       const gisTokenResolveRef = useRef(null);
       const googleCalAutoSyncFiredRef = useRef(false);
+      const googleCalSyncInFlightRef = useRef(false);
 
       const [isOnline, setIsOnline] = useState(navigator.onLine);
       const quickCanvasRef = useRef(null);
@@ -1091,8 +1092,18 @@
         }));
       };
 
+      const deleteGcalEvent = async (token, eventId) => {
+        const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        // 404/410 = すでに存在しないので無視
+        if (!res.ok && res.status !== 404 && res.status !== 410) throw new Error(`gcal_delete_${res.status}`);
+      };
+
       const fetchSyncedGcalEvents = async (token, timeMinISO, timeMaxISO) => {
         const map = {};
+        const duplicateIds = [];
         let pageToken = '';
         do {
           const params = new URLSearchParams({
@@ -1107,10 +1118,16 @@
           const data = await res.json();
           (data.items || []).forEach(ev => {
             const key = ev.extendedProperties?.private?.eduplannerKey;
-            if (key) map[key] = ev.id;
+            if (!key) return;
+            if (map[key]) duplicateIds.push(ev.id);
+            else map[key] = ev.id;
           });
           pageToken = data.nextPageToken || '';
         } while (pageToken);
+        // 過去の同期で二重登録されたイベントを掃除する
+        for (const id of duplicateIds) {
+          await deleteGcalEvent(token, id);
+        }
         return map;
       };
 
@@ -1120,14 +1137,25 @@
           extendedProperties: { private: { [GCAL_SYNC_TAG]: '1', eduplannerKey: item.key } },
         };
         if (item.memo) body.description = item.memo;
+        const existingId = existingMap[item.key];
         if (item.startTime && item.endTime) {
           body.start = { dateTime: `${item.date}T${item.startTime}:00`, timeZone: 'Asia/Tokyo' };
           body.end = { dateTime: `${item.date}T${item.endTime}:00`, timeZone: 'Asia/Tokyo' };
+          if (existingId) {
+            // PATCHで終日→時刻ありへ切り替わるケースに備え、終日指定を明示的にクリア
+            body.start.date = null;
+            body.end.date = null;
+          }
         } else {
+          // 終日イベントの終了日は排他的（翌日を指定）
+          const [y, m, d] = item.date.split('-').map(Number);
           body.start = { date: item.date };
-          body.end = { date: item.date };
+          body.end = { date: formatDate(new Date(y, m - 1, d + 1)) };
+          if (existingId) {
+            body.start.dateTime = null;
+            body.end.dateTime = null;
+          }
         }
-        const existingId = existingMap[item.key];
         const url = existingId
           ? `https://www.googleapis.com/calendar/v3/calendars/primary/events/${existingId}`
           : `https://www.googleapis.com/calendar/v3/calendars/primary/events`;
@@ -1144,6 +1172,8 @@
           if (!silent) showToast('先にGoogle OAuthクライアントIDを入力してください');
           return false;
         }
+        if (googleCalSyncInFlightRef.current) return false;
+        googleCalSyncInFlightRef.current = true;
         setGoogleCalSyncing(true);
         try {
           let tokenResp = await requestGoogleToken(silent ? '' : 'consent');
@@ -1155,14 +1185,27 @@
 
           const startDate = getJSTDate();
           const rangeEnd = new Date(startDate); rangeEnd.setDate(rangeEnd.getDate() + 7);
-          const timeMin = new Date(`${formatDate(startDate)}T00:00:00+09:00`).toISOString();
-          const timeMax = new Date(`${formatDate(rangeEnd)}T00:00:00+09:00`).toISOString();
 
           const scheduleEvents = buildScheduleEventsForSync(startDate, 7);
           const todoEvents = buildTodoEventsForSync();
+          const allItems = [...scheduleEvents, ...todoEvents];
+
+          // 既存イベントの検索範囲は、同期対象すべての日付を前後1日の余裕をもって覆う
+          // （ToDoの期限は7日間の週案範囲外や過去のこともある）
+          let minDate = formatDate(startDate);
+          let maxDate = formatDate(rangeEnd);
+          for (const item of allItems) {
+            if (item.date < minDate) minDate = item.date;
+            if (item.date > maxDate) maxDate = item.date;
+          }
+          const [minY, minM, minD] = minDate.split('-').map(Number);
+          const [maxY, maxM, maxD] = maxDate.split('-').map(Number);
+          const timeMin = new Date(`${formatDate(new Date(minY, minM - 1, minD - 1))}T00:00:00+09:00`).toISOString();
+          const timeMax = new Date(`${formatDate(new Date(maxY, maxM - 1, maxD + 2))}T00:00:00+09:00`).toISOString();
+
           const existingMap = await fetchSyncedGcalEvents(token, timeMin, timeMax);
 
-          for (const item of [...scheduleEvents, ...todoEvents]) {
+          for (const item of allItems) {
             await upsertGcalEvent(token, existingMap, item);
           }
 
@@ -1176,6 +1219,7 @@
           if (!silent) showToast('カレンダー同期中にエラーが発生しました');
           return false;
         } finally {
+          googleCalSyncInFlightRef.current = false;
           setGoogleCalSyncing(false);
         }
       };
