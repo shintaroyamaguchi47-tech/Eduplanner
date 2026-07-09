@@ -1101,13 +1101,14 @@
         if (!res.ok && res.status !== 404 && res.status !== 410) throw new Error(`gcal_delete_${res.status}`);
       };
 
-      const fetchSyncedGcalEvents = async (token, timeMinISO, timeMaxISO) => {
+      // EduPlannerが同期した（タグ付きの）イベントを全件取得し、key→イベントIDのマップを返す
+      const fetchSyncedGcalEvents = async (token) => {
         const map = {};
         const duplicateIds = [];
         let pageToken = '';
         do {
           const params = new URLSearchParams({
-            timeMin: timeMinISO, timeMax: timeMaxISO, singleEvents: 'true', maxResults: '2500',
+            singleEvents: 'true', maxResults: '2500',
             privateExtendedProperty: `${GCAL_SYNC_TAG}=1`,
           });
           if (pageToken) params.set('pageToken', pageToken);
@@ -1190,20 +1191,22 @@
           const todoEvents = buildTodoEventsForSync();
           const allItems = [...scheduleEvents, ...todoEvents];
 
-          // 既存イベントの検索範囲は、同期対象すべての日付を前後1日の余裕をもって覆う
-          // （ToDoの期限は7日間の週案範囲外や過去のこともある）
-          let minDate = formatDate(startDate);
-          let maxDate = formatDate(rangeEnd);
-          for (const item of allItems) {
-            if (item.date < minDate) minDate = item.date;
-            if (item.date > maxDate) maxDate = item.date;
-          }
-          const [minY, minM, minD] = minDate.split('-').map(Number);
-          const [maxY, maxM, maxD] = maxDate.split('-').map(Number);
-          const timeMin = new Date(`${formatDate(new Date(minY, minM - 1, minD - 1))}T00:00:00+09:00`).toISOString();
-          const timeMax = new Date(`${formatDate(new Date(maxY, maxM - 1, maxD + 2))}T00:00:00+09:00`).toISOString();
+          const existingMap = await fetchSyncedGcalEvents(token);
 
-          const existingMap = await fetchSyncedGcalEvents(token, timeMin, timeMax);
+          // EduPlanner側で消えた項目をカレンダーからも削除する。
+          // ・ToDo: 完了・削除されたものは期日に関係なく削除
+          // ・週案(今日〜7日間): 予定から消えたコマを削除。過去の週案イベントは記録として残す
+          const currentKeys = new Set(allItems.map(it => it.key));
+          const windowStart = formatDate(startDate);
+          const windowEnd = formatDate(rangeEnd);
+          for (const key of Object.keys(existingMap)) {
+            if (currentKeys.has(key)) continue;
+            const schedDate = key.startsWith('sched-') ? key.slice(6, 16) : '';
+            if (key.startsWith('todo-') || (schedDate && schedDate >= windowStart && schedDate < windowEnd)) {
+              await deleteGcalEvent(token, existingMap[key]);
+              delete existingMap[key];
+            }
+          }
 
           for (const item of allItems) {
             await upsertGcalEvent(token, existingMap, item);
