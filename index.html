@@ -1132,6 +1132,28 @@
         return map;
       };
 
+      // 「📅 カレンダー共有(.ics)」で取り込まれたEduPlannerイベントを削除する。
+      // 自動同期が作るイベントと二重になるため。iCalUIDの形式で判別できる
+      const cleanupImportedIcsEvents = async (token, timeMinISO, timeMaxISO) => {
+        let pageToken = '';
+        do {
+          const params = new URLSearchParams({ timeMin: timeMinISO, timeMax: timeMaxISO, singleEvents: 'true', maxResults: '2500' });
+          if (pageToken) params.set('pageToken', pageToken);
+          const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events?${params.toString()}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (!res.ok) throw new Error(`gcal_list_${res.status}`);
+          const data = await res.json();
+          for (const ev of (data.items || [])) {
+            if (ev.extendedProperties?.private?.[GCAL_SYNC_TAG]) continue;
+            if (/^eduplanner-\d{4}-\d{2}-\d{2}-\d+@eduplanner$/.test(ev.iCalUID || '')) {
+              await deleteGcalEvent(token, ev.id);
+            }
+          }
+          pageToken = data.nextPageToken || '';
+        } while (pageToken);
+      };
+
       const upsertGcalEvent = async (token, existingMap, item) => {
         const body = {
           summary: item.subject,
@@ -1207,6 +1229,12 @@
               delete existingMap[key];
             }
           }
+
+          await cleanupImportedIcsEvents(
+            token,
+            new Date(`${windowStart}T00:00:00+09:00`).toISOString(),
+            new Date(`${windowEnd}T00:00:00+09:00`).toISOString()
+          );
 
           for (const item of allItems) {
             await upsertGcalEvent(token, existingMap, item);
