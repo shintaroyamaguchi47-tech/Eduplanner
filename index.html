@@ -176,8 +176,12 @@
       special: { id: 'special', label: '特別短縮', color: 'bg-fuchsia-50 text-fuchsia-600 border-fuchsia-300' },
       morning_only: { id: 'morning_only', label: '午前授業', color: 'bg-teal-50 text-teal-600 border-teal-300' },
       assembly: { id: 'assembly', label: '集会', color: 'bg-violet-50 text-violet-600 border-violet-300' },
+      work: { id: 'work', label: '休業(出勤)', color: 'bg-emerald-50 text-emerald-700 border-emerald-300' },
       holiday: { id: 'holiday', label: '休日', color: 'bg-rose-50 text-rose-600 border-rose-300' },
     };
+
+    // 授業コマ（基本時間割）を適用しない日課。休業(出勤)は勤務日だが授業コマなし
+    const isNoClassType = (t) => t === 'holiday' || t === 'work';
 
     const SCHEDULE_TIMES = {
       normal: { event:null, morning:{start:'08:15',end:'08:30'}, p1:{start:'08:40',end:'09:30'}, p2:{start:'09:40',end:'10:30'}, p3:{start:'10:40',end:'11:30'}, p4:{start:'11:40',end:'12:30'}, lunch:{start:'12:30',end:'13:35'}, p5:{start:'13:35',end:'14:25'}, p6:{start:'14:35',end:'15:25'}, afterschool:{start:'16:00',end:''} },
@@ -185,6 +189,7 @@
       special: { event:null, morning:{start:'08:15',end:'08:20'}, p1:{start:'08:30',end:'09:15'}, p2:{start:'09:25',end:'10:10'}, p3:{start:'10:20',end:'11:05'}, p4:{start:'11:15',end:'12:00'}, lunch:{start:'12:00',end:'13:05'}, p5:{start:'13:05',end:'13:50'}, p6:{start:'14:00',end:'14:45'}, afterschool:{start:'15:10',end:''} },
       morning_only: { event:null, morning:{start:'08:15',end:'08:30'}, p1:{start:'08:40',end:'09:30'}, p2:{start:'09:40',end:'10:30'}, p3:{start:'10:40',end:'11:30'}, p4:{start:'11:40',end:'12:30'}, lunch:null, p5:null, p6:null, afterschool:{start:'12:30',end:''} },
       assembly: { event:null, morning:{start:'08:20',end:'08:50'}, p1:{start:'09:00',end:'09:45'}, p2:{start:'09:55',end:'10:40'}, p3:{start:'10:50',end:'11:35'}, p4:{start:'11:45',end:'12:30'}, lunch:{start:'12:30',end:'13:35'}, p5:{start:'13:35',end:'14:25'}, p6:{start:'14:35',end:'15:25'}, afterschool:{start:'16:00',end:''} },
+      work: { event:null, morning:null, p1:null, p2:null, p3:null, p4:null, lunch:null, p5:null, p6:null, afterschool:null },
       holiday: { event:null, morning:null, p1:null, p2:null, p3:null, p4:null, lunch:null, p5:null, p6:null, afterschool:null }
     };
 
@@ -203,10 +208,14 @@
       const sy = m < 4 ? y - 1 : y;
       return yData?.[sy]?.[`${m}-${d}`] || '';
     };
+    // 行事テキストから休日判定。「休業前」「休業(日)明け」は授業日・出勤日なので除外
+    const isHolidayEventText = (text) => (text || '').split('\n').some(line =>
+      /休業|休校|振替休|代休|休日|お休み/.test(line) && !/休業前|休業日?明け/.test(line)
+    );
     const getEventImpact = (text = '') => {
       const s = text.trim();
       if (!s) return null;
-      if (/休業|休校|振替休|代休|休日|お休み/.test(s)) return { kind:'holiday', label:'休業', scheduleType:'holiday', badge:'bg-rose-100 text-rose-700 border-rose-300' };
+      if (isHolidayEventText(s)) return { kind:'holiday', label:'休業', scheduleType:'holiday', badge:'bg-rose-100 text-rose-700 border-rose-300' };
       if (/入試|テスト|試験|考査|学調|学力/.test(s)) return { kind:'test', label:'テスト', scheduleType:/入試/.test(s)?'special':'short', badge:'bg-rose-100 text-rose-700 border-rose-300' };
       if (/始業式|終業式|修了式|卒業|入学式|離任式|式/.test(s)) return { kind:'ceremony', label:'式', scheduleType:'special', badge:'bg-purple-100 text-purple-700 border-purple-300' };
       if (/保護者|参観|面談|懇談/.test(s)) return { kind:'parent', label:'保護者', scheduleType:'short', badge:'bg-amber-100 text-amber-700 border-amber-300' };
@@ -236,6 +245,13 @@
 
     const JAPAN_HOLIDAYS = { "2025-1-1":"🎌 元日","2025-1-13":"🎌 成人の日","2025-2-11":"🎌 建国記念の日","2025-2-23":"🎌 天皇誕生日","2025-2-24":"🎌 振替休日","2025-3-20":"🎌 春分の日","2025-4-29":"🎌 昭和の日","2025-5-3":"🎌 憲法記念日","2025-5-4":"🎌 みどりの日","2025-5-5":"🎌 こどもの日","2025-5-6":"🎌 振替休日","2025-7-21":"🎌 海の日","2025-8-11":"🎌 山の日","2025-9-15":"🎌 敬老の日","2025-9-23":"🎌 秋分の日","2025-10-13":"🎌 スポーツの日","2025-11-3":"🎌 文化の日","2025-11-23":"🎌 勤労感謝の日","2025-11-24":"🎌 振替休日","2026-1-1":"🎌 元日","2026-1-12":"🎌 成人の日","2026-2-11":"🎌 建国記念の日","2026-2-23":"🎌 天皇誕生日","2026-3-20":"🎌 春分の日","2026-4-29":"🎌 昭和の日","2026-5-3":"🎌 憲法記念日","2026-5-4":"🎌 みどりの日","2026-5-5":"🎌 こどもの日","2026-5-6":"🎌 振替休日","2026-7-20":"🎌 海の日","2026-8-11":"🎌 山の日","2026-9-21":"🎌 敬老の日","2026-9-22":"🎌 国民の休日","2026-9-23":"🎌 秋分の日","2026-10-12":"🎌 スポーツの日","2026-11-3":"🎌 文化の日","2026-11-23":"🎌 勤労感謝の日" };
     const getHolidayName = (y, m, d) => JAPAN_HOLIDAYS[`${y}-${m}-${d}`] || null;
+
+    // 長期休業期間の日課: 平日は「休業(出勤)」、土日祝は「休日」
+    const getVacationDaySetting = (ds, di, vacations) => {
+      if (!vacations.find(v => ds >= v.start && ds <= v.end)) return null;
+      const [y, m, d] = ds.split('-').map(Number);
+      return (di >= 5 || getHolidayName(y, m, d)) ? { type: 'holiday' } : { type: 'work' };
+    };
 
     const getJSTDate = () => {
       const dt = new Date();
@@ -412,28 +428,25 @@
     const Dashboard = ({ weeklyData, baseTemplate, todos, syllabusData, yearlyData, vacations, weeklySettings, templateSettings, onGoToWeekly, onGoToDate, onDeleteTodo, onToggleTodo }) => {
       const today = getJSTDate(); const todayStr = formatDate(today); let dayIdx = today.getDay() - 1; if (dayIdx === -1) dayIdx = 6;
       
-      const isYearlyHoliday = (ds, yData) => {
-        const ye = getYearlyEventText(yData, ds);
-        if (ye && (ye.includes('休業') || ye.includes('休校') || ye.includes('振替休') || ye.includes('代休') || ye.includes('休日') || ye.includes('お休み'))) return true;
-        return false;
-      };
+      const isYearlyHoliday = (ds, yData) => isHolidayEventText(getYearlyEventText(yData, ds));
 
       const getDaySetting = (ds, di) => {
         if (weeklySettings[ds]) return weeklySettings[ds];
-        if (vacations.find(v => ds >= v.start && ds <= v.end)) return { type:'holiday' };
+        const vac = getVacationDaySetting(ds, di, vacations);
+        if (vac) return vac;
         const [y,m,d] = ds.split('-').map(Number);
         if (getHolidayName(y,m,d) || isYearlyHoliday(ds, yearlyData)) return { type:'holiday' };
         const inferred = getInferredDaySetting(yearlyData, ds);
         if (inferred) return inferred;
         return templateSettings[di] || DEFAULT_TEMPLATE_SETTINGS[di];
       };
-      
+
       const setting = getDaySetting(todayStr, dayIdx);
       
       const getCellData = (ds, pid, di) => {
         const wKey = `${ds}-${pid}`; const tKey = `${di}-${pid}`; let base = baseTemplate[tKey] || { subject:'', memo:'' };
         if (pid === 'event') { const [y,m,d] = ds.split('-').map(Number); const sy = m < 4 ? y - 1 : y; const ye = yearlyData[sy]?.[`${m}-${d}`]; if (ye) base = { ...base, subject: ye }; }
-        else if (getDaySetting(ds, di).type === 'holiday') base = { subject:'', memo:'' };
+        else if (isNoClassType(getDaySetting(ds, di).type)) base = { subject:'', memo:'' };
         const override = weeklyData[wKey]; return (override && !override.useTemplate) ? override : base;
       };
 
@@ -460,6 +473,7 @@
       const dueTodayTodos = todos.filter(t => !t.completed && t.dueDate === todayStr);
 
       const isHoliday = setting.type === 'holiday';
+      const isFreeDay = isNoClassType(setting.type);
       const greetingHour = today.getHours();
       const greeting = greetingHour < 10 ? 'おはようございます' : greetingHour < 17 ? 'お疲れさまです' : 'お疲れさまでした';
 
@@ -472,8 +486,8 @@
         return { ...r, data, time: { start: startTime, end: endTime } };
       }).filter(r => r.data?.subject || (r.id === 'afterschool' && r.data?.events?.some(e => e.subject)));
 
-      // 休日はコマ順ではなく時間帯順に並べて表示する
-      const displaySchedule = isHoliday
+      // 休日・休業(出勤)はコマ順ではなく時間帯順に並べて表示する
+      const displaySchedule = isFreeDay
         ? [...todaySchedule].sort((a, b) => (a.time?.start || '99:99').localeCompare(b.time?.start || '99:99'))
         : todaySchedule;
 
@@ -543,7 +557,7 @@
 
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">
               <div className="bg-white rounded-2xl p-3 sm:p-4 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-300 anim-fade-up" style={{animationDelay:'0.02s'}}>
-                <div className="text-xs font-black text-slate-500 mb-2">{isHoliday ? 'いま見る予定' : 'いま見る授業'}</div>
+                <div className="text-xs font-black text-slate-500 mb-2">{isFreeDay ? 'いま見る予定' : 'いま見る授業'}</div>
                 {isHoliday && !nextFocus ? (
                   <div className="text-sm font-black text-slate-700">今日は休日です</div>
                 ) : nextFocus ? (
@@ -624,7 +638,7 @@
                         : null;
                       return (
                       <div key={item.id} className="flex items-center gap-2.5 px-2.5 py-2 rounded-xl bg-slate-50 border border-slate-200 hover:border-blue-300 hover:bg-blue-50/50 transition-colors group">
-                        <div className="w-9 h-9 rounded-lg bg-white border border-slate-300 flex items-center justify-center shrink-0 shadow-sm text-slate-600 group-hover:text-blue-600 group-hover:border-blue-300 transition-colors"><span className="text-xs font-black">{isHoliday && item.id !== 'event' ? '🕐' : item.id.startsWith('p') ? item.id.replace('p','') : item.icon}</span></div>
+                        <div className="w-9 h-9 rounded-lg bg-white border border-slate-300 flex items-center justify-center shrink-0 shadow-sm text-slate-600 group-hover:text-blue-600 group-hover:border-blue-300 transition-colors"><span className="text-xs font-black">{isFreeDay && item.id !== 'event' ? '🕐' : item.id.startsWith('p') ? item.id.replace('p','') : item.icon}</span></div>
                         <div className="flex-1 min-w-0">
                           {itemEvents ? itemEvents.map((ev, idx) => (
                             <div key={idx} className="py-0.5">
@@ -686,13 +700,11 @@
       const nowMinutes = today.getHours() * 60 + today.getMinutes();
       const timeToMinutes = (time) => { if (!time) return null; const [h,m] = time.split(':').map(Number); return Number.isFinite(h)&&Number.isFinite(m) ? h*60+m : null; };
       const formatTimeRange = (start, end) => start ? `${start}${end ? `-${end}` : ''}` : '時刻未設定';
-      const isYearlyHoliday = (ds, yData) => {
-        const ye = getYearlyEventText(yData, ds);
-        return !!(ye && (ye.includes('休業') || ye.includes('休校') || ye.includes('振替休') || ye.includes('代休') || ye.includes('休日') || ye.includes('お休み')));
-      };
+      const isYearlyHoliday = (ds, yData) => isHolidayEventText(getYearlyEventText(yData, ds));
       const getDaySettingLocal = (ds, di) => {
         if (weeklySettings[ds]) return weeklySettings[ds];
-        if (vacations.find(v => ds >= v.start && ds <= v.end)) return { type:'holiday' };
+        const vac = getVacationDaySetting(ds, di, vacations);
+        if (vac) return vac;
         const [y,m,d] = ds.split('-').map(Number);
         if (getHolidayName(y,m,d) || isYearlyHoliday(ds, yearlyData)) return { type:'holiday' };
         const inferred = getInferredDaySetting(yearlyData, ds);
@@ -702,7 +714,7 @@
       const getCellDataLocal = (ds, pid, di) => {
         const wKey = `${ds}-${pid}`; const tKey = `${di}-${pid}`; let base = baseTemplate[tKey] || { subject:'', memo:'' };
         if (pid === 'event') { const [y,m,d] = ds.split('-').map(Number); const sy = m < 4 ? y - 1 : y; const ye = yearlyData[sy]?.[`${m}-${d}`]; if (ye) base = { ...base, subject: ye }; }
-        else if (getDaySettingLocal(ds, di).type === 'holiday') base = { subject:'', memo:'' };
+        else if (isNoClassType(getDaySettingLocal(ds, di).type)) base = { subject:'', memo:'' };
         const override = weeklyData[wKey]; return (override && !override.useTemplate) ? override : base;
       };
 
@@ -1854,17 +1866,12 @@
         reader.readAsText(file);
       };
 
-      const isYearlyHoliday = (ds, yData) => {
-        const ye = getYearlyEventText(yData, ds);
-        if (ye && (ye.includes('休業') || ye.includes('休校') || ye.includes('振替休') || ye.includes('代休') || ye.includes('休日') || ye.includes('お休み'))) {
-          return true;
-        }
-        return false;
-      };
+      const isYearlyHoliday = (ds, yData) => isHolidayEventText(getYearlyEventText(yData, ds));
 
-      const getDaySetting = (ds, di) => { 
+      const getDaySetting = (ds, di) => {
         if (weeklySettings[ds]) return weeklySettings[ds];
-        if (vacations.find(v=>ds>=v.start&&ds<=v.end)) return {type:'holiday'};
+        const vac = getVacationDaySetting(ds, di, vacations);
+        if (vac) return vac;
         const [y,m,d] = ds.split('-').map(Number);
         if (getHolidayName(y,m,d)) return {type:'holiday'};
         if (isYearlyHoliday(ds, yearlyData)) return {type:'holiday'};
@@ -1906,7 +1913,7 @@
         if (activeTab === 'template') return base; 
 
         const set = getDaySetting(ds, di);
-        if (set.type === 'holiday' && pid !== 'event' && pid !== 'diary') {
+        if (isNoClassType(set.type) && pid !== 'event' && pid !== 'diary') {
           base = { subject:'', memo:'' };
         }
 
@@ -1965,7 +1972,7 @@
         while (cur <= today) {
           const ds = formatDate(cur);
           let di = cur.getDay() - 1; if (di === -1) di = 6;
-          if (getDaySetting(ds, di).type !== 'holiday') {
+          if (!isNoClassType(getDaySetting(ds, di).type)) {
             for (const pid of periodIds) {
               const raw = (getCellData(ds, pid, di).subject || '').trim();
               if (raw) {
@@ -1988,7 +1995,7 @@
         let total = 0;
         for (let di = 0; di < 7; di++) {
           const set = templateSettings[di] || DEFAULT_TEMPLATE_SETTINGS[di];
-          if (set && set.type === 'holiday') continue;
+          if (set && isNoClassType(set.type)) continue;
           for (const pid of periodIds) {
             const raw = (baseTemplate[`${di}-${pid}`]?.subject || '').trim();
             if (!raw) continue;
@@ -2107,7 +2114,7 @@
       const openLeaveModal = (ds, di) => { const ls = (getDaySetting(ds, di).leaves || []).map(l => ({...l})); if (ls.length === 0) ls.push({ label: '年休', start: '', end: '' }); setTempLeaves(ls); setEditingLeaveDay({ dateStr: ds, dayIndex: di }); };
       const handleSaveLeaves = () => { if (!editingLeaveDay) return; const { dateStr, dayIndex } = editingLeaveDay; const cleaned = tempLeaves.filter(l => l.start && l.end).map(l => ({ label: (l.label || '').trim() || '休暇', start: l.start, end: l.end })); const ns = { ...getDaySetting(dateStr, dayIndex) }; if (cleaned.length > 0) ns.leaves = cleaned; else delete ns.leaves; handleSettingChange(dateStr, dayIndex, ns); setEditingLeaveDay(null); showToast(cleaned.length > 0 ? '休暇を設定しました' : '休暇を解除しました'); };
       
-      const handleSaveCell = (d) => { let syllabusUp=[...syllabusData]; let ch=false; let matchedIdx=-1; let matchedCls=null; if(!editingCell.isTemplate && d.subject){ for(let i=0;i<syllabusUp.length;i++){ let s=syllabusUp[i]; if(s.type==='auto') { const tryMatch = (prefix, cls) => { const prog = getClassProgress(s, cls); const unit = s.units?.[prog.currentUnitIdx]; if(!unit) return false; const exp=`${prefix}${s.name}（${unit.name} ${prog.currentHour}/${unit.hours}）`; if(d.subject===exp){ let nh=prog.currentHour+1; let nu=prog.currentUnitIdx; if(nh>unit.hours){nh=1;nu++;} syllabusUp[i]=setClassProgress(syllabusUp[i],cls,nu,nh); return true; } return false; }; if(s.classes&&s.classes.length>0){ for(const cls of s.classes){ if(tryMatch(cls,cls)){ch=true;matchedIdx=i;matchedCls=cls;break;} } }else{ if(tryMatch('',null)){ch=true;matchedIdx=i;matchedCls=null;} } if(ch) break; }else if(s.type==='history'){ const pat=s.classes&&s.classes.length>0 ? `^(?:${s.classes.join('|')})?${s.name}（(.+)）$` : `^${s.name}（(.+)）$`; const m=d.subject.match(new RegExp(pat)); if(m){ let h=s.history||[]; if(!h.includes(m[1])){ syllabusUp[i]={...s,history:[m[1],...h].slice(0,15)}; ch=true; } } } } if(ch) saveSyllabus(syllabusUp); } if(editingCell.isTemplate){ const n={...baseTemplate,[`${editingCell.dayIndex}-${editingCell.periodId}`]:d}; saveAll(n,templateSettings,weeklyData,weeklySettings); } else { if(editingCell.periodId==='event') syncEventToYearly(editingCell.dateStr, d.subject || ''); let n={...weeklyData,[`${editingCell.dateStr}-${editingCell.periodId}`]:{...d,useTemplate:false}}; if(matchedIdx>=0 && editingCell.periodId.startsWith('p')){ const subj=syllabusUp[matchedIdx]; const prog=getClassProgress(subj,matchedCls); const unit=subj.units?.[prog.currentUnitIdx]; if(unit){ const prefix=matchedCls||''; const nextText=`${prefix}${subj.name}（${unit.name} ${prog.currentHour}/${unit.hours}）`; const tSubjName=`${prefix}${subj.name}`; const periodIds=['p1','p2','p3','p4','p5','p6']; const curDate=new Date(editingCell.dateStr); let found=false; for(let offset=1;offset<=60&&!found;offset++){ const nd2=new Date(curDate); nd2.setDate(nd2.getDate()+offset); const ds2=formatDate(nd2); const di2=nd2.getDay()===0?6:nd2.getDay()-1; const setting2=getDaySetting(ds2,di2); if(setting2.type==='holiday') continue; for(const pid2 of periodIds){ const tk=`${di2}-${pid2}`; const tmpl=baseTemplate[tk]; if(!tmpl||!tmpl.subject||tmpl.subject.trim()!==tSubjName) continue; const wk2=`${ds2}-${pid2}`; const existing=n[wk2]; if(existing&&!existing.useTemplate) continue; const times=SCHEDULE_TIMES[setting2.type]?.[pid2]; n[wk2]={subject:nextText,memo:tmpl.memo||'',useTemplate:false,startTime:times?.start||'',endTime:times?.end||'',color:''}; found=true; break; } } } } saveAll(baseTemplate,templateSettings,n,weeklySettings); } setEditingCell(null); };
+      const handleSaveCell = (d) => { let syllabusUp=[...syllabusData]; let ch=false; let matchedIdx=-1; let matchedCls=null; if(!editingCell.isTemplate && d.subject){ for(let i=0;i<syllabusUp.length;i++){ let s=syllabusUp[i]; if(s.type==='auto') { const tryMatch = (prefix, cls) => { const prog = getClassProgress(s, cls); const unit = s.units?.[prog.currentUnitIdx]; if(!unit) return false; const exp=`${prefix}${s.name}（${unit.name} ${prog.currentHour}/${unit.hours}）`; if(d.subject===exp){ let nh=prog.currentHour+1; let nu=prog.currentUnitIdx; if(nh>unit.hours){nh=1;nu++;} syllabusUp[i]=setClassProgress(syllabusUp[i],cls,nu,nh); return true; } return false; }; if(s.classes&&s.classes.length>0){ for(const cls of s.classes){ if(tryMatch(cls,cls)){ch=true;matchedIdx=i;matchedCls=cls;break;} } }else{ if(tryMatch('',null)){ch=true;matchedIdx=i;matchedCls=null;} } if(ch) break; }else if(s.type==='history'){ const pat=s.classes&&s.classes.length>0 ? `^(?:${s.classes.join('|')})?${s.name}（(.+)）$` : `^${s.name}（(.+)）$`; const m=d.subject.match(new RegExp(pat)); if(m){ let h=s.history||[]; if(!h.includes(m[1])){ syllabusUp[i]={...s,history:[m[1],...h].slice(0,15)}; ch=true; } } } } if(ch) saveSyllabus(syllabusUp); } if(editingCell.isTemplate){ const n={...baseTemplate,[`${editingCell.dayIndex}-${editingCell.periodId}`]:d}; saveAll(n,templateSettings,weeklyData,weeklySettings); } else { if(editingCell.periodId==='event') syncEventToYearly(editingCell.dateStr, d.subject || ''); let n={...weeklyData,[`${editingCell.dateStr}-${editingCell.periodId}`]:{...d,useTemplate:false}}; if(matchedIdx>=0 && editingCell.periodId.startsWith('p')){ const subj=syllabusUp[matchedIdx]; const prog=getClassProgress(subj,matchedCls); const unit=subj.units?.[prog.currentUnitIdx]; if(unit){ const prefix=matchedCls||''; const nextText=`${prefix}${subj.name}（${unit.name} ${prog.currentHour}/${unit.hours}）`; const tSubjName=`${prefix}${subj.name}`; const periodIds=['p1','p2','p3','p4','p5','p6']; const curDate=new Date(editingCell.dateStr); let found=false; for(let offset=1;offset<=60&&!found;offset++){ const nd2=new Date(curDate); nd2.setDate(nd2.getDate()+offset); const ds2=formatDate(nd2); const di2=nd2.getDay()===0?6:nd2.getDay()-1; const setting2=getDaySetting(ds2,di2); if(isNoClassType(setting2.type)) continue; for(const pid2 of periodIds){ const tk=`${di2}-${pid2}`; const tmpl=baseTemplate[tk]; if(!tmpl||!tmpl.subject||tmpl.subject.trim()!==tSubjName) continue; const wk2=`${ds2}-${pid2}`; const existing=n[wk2]; if(existing&&!existing.useTemplate) continue; const times=SCHEDULE_TIMES[setting2.type]?.[pid2]; n[wk2]={subject:nextText,memo:tmpl.memo||'',useTemplate:false,startTime:times?.start||'',endTime:times?.end||'',color:''}; found=true; break; } } } } saveAll(baseTemplate,templateSettings,n,weeklySettings); } setEditingCell(null); };
 
       // 週全体スマート自動入力：現在コマを含め今週のテンプレート一致する空きコマに連続入力
       const handleSmartAutoFill = (subjIdx, cls = null) => {
@@ -2132,7 +2139,7 @@
           const dstr = formatDate(cd);
           if (dstr < ds) continue;
           const setting = getDaySetting(dstr, i);
-          if (setting.type === 'holiday') continue;
+          if (isNoClassType(setting.type)) continue;
 
           for (const p of periodIds) {
             if (dstr === ds && p === pid) continue; // 現在コマは既に追加済み
@@ -2211,7 +2218,7 @@
           const dstr = formatDate(cd);
           if (dstr < ds) continue;
           const setting = getDaySetting(dstr, i);
-          if (setting.type === 'holiday') continue;
+          if (isNoClassType(setting.type)) continue;
 
           for (const p of periodIds) {
             if (dstr === ds && p === pid) continue;
@@ -2377,7 +2384,7 @@
           const cd = new Date(currentWeekStart); cd.setDate(cd.getDate() + i);
           const ds = formatDate(cd);
           const setting = getDaySetting(ds, i);
-          if (setting.type === 'holiday') continue;
+          if (isNoClassType(setting.type)) continue;
 
           for (const pid of periodIds) {
             const wk = `${ds}-${pid}`;
@@ -2437,7 +2444,7 @@
 
             const ds = formatDate(cd);
             const setting = getDaySetting(ds, i);
-            if (setting.type === 'holiday') continue;
+            if (isNoClassType(setting.type)) continue;
 
             for (const pid of periodIds) {
               const wk = `${ds}-${pid}`;
@@ -2990,7 +2997,7 @@
             <div className="flex-1 grid min-w-0" style={{ gridTemplateColumns: 'repeat(19, minmax(0, 1fr))' }}>
               {DAYS.map((day,i)=>{
                 const cd=new Date(currentWeekStart); cd.setDate(cd.getDate()+i); const ds=formatDate(cd);
-                const data=getCellData(ds,row.id,i); const set=getDaySetting(ds,i); const isH=set.type==='holiday';
+                const data=getCellData(ds,row.id,i); const set=getDaySetting(ds,i); const isH=isNoClassType(set.type);
                 const cf=i>=5?'col-span-2':'col-span-3'; const isT=ds===todayStr;
 
                 const cellBg = (activeTab==='weekly' && isH) ? 'bg-slate-100/60 dark:bg-slate-800/40' : 'bg-transparent';
@@ -3099,7 +3106,7 @@
           const d = new Date(currentWeekStart); d.setDate(d.getDate() + i);
           const dateStr = formatDate(d);
           const setting = getDaySetting(dateStr, i);
-          if (setting.type !== 'holiday') return;
+          if (!isNoClassType(setting.type)) return;
 
           const allItems = [];
           ['morning','p1','p2','p3','p4','lunch','p5','p6'].forEach(pid => {
@@ -3305,7 +3312,7 @@
                       return (
                         <div key={i} title={isMobile ? 'タップで予定を表示' : undefined} onClick={()=>{
                           if (isMobile) { setMonthDayPopup({ dateStr: ds, dateObj: new Date(day.date.getTime()), dayIndex: di }); }
-                          else { openEditModal(getCellData(ds,'event',di), ds, eventRow, di, DAYS[di], setting.type==='holiday', null); }
+                          else { openEditModal(getCellData(ds,'event',di), ds, eventRow, di, DAYS[di], isNoClassType(setting.type), null); }
                         }} className={`flex flex-col overflow-hidden cursor-pointer hover:brightness-95 dark:hover:brightness-110 relative transition-all min-h-0 min-w-0 ${bg} ${isMobile ? 'p-0.5' : 'p-1 sm:p-1.5'}`}>
                           <span onClick={(e)=>{ e.stopPropagation(); setCurrentWeekStart(getMonday(day.date)); setActiveTab('weekly'); }} className={`cursor-pointer hover:scale-125 hover:z-20 font-black flex items-center justify-center rounded-full shrink-0 z-10 relative ${isMobile ? 'w-5 h-5 text-[9px] mb-px' : 'text-[10px] sm:text-xs w-5 h-5 sm:w-6 sm:h-6 mb-0.5'} ${isT?'bg-blue-600 text-white shadow-md today-ring':isCM?(di===6?'text-rose-700 dark:text-rose-300':di===5?'text-blue-700 dark:text-blue-300':'text-slate-800 dark:text-slate-100'):'text-slate-400 dark:text-slate-500'}`} title="週案へ移動">{day.date.getDate()}</span>
                           <div className={`flex-1 space-y-0.5 sm:space-y-1 overflow-y-auto overflow-x-hidden hide-scrollbar min-h-0 min-w-0 w-full pointer-events-none ${isMobile ? 'px-0.5 pb-0.5' : ''}`}>
@@ -3396,7 +3403,8 @@
                           const isT=ds===todayStr;
                           const setting=getDaySetting(ds,i); const style=SCHEDULE_TYPES[setting.type];
                           const isHoliday = activeTab==='weekly' && setting.type==='holiday';
-                          const headerBg = isHoliday ? 'bg-rose-50/80 dark:bg-rose-900/20' : (activeTab==='weekly'&&isT ? 'bg-blue-50/80 dark:bg-blue-900/20' : '');
+                          const isWorkday = activeTab==='weekly' && setting.type==='work';
+                          const headerBg = isHoliday ? 'bg-rose-50/80 dark:bg-rose-900/20' : isWorkday ? 'bg-emerald-50/80 dark:bg-emerald-900/20' : (activeTab==='weekly'&&isT ? 'bg-blue-50/80 dark:bg-blue-900/20' : '');
 
                           return (
                             <div key={d} className={`min-w-0 ${cf} flex flex-col justify-center text-center border-r border-slate-200 dark:border-slate-700 last:border-0 ${headerBg} ${isMobile && activeTab === 'weekly' ? 'py-0.5 px-0.5' : 'py-1.5 px-1'}`}>
@@ -3555,7 +3563,7 @@
                     })()}
                     <div className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-300 shadow-sm">
                       <h2 className="text-xl font-black mb-4 text-slate-800 flex items-center gap-2">🌴 長期休業・休暇期間の設定</h2>
-                      <p className="text-xs text-slate-600 font-bold mb-4">期間を設定すると、月間や週案で自動的に「休日日課」になります。</p>
+                      <p className="text-xs text-slate-600 font-bold mb-4">期間を設定すると、月間や週案で平日は「休業(出勤)」日課（授業コマなしの勤務日）、土日祝は「休日」日課に自動でなります。</p>
                       <div className="space-y-3">
                         {vacations.map((vac,idx) => (
                            <div key={vac.id} className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 bg-slate-50 p-3 sm:p-4 rounded-xl border border-slate-200 shadow-sm">
@@ -3632,9 +3640,9 @@
                     <div className="flex border-b border-slate-200 dark:border-slate-700 shrink-0 bg-slate-50 dark:bg-slate-900/60">
                       <div className="w-10 sm:w-14 shrink-0 border-r border-slate-200 dark:border-slate-700 sticky left-0 bg-slate-50 dark:bg-slate-900/60 z-10"></div>
                       <div className="flex-1 grid grid-cols-7" style={{minWidth:'350px'}}>
-                        {days.map((d,i)=>{ const ds=formatDate(d); const isT=ds===nowStr; const setting=getDaySetting(ds,i); const isH=setting.type==='holiday'; const lvs=setting.leaves||[];
+                        {days.map((d,i)=>{ const ds=formatDate(d); const isT=ds===nowStr; const setting=getDaySetting(ds,i); const isH=setting.type==='holiday'; const isW=setting.type==='work'; const lvs=setting.leaves||[];
                           return (
-                            <div key={i} className={`min-w-0 flex flex-col items-stretch border-r border-slate-200 dark:border-slate-700 last:border-0 ${isH?'bg-rose-50/60 dark:bg-rose-900/10':isT?'bg-blue-50/60 dark:bg-blue-900/10':''}`}>
+                            <div key={i} className={`min-w-0 flex flex-col items-stretch border-r border-slate-200 dark:border-slate-700 last:border-0 ${isH?'bg-rose-50/60 dark:bg-rose-900/10':isW?'bg-emerald-50/60 dark:bg-emerald-900/10':isT?'bg-blue-50/60 dark:bg-blue-900/10':''}`}>
                               <button onClick={()=>setSelectedDateDetails({dateStr:ds,dateObj:d})} title="タイムライン表示" className="flex-1 min-w-0 flex flex-col items-center justify-center py-1 sm:py-1.5 hover:bg-slate-100 dark:hover:bg-slate-700/40 transition-colors">
                                 <span className={`text-[10px] sm:text-xs font-black ${isT?'text-blue-700 dark:text-blue-300':i===5?'text-blue-600 dark:text-blue-400':i===6||isH?'text-rose-500 dark:text-rose-400':'text-slate-600 dark:text-slate-300'}`}>{DAYS[i]}</span>
                                 <span className={`text-sm sm:text-lg font-black mt-0.5 ${isT?'w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center bg-blue-600 text-white rounded-full text-xs sm:text-base':'text-slate-800 dark:text-slate-100'}`}>{d.getDate()}</span>
@@ -3654,7 +3662,7 @@
                     <div className="flex border-b border-slate-200 dark:border-slate-700 shrink-0 bg-white dark:bg-slate-800">
                       <div className="w-10 sm:w-14 shrink-0 border-r border-slate-200 dark:border-slate-700 flex items-center justify-center text-[8px] sm:text-[10px] font-black text-slate-400 dark:text-slate-500 sticky left-0 bg-white dark:bg-slate-800 z-10">🚩行事</div>
                       <div className="flex-1 grid grid-cols-7" style={{minWidth:'350px'}}>
-                        {days.map((d,i)=>{ const ds=formatDate(d); const di=i; const ev=getCellData(ds,'event',di); const lines=(ev.subject||'').split('\n').filter(s=>s.trim()); const isH=getDaySetting(ds,di).type==='holiday';
+                        {days.map((d,i)=>{ const ds=formatDate(d); const di=i; const ev=getCellData(ds,'event',di); const lines=(ev.subject||'').split('\n').filter(s=>s.trim()); const isH=isNoClassType(getDaySetting(ds,di).type);
                           return (
                             <div key={i} onClick={()=>openEditModal(getCellData(ds,'event',di),ds,eventRow,di,DAYS[di],isH)} className="min-w-0 border-r border-slate-200 dark:border-slate-700 last:border-0 p-0.5 min-h-[1.4rem] space-y-0.5 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/30">
                               {lines.map((line,li)=>(<div key={li} className="text-[8px] sm:text-[10px] font-bold leading-tight bg-pink-100 dark:bg-pink-900/40 text-pink-800 dark:text-pink-200 rounded px-1 py-0.5 truncate" title={line}>{line}</div>))}
@@ -3672,9 +3680,9 @@
                         </div>
                         <div className="flex-1 grid grid-cols-7 relative" style={{minWidth:'350px'}}>
                           {Array.from({length:EH-SH+1},(_,i)=>i).map(i=>(<div key={'l'+i} className="absolute left-0 right-0 border-t border-slate-100 dark:border-slate-700/50 pointer-events-none" style={{top:(i*HH)+'px'}}></div>))}
-                          {days.map((d,i)=>{ const ds=formatDate(d); const di=i; const setting=getDaySetting(ds,di); const isH=setting.type==='holiday'; const isT=ds===nowStr; const blocks=buildBlocks(ds,di);
+                          {days.map((d,i)=>{ const ds=formatDate(d); const di=i; const setting=getDaySetting(ds,di); const isH=setting.type==='holiday'; const isW=setting.type==='work'; const isT=ds===nowStr; const blocks=buildBlocks(ds,di);
                             return (
-                              <div key={i} className={`relative border-r border-slate-200 dark:border-slate-700 last:border-0 cursor-pointer ${isH?'bg-rose-50/30 dark:bg-rose-900/5':isT?'bg-blue-50/20 dark:bg-blue-900/5':''}`}
+                              <div key={i} className={`relative border-r border-slate-200 dark:border-slate-700 last:border-0 cursor-pointer ${isH?'bg-rose-50/30 dark:bg-rose-900/5':isW?'bg-emerald-50/30 dark:bg-emerald-900/5':isT?'bg-blue-50/20 dark:bg-blue-900/5':''}`}
                                 onClick={(e) => {
                                   if (e.target !== e.currentTarget) return;
                                   const rect = e.currentTarget.getBoundingClientRect();
@@ -3696,7 +3704,7 @@
                                   setTempEvents(ie);
                                   setTempHandwriting(cd.handwriting || null);
                                   setTempColor(cd.color || 'private');
-                                  setEditingCell({dateStr: ds, periodId: 'afterschool', dayIndex: di, dayName: DAYS[di], periodName: '放課後・個人予定', isTemplate: false, ih: isH});
+                                  setEditingCell({dateStr: ds, periodId: 'afterschool', dayIndex: di, dayName: DAYS[di], periodName: '放課後・個人予定', isTemplate: false, ih: isH||isW});
                                 }}
                                 title="クリックして予定を追加">
                                 {isT && nowY>=0 && nowY<=TOTAL && (<div className="absolute left-0 right-0 z-30 border-t-2 border-rose-500 pointer-events-none" style={{top:nowY+'px'}}><div className="w-1.5 h-1.5 bg-rose-500 rounded-full -mt-1 -ml-0.5"></div></div>)}
@@ -3709,7 +3717,7 @@
                                 })}
                                 {blocks.map(b=>{ const top=t2y(b.startTime); const bot=t2y(b.endTime); if(top===null) return null; const h=bot?Math.max(bot-top,18):28;
                                   return (
-                                    <div key={b.key} onClick={(e)=>{e.stopPropagation();openEditModal(b.data,ds,b.row,di,DAYS[di],isH);}} className={`absolute left-0.5 right-0.5 rounded border shadow-sm cursor-pointer hover:brightness-95 z-10 group/ev ${b.color.bg}`} style={{top:top+'px',height:h+'px',overflow:'visible'}}>
+                                    <div key={b.key} onClick={(e)=>{e.stopPropagation();openEditModal(b.data,ds,b.row,di,DAYS[di],isH||isW);}} className={`absolute left-0.5 right-0.5 rounded border shadow-sm cursor-pointer hover:brightness-95 z-10 group/ev ${b.color.bg}`} style={{top:top+'px',height:h+'px',overflow:'visible'}}>
                                       <div className={`flex h-full rounded overflow-hidden`}>
                                         <div className={`w-0.5 sm:w-1 shrink-0 ${b.color.bar}`}></div>
                                         <div className="flex-1 px-0.5 sm:px-1 py-0.5 overflow-hidden leading-tight">
@@ -4605,7 +4613,7 @@
                 const eventRow = ROWS.find(r => r.id === 'event');
                 const setting = getDaySetting(ds, di);
                 setMonthDayPopup(null);
-                openEditModal(getCellData(ds,'event',di), ds, eventRow, di, DAYS[di], setting.type==='holiday', null);
+                openEditModal(getCellData(ds,'event',di), ds, eventRow, di, DAYS[di], isNoClassType(setting.type), null);
               }}
               onDeleteEvent={(eventText) => {
                 const ds = monthDayPopup.dateStr;
@@ -4708,7 +4716,7 @@
                   <div className="flex justify-between items-center mb-4 sm:mb-6">
                     <div>
                       <div className="text-xs sm:text-sm font-bold text-slate-500 mb-1">{editingCell.dateStr} ({editingCell.dayName}曜) {editingCell.isTemplate?'※基本設定':''}</div>
-                      <h2 className="text-xl sm:text-2xl font-black text-slate-800">{editingCell.ih && !editingCell.isTemplate && editingCell.periodId !== 'event' && editingCell.periodId !== 'diary' ? '🌴 休日の予定' : `${editingCell.periodName}の編集`}</h2>
+                      <h2 className="text-xl sm:text-2xl font-black text-slate-800">{editingCell.ih && !editingCell.isTemplate && editingCell.periodId !== 'event' && editingCell.periodId !== 'diary' ? (getDaySetting(editingCell.dateStr, editingCell.dayIndex).type === 'work' ? '🏫 出勤日の予定' : '🌴 休日の予定') : `${editingCell.periodName}の編集`}</h2>
                       {editingCell.ih && !editingCell.isTemplate && editingCell.periodId !== 'event' && editingCell.periodId !== 'diary' && (
                         <div className="text-[11px] font-bold text-slate-400 mt-1">開始・終了時刻を入力すると時間帯に合わせて表示されます</div>
                       )}
