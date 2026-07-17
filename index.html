@@ -3420,23 +3420,23 @@
                               </div>
 
                               {activeTab==='weekly' && !isMobile && (
-                                <div className="space-y-0.5">
-                                  <div className={`text-[8px] sm:text-[9px] font-black rounded-md px-1 py-0.5 border ${style.color} bg-white dark:bg-slate-800 shadow-sm`}>
+                                <div className="flex items-stretch gap-0.5">
+                                  <div className={`flex-1 min-w-0 flex items-center text-[8px] sm:text-[9px] font-black rounded-md px-1 py-0.5 border ${style.color} bg-white dark:bg-slate-800 shadow-sm`}>
                                     <select value={setting.type} onChange={(e) => handleSettingChange(ds,i,{...setting,type:e.target.value})} className="bg-transparent font-black w-full text-center outline-none appearance-none cursor-pointer">
                                       {Object.values(SCHEDULE_TYPES).map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
                                     </select>
                                   </div>
-                                  <div className="relative w-full">
+                                  <div className="relative flex-1 min-w-0">
                                     <select value="" onChange={(e) => { const v=e.target.value; if(v==='revert') handleRevertDay(ds); else if(v!=='') handleCopyDay(ds,v); }}
-                                      className={`w-full text-[7px] sm:text-[8px] font-bold rounded-md px-0.5 sm:px-1 py-0.5 outline-none cursor-pointer text-center appearance-none transition-colors ${isHoliday ? 'bg-white/60 text-rose-600 border border-rose-200' : 'bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-500 dark:text-slate-400'}`}>
+                                      className={`w-full h-full text-[7px] sm:text-[8px] font-bold rounded-md px-0.5 sm:px-1 py-0.5 outline-none cursor-pointer text-center appearance-none transition-colors ${isHoliday ? 'bg-white/60 text-rose-600 border border-rose-200' : 'bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-500 dark:text-slate-400'}`}>
                                       <option value="" disabled>{DAYS[setting.routine !== undefined ? setting.routine : i]}曜日課</option><option value="revert">リセット</option>
                                       {DAYS.map((dn,di) => <option key={di} value={di}>{dn}曜日課</option>)}
                                     </select>
                                   </div>
                                   {!isHoliday && ((setting.leaves||[]).length>0 ? (
-                                    <button type="button" onClick={()=>openLeaveModal(ds,i)} title={(setting.leaves||[]).map(l=>`${l.label} ${l.start}〜${l.end}`).join('\n')+'（クリックで編集）'} className="w-full px-0.5 py-px rounded-md bg-orange-100 dark:bg-orange-900/40 border border-orange-300 dark:border-orange-700 text-orange-700 dark:text-orange-300 text-[7px] sm:text-[8px] font-black truncate leading-tight hover:bg-orange-200 dark:hover:bg-orange-900/60 transition-colors">🏖{setting.leaves[0].label}{setting.leaves.length>1?` +${setting.leaves.length-1}`:''}</button>
+                                    <button type="button" onClick={()=>openLeaveModal(ds,i)} title={(setting.leaves||[]).map(l=>`${l.label} ${l.start}〜${l.end}`).join('\n')+'（クリックで編集）'} className="flex-1 min-w-0 px-0.5 py-px rounded-md bg-orange-100 dark:bg-orange-900/40 border border-orange-300 dark:border-orange-700 text-orange-700 dark:text-orange-300 text-[7px] sm:text-[8px] font-black truncate leading-tight hover:bg-orange-200 dark:hover:bg-orange-900/60 transition-colors">🏖{setting.leaves[0].label}{setting.leaves.length>1?` +${setting.leaves.length-1}`:''}</button>
                                   ) : (
-                                    <button type="button" onClick={()=>openLeaveModal(ds,i)} title="休暇を設定" className="w-full px-0.5 py-px rounded-md text-[7px] sm:text-[8px] font-bold text-slate-300 dark:text-slate-600 hover:text-orange-500 dark:hover:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20 leading-tight transition-colors">＋休暇</button>
+                                    <button type="button" onClick={()=>openLeaveModal(ds,i)} title="休暇を設定" className="flex-1 min-w-0 px-0.5 py-px rounded-md text-[7px] sm:text-[8px] font-bold text-slate-300 dark:text-slate-600 hover:text-orange-500 dark:hover:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20 leading-tight transition-colors whitespace-nowrap">＋休暇</button>
                                   ))}
                                 </div>
                               )}
