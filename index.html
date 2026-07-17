@@ -1593,18 +1593,7 @@
                 setYearlyData(mergedYearlyData);
               }
               if(Array.isArray(d.documents)) setDocuments(d.documents);
-              if(Array.isArray(d.vacations)) {
-                  const mergedVacations = [...INITIAL_VACATIONS];
-                  d.vacations.forEach(v => {
-                      if (!mergedVacations.find(mv => mv.id === v.id)) {
-                          mergedVacations.push(v);
-                      } else {
-                          const idx = mergedVacations.findIndex(mv => mv.id === v.id);
-                          mergedVacations[idx] = v;
-                      }
-                  });
-                  setVacations(mergedVacations);
-              }
+              if(Array.isArray(d.vacations)) setVacations(d.vacations);
               // Googleカレンダー連携設定をクラウドから復元（localStorageが消えても連携が維持される）
               if (d.googleCalSettings && typeof d.googleCalSettings === 'object') {
                 const g = d.googleCalSettings;
