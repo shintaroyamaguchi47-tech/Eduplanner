@@ -3433,6 +3433,11 @@
                                       {DAYS.map((dn,di) => <option key={di} value={di}>{dn}曜日課</option>)}
                                     </select>
                                   </div>
+                                  {!isHoliday && ((setting.leaves||[]).length>0 ? (
+                                    <button type="button" onClick={()=>openLeaveModal(ds,i)} title={(setting.leaves||[]).map(l=>`${l.label} ${l.start}〜${l.end}`).join('\n')+'（クリックで編集）'} className="w-full px-0.5 py-px rounded-md bg-orange-100 dark:bg-orange-900/40 border border-orange-300 dark:border-orange-700 text-orange-700 dark:text-orange-300 text-[7px] sm:text-[8px] font-black truncate leading-tight hover:bg-orange-200 dark:hover:bg-orange-900/60 transition-colors">🏖{setting.leaves[0].label}{setting.leaves.length>1?` +${setting.leaves.length-1}`:''}</button>
+                                  ) : (
+                                    <button type="button" onClick={()=>openLeaveModal(ds,i)} title="休暇を設定" className="w-full px-0.5 py-px rounded-md text-[7px] sm:text-[8px] font-bold text-slate-300 dark:text-slate-600 hover:text-orange-500 dark:hover:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20 leading-tight transition-colors">＋休暇</button>
+                                  ))}
                                 </div>
                               )}
                               {activeTab==='weekly' && isMobile && (
@@ -3441,6 +3446,9 @@
                                     {Object.values(SCHEDULE_TYPES).map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
                                   </select>
                                 </div>
+                              )}
+                              {activeTab==='weekly' && isMobile && !isHoliday && (setting.leaves||[]).length>0 && (
+                                <button type="button" onClick={()=>openLeaveModal(ds,i)} title={(setting.leaves||[]).map(l=>`${l.label} ${l.start}〜${l.end}`).join('\n')+'（タップで編集）'} className="mt-0.5 w-full px-0.5 py-px rounded bg-orange-100 dark:bg-orange-900/40 border border-orange-300 dark:border-orange-700 text-orange-700 dark:text-orange-300 text-[6px] font-black truncate leading-tight">🏖{setting.leaves[0].label}{setting.leaves.length>1?` +${setting.leaves.length-1}`:''}</button>
                               )}
 
                             </div>
