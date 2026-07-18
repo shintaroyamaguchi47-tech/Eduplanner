@@ -927,6 +927,12 @@
       const lastPosRef = useRef({ x: 0, y: 0 });
       const [selectedDateDetails, setSelectedDateDetails] = useState(null);
       const [monthDayPopup, setMonthDayPopup] = useState(null);
+      const [editingYearCell, setEditingYearCell] = useState(null);
+
+      useEffect(() => {
+        if (activeTab !== 'yearly') return;
+        requestAnimationFrame(() => document.getElementById('yearly-today-row')?.scrollIntoView({ block: 'center' }));
+      }, [activeTab]);
 
       // Googleカレンダー連携: 週案の予定をGoogleカレンダーに追加
       const exportToGoogleCalendar = () => {
@@ -3884,25 +3890,43 @@
                     <thead className="bg-slate-100 sticky top-0 z-10 border-b-2 border-slate-300">
                       <tr>
                         <th className="border border-slate-300 p-2 text-slate-700 w-10 sm:w-12">日</th>
-                        {[4,5,6,7,8,9,10,11,12,1,2,3].map(m=><th key={m} className="border border-slate-300 p-2 text-slate-700">{m}月</th>)}
+                        {[4,5,6,7,8,9,10,11,12,1,2,3].map(m=>{
+                          const y=m<=3?schoolYear+1:schoolYear;
+                          const isNowMonth = todayStr.startsWith(`${y}-${String(m).padStart(2,'0')}`);
+                          return <th key={m} className={`border border-slate-300 p-2 ${isNowMonth?'bg-blue-100 text-blue-800':'text-slate-700'}`}>{m}月</th>;
+                        })}
                       </tr>
                     </thead>
                     <tbody>
-                      {Array.from({length:31},(_,i)=>i+1).map(d=><tr key={d} className="border-b border-slate-200 hover:bg-blue-50/50">
+                      {Array.from({length:31},(_,i)=>i+1).map(d=><tr key={d} id={d===Number(todayStr.split('-')[2])?'yearly-today-row':undefined} className="border-b border-slate-200 hover:bg-blue-50/50">
                         <td className="border-r border-slate-300 p-2 text-center bg-slate-50 sticky left-0 font-black text-slate-600 z-10">{d}</td>
                         {[4,5,6,7,8,9,10,11,12,1,2,3].map(m=>{
                           const y=m<=3?schoolYear+1:schoolYear;const dt=new Date(y,m-1,d);const iv=dt.getDate()===d;const ds=iv?formatDate(dt):'';const hol=iv?getHolidayName(y,m,d):null;const ut=iv?getMergedYearlyEventText(ds):'';
-                          return <td key={m} className={`border-r border-slate-300 p-1 sm:p-1.5 align-top overflow-hidden relative ${!iv?'bg-stone-100/50':dt.getDay()===0||hol?'bg-rose-50/60':dt.getDay()===6?'bg-blue-50/30':''}`}>
+                          const cellKey = `${schoolYear}-${m}-${d}`;
+                          return <td key={m} className={`border-r border-slate-300 p-1 sm:p-1.5 align-top overflow-hidden relative ${!iv?'bg-stone-100/50':dt.getDay()===0||hol?'bg-rose-50/60':dt.getDay()===6?'bg-blue-50/30':''} ${iv&&ds===todayStr?'outline outline-2 -outline-offset-2 outline-blue-500':''}`}>
                             {iv&&<div className="flex flex-col h-full w-full">
-                              <div 
-                                onClick={()=>{setCurrentWeekStart(getMonday(dt));setActiveTab('weekly');}} 
+                              <div
+                                onClick={()=>{setCurrentWeekStart(getMonday(dt));setActiveTab('weekly');}}
                                 className="cursor-pointer hover:bg-slate-200/60 transition-colors rounded -mx-0.5 px-0.5 flex flex-col"
                                 title="この日の週案を開く"
                               >
-                                <span className={`text-[9px] font-black ${dt.getDay()===0||hol?'text-rose-700':dt.getDay()===6?'text-blue-700':'text-slate-700'}`}>{['日','月','火','水','木','金','土'][dt.getDay()]}</span>
+                                <span className={`text-[9px] font-black ${ds===todayStr?'text-blue-700':dt.getDay()===0||hol?'text-rose-700':dt.getDay()===6?'text-blue-700':'text-slate-700'}`}>{['日','月','火','水','木','金','土'][dt.getDay()]}{ds===todayStr?' 今日':''}</span>
                                 {hol&&<span className="text-[8px] font-black text-rose-700 leading-tight mt-0.5 truncate">{hol}</span>}
                               </div>
+                              {editingYearCell!==cellKey ? (
+                                <div onClick={()=>setEditingYearCell(cellKey)} title="クリックで編集" className="flex-1 mt-1 min-h-[14px] cursor-text rounded hover:bg-slate-200/40 space-y-0.5">
+                                  {ut.split('\n').filter(s=>s.trim()!=='').map((line,li)=>{
+                                    const imp = getEventImpact(line.trim());
+                                    return (imp.scheduleType || imp.kind==='meeting')
+                                      ? <div key={li} className={`text-[9px] font-black border rounded px-1 py-px leading-tight break-all ${imp.badge}`}>{line.trim()}</div>
+                                      : <div key={li} className={`text-[10px] font-bold leading-tight break-all ${dt.getDay()===0||hol?'text-rose-900':dt.getDay()===6?'text-blue-900':'text-slate-800'}`}>{line.trim()}</div>;
+                                  })}
+                                </div>
+                              ) : (
                               <textarea
+                                autoFocus
+                                onFocus={e=>{const v=e.target.value;e.target.setSelectionRange(v.length,v.length);}}
+                                onBlur={()=>setEditingYearCell(null)}
                                 className={`w-full flex-1 text-[10px] font-bold bg-transparent outline-none resize-none leading-tight mt-1 break-all ${dt.getDay()===0||hol?'text-rose-900':dt.getDay()===6?'text-blue-900':'text-slate-800'}`}
                                 value={ut}
                                 onChange={e=>{
@@ -3923,6 +3947,7 @@
                                 }}
                                 rows={ut.split('\n').filter(s=>s.trim()!=='').length||1}
                               />
+                              )}
                             </div>}
                           </td>
                         })}
