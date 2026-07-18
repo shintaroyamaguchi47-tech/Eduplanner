@@ -3297,7 +3297,8 @@
                       
                       const setting = getDaySetting(ds, di);
                       const eventRow = ROWS.find(r => r.id === 'event');
-                      const textMax = isMobile ? 2 : 5;
+                      const textMax = isMobile ? 2 : 4;
+                      const shownMax = (!isMobile && evs.length > textMax) ? textMax - 1 : textMax;
                       
                       return (
                         <div key={i} title={isMobile ? 'タップで予定を表示' : undefined} onClick={()=>{
@@ -3305,16 +3306,26 @@
                           else { openEditModal(getCellData(ds,'event',di), ds, eventRow, di, DAYS[di], isNoClassType(setting.type), null); }
                         }} className={`flex flex-col overflow-hidden cursor-pointer hover:brightness-95 dark:hover:brightness-110 relative transition-all min-h-0 min-w-0 ${bg} ${isMobile ? 'p-0.5' : 'p-1 sm:p-1.5'}`}>
                           <span onClick={(e)=>{ e.stopPropagation(); setCurrentWeekStart(getMonday(day.date)); setActiveTab('weekly'); }} className={`cursor-pointer hover:scale-125 hover:z-20 font-black flex items-center justify-center rounded-full shrink-0 z-10 relative ${isMobile ? 'w-5 h-5 text-[9px] mb-px' : 'text-[10px] sm:text-xs w-5 h-5 sm:w-6 sm:h-6 mb-0.5'} ${isT?'bg-blue-600 text-white shadow-md today-ring':isCM?(di===6?'text-rose-700 dark:text-rose-300':di===5?'text-blue-700 dark:text-blue-300':'text-slate-800 dark:text-slate-100'):'text-slate-400 dark:text-slate-500'}`} title="週案へ移動">{day.date.getDate()}</span>
-                          <div className={`flex-1 space-y-0.5 sm:space-y-1 overflow-y-auto overflow-x-hidden hide-scrollbar min-h-0 min-w-0 w-full pointer-events-none ${isMobile ? 'px-0.5 pb-0.5' : ''}`}>
-                            {evs.slice(0, textMax).map((e,idx)=>{
+                          <div className={`flex-1 space-y-0.5 overflow-hidden min-h-0 min-w-0 w-full pointer-events-none ${isMobile ? 'px-0.5 pb-0.5' : ''}`}>
+                            {evs.slice(0, shownMax).map((e,idx)=>{
+                              const sizeCls = isMobile ? 'text-[7px]' : 'text-[10px] sm:text-[11px] lg:text-xs';
+                              const emphasized = e.type==='holiday' || e.type==='todo' || (e.type==='event' && e.impact && (e.impact.scheduleType || e.impact.kind==='meeting'));
+                              if(!emphasized) {
+                                return (
+                                  <div key={idx} className={`flex items-center w-full min-w-0 leading-tight ${isMobile ? 'gap-0.5' : 'gap-1 px-0.5'}`} title={e.text}>
+                                    <span className={`rounded-full shrink-0 bg-sky-500 ${isMobile ? 'w-1 h-1' : 'w-1.5 h-1.5'}`}></span>
+                                    <span className={`truncate font-bold text-slate-700 dark:text-slate-200 ${sizeCls}`}>{e.text}</span>
+                                  </div>
+                                );
+                              }
                               let c='bg-slate-100 text-slate-800 border-slate-300 dark:bg-slate-700 dark:text-slate-100 dark:border-slate-500'; let ic='';
                               if(e.type==='holiday') c='bg-rose-50 text-rose-800 border-rose-300 dark:bg-rose-950/50 dark:text-rose-100 dark:border-rose-700';
-                              else if(e.type==='event') { c=e.impact?.badge || 'bg-pink-50 text-pink-900 border-pink-300 dark:bg-pink-950/40 dark:text-pink-100 dark:border-pink-700'; ic='🚩'; }
+                              else if(e.type==='event') c=e.impact?.badge || 'bg-pink-50 text-pink-900 border-pink-300 dark:bg-pink-950/40 dark:text-pink-100 dark:border-pink-700';
                               else if(e.type==='todo') { c='bg-blue-50 text-blue-900 border-blue-300 dark:bg-blue-950/40 dark:text-blue-100 dark:border-blue-700'; ic='☑️'; }
-                              return <div key={idx} className={`font-black border rounded truncate w-full shadow-sm leading-tight ${isMobile ? 'text-[7px] px-1 py-0.5' : 'text-[9px] sm:text-[10px] lg:text-xs px-1 sm:px-1.5 py-0.5'} ${c}`} title={e.text}>{ic}{e.text}</div>
+                              return <div key={idx} className={`font-black border rounded truncate w-full leading-tight ${isMobile ? 'px-1 py-px' : 'px-1 sm:px-1.5 py-0.5'} ${sizeCls} ${c}`} title={e.text}>{ic}{e.text}</div>
                             })}
-                            {evs.length > textMax && (
-                              <div className={`font-black text-slate-600 dark:text-slate-300 ${isMobile ? 'text-[7px]' : 'text-[9px]'}`}>+{evs.length - textMax}件</div>
+                            {evs.length > shownMax && (
+                              <div className={`font-black text-slate-500 dark:text-slate-400 ${isMobile ? 'text-[7px]' : 'text-[9px] px-0.5'}`}>+{evs.length - shownMax}件</div>
                             )}
                           </div>
                           {isT && <div className="absolute inset-0 border-[3px] border-blue-500 pointer-events-none z-20 rounded-sm"></div>}
