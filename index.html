@@ -3305,10 +3305,10 @@
                         const color = COLORS[idx % COLORS.length];
                         return (
                           <div key={idx} onClick={(ev)=>{ev.stopPropagation(); openEditModal(getCellData(dateStr,e.pid,i),dateStr,ROWS.find(r=>r.id===e.pid),i,day,true,null);}}
-                               className="absolute left-1 right-1 sm:left-1.5 sm:right-1.5 rounded shadow-md cursor-pointer hover:shadow-lg z-40 hover:z-50 overflow-hidden flex flex-col px-1 py-0.5 sm:px-1.5 sm:py-1 transition-all bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600"
+                               className="absolute left-1 right-1 sm:left-1.5 sm:right-1.5 rounded shadow-md cursor-pointer hover:shadow-lg z-40 hover:z-50 overflow-y-auto overflow-x-hidden hide-scrollbar overscroll-contain flex flex-col px-1 py-0.5 sm:px-1.5 sm:py-1 transition-all bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 touch-pan-y"
                                style={{ top: `${topPct}%`, height: `${heightPct}%`, minHeight:'34px', borderLeft: `4px solid ${color}` }}>
                             {e.start && <div className="text-[7px] sm:text-[9px] font-mono font-bold leading-none mb-0.5 opacity-90 shrink-0" style={{color}}>{e.start}{e.end?`-${e.end}`:''}</div>}
-                            <div className={`${getDynamicFontSize(e.subject, isMobile)} font-black leading-[1.05] text-slate-800 dark:text-slate-200 break-words line-clamp-2`}>{e.subject}</div>
+                            <div className={`${getDynamicFontSize(e.subject, isMobile)} font-black leading-[1.05] text-slate-800 dark:text-slate-200 break-words whitespace-pre-wrap shrink-0`}>{e.subject}</div>
                           </div>
                         )
                       })}
