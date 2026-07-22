@@ -30,10 +30,13 @@
 
   <style>
     :root {
-      --ink: #0f172a;
-      --paper: #f1f5f9;
+      --ink: #1e293b;
+      --muted: #64748b;
+      --primary: #4f46e5;
+      --primary-soft: #eef2ff;
+      --paper: #f8fafc;
       --surface: #ffffff;
-      --border: #e2e8f0;
+      --border: #dbe3ee;
       --shadow-sm: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
       --shadow-md: 0 4px 16px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.05);
       --shadow-lg: 0 8px 24px rgba(0,0,0,0.10), 0 3px 6px rgba(0,0,0,0.06);
@@ -52,6 +55,8 @@
       background-color: var(--paper);
       color: var(--ink);
       letter-spacing: 0.02em;
+      font-size: 16px;
+      line-height: 1.5;
     }
     .font-mono { font-family: 'IBM Plex Mono', monospace; }
     .hide-scrollbar::-webkit-scrollbar { display: none; }
@@ -81,6 +86,32 @@
     }
     .cell-card:hover {
       box-shadow: 0 3px 10px rgba(0,0,0,0.13) !important;
+    }
+
+    /* 視認性を優先した共通フォーカス。キーボード操作でも現在地を見失わない。 */
+    button:focus-visible,
+    select:focus-visible,
+    input:focus-visible,
+    textarea:focus-visible,
+    [role="button"]:focus-visible {
+      outline: 3px solid rgba(79, 70, 229, 0.38);
+      outline-offset: 2px;
+    }
+
+    /* 週間画面は、罫線より余白と背景差で情報を分ける。 */
+    .weekly-panel {
+      border-color: var(--border) !important;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.07) !important;
+    }
+    .today-column {
+      background-color: rgba(238, 242, 255, 0.82) !important;
+      box-shadow: inset 2px 0 0 rgba(79, 70, 229, 0.2), inset -2px 0 0 rgba(79, 70, 229, 0.2);
+    }
+    .dark .today-column {
+      background-color: rgba(49, 46, 129, 0.24) !important;
+    }
+    @media (max-width: 639px) {
+      .cell-card { border-radius: 7px; }
     }
 
     /* ヘッダーナビタブ */
@@ -922,6 +953,11 @@
       const googleCalSyncInFlightRef = useRef(false);
 
       const [isOnline, setIsOnline] = useState(navigator.onLine);
+      const [saveStatus, setSaveStatus] = useState(navigator.onLine ? 'saved' : 'offline');
+      const [lastSavedAt, setLastSavedAt] = useState(null);
+      const [autoBackupCount, setAutoBackupCount] = useState(() => { try { return JSON.parse(localStorage.getItem('ep_auto_backups') || '[]').length; } catch(e) { return 0; } });
+      const pendingCloudSavesRef = useRef({});
+      const saveStatusTimerRef = useRef(null);
       const quickCanvasRef = useRef(null);
       const isDrawingRef = useRef(false);
       const lastPosRef = useRef({ x: 0, y: 0 });
@@ -1316,21 +1352,17 @@
       const schoolYear = currentMonth.getMonth() < 3 ? currentMonth.getFullYear() - 1 : currentMonth.getFullYear();
 
       const getDynamicFontSize = (text, isMobile, isWeekly = false) => {
-        if (!text) return isMobile ? 'text-[11px]' : isWeekly ? 'text-[11px]' : 'text-sm';
+        if (!text) return isMobile ? 'text-[10px]' : isWeekly ? 'text-[10px]' : 'text-sm';
         const len = text.length;
         if (isMobile) {
-          if (len < 6) return 'text-[13px]';
-          if (len < 12) return isWeekly ? 'text-[11px]' : 'text-[12px]';
-          if (len < 20) return 'text-[11px]';
-          if (len < 30) return 'text-[10px] leading-tight';
+          if (len < 8) return 'text-[11px]';
+          if (len < 18) return 'text-[10px] leading-tight';
           return 'text-[9px] leading-tight';
         } else {
           if (isWeekly) {
-            if (len < 8) return 'text-[11px] leading-tight';
-            if (len < 16) return 'text-[10px] leading-tight';
-            if (len < 25) return 'text-[9px] leading-tight';
-            if (len < 35) return 'text-[8px] leading-tight';
-            return 'text-[8px] leading-tight';
+            if (len < 10) return 'text-[11px] leading-tight';
+            if (len < 24) return 'text-[10px] leading-tight';
+            return 'text-[9px] leading-tight';
           }
           if (len < 8) return 'text-base';
           if (len < 16) return 'text-sm';
@@ -1346,14 +1378,11 @@
         if (!text) return isMobile ? 'text-[10px]' : 'text-xs';
         const len = text.length;
         if (isMobile) {
-          if (len < 6) return 'text-[12px] leading-tight';
-          if (len < 12) return 'text-[11px] leading-tight';
-          if (len < 20) return `text-[10px] leading-tight${clamp('line-clamp-2')}`;
+          if (len < 12) return 'text-[10px] leading-tight';
           return `text-[9px] leading-tight${clamp('line-clamp-3')}`;
         } else {
           if (len < 8) return 'text-sm leading-tight';
-          if (len < 16) return `text-xs leading-tight${clamp('line-clamp-2')}`;
-          if (len < 25) return `text-[11px] leading-tight${clamp('line-clamp-3')}`;
+          if (len < 20) return `text-[11px] leading-tight${clamp('line-clamp-3')}`;
           return `text-[10px] leading-tight${clamp('line-clamp-4')}`;
         }
       };
@@ -1631,26 +1660,88 @@
           const cur = JSON.parse(localStorage.getItem('ep_local_data') || '{}');
           Object.assign(cur, updates);
           localStorage.setItem('ep_local_data', JSON.stringify(cur));
+          // 6時間ごとに最大4世代の端末内スナップショットを残す。
+          const backups = JSON.parse(localStorage.getItem('ep_auto_backups') || '[]');
+          const now = Date.now();
+          if (!backups.length || now - backups[0].savedAt >= 6 * 60 * 60 * 1000) {
+            const nextBackups = [{ savedAt: now, data: cur }, ...backups].slice(0, 4);
+            localStorage.setItem('ep_auto_backups', JSON.stringify(nextBackups));
+            setAutoBackupCount(nextBackups.length);
+          }
         } catch(e){}
       };
       const loadFromLocal = () => {
         try { const d = JSON.parse(localStorage.getItem('ep_local_data') || '{}'); return Object.keys(d).length > 0 ? d : null; } catch(e){ return null; }
       };
 
+      const restoreLatestAutoBackup = () => {
+        try {
+          const backups = JSON.parse(localStorage.getItem('ep_auto_backups') || '[]');
+          if (!backups.length) { showToast('自動バックアップはまだありません'); return; }
+          const latest = backups[0];
+          const savedLabel = new Date(latest.savedAt).toLocaleString('ja-JP');
+          if (!window.confirm(`${savedLabel} の自動バックアップに戻しますか？\n現在の状態は上書きされます。`)) return;
+          applyLocalData(latest.data);
+          localStorage.setItem('ep_local_data', JSON.stringify(latest.data));
+          const d = latest.data;
+          saveToFirestore('template', { baseTemplate:d.baseTemplate, templateSettings:d.templateSettings });
+          saveToFirestore('weekly', { weeklyData:d.weeklyData, weeklySettings:d.weeklySettings });
+          saveToFirestore('todos', { todos:d.todos });
+          saveToFirestore('notes', { notes:d.notesData });
+          saveToFirestore('syllabus', { syllabus:d.syllabusData });
+          saveToFirestore('extra', { yearlyData:d.yearlyData, documents:d.documents, vacations:d.vacations });
+          saveToFirestore('quickMemos', { memos:d.quickMemos });
+          showToast('🕘 自動バックアップから復元しました');
+        } catch(e) { showToast('自動バックアップを読み込めませんでした'); }
+      };
+
       const saveToFirestore = async (name, data) => {
-        if(!cloudDataLoaded.current){ return; }
+        // ローカル保存は呼び出し側ですでに完了しているため、クラウド未準備時は再送用に保持する。
+        if(!cloudDataLoaded.current || !navigator.onLine){
+          pendingCloudSavesRef.current[name] = data;
+          setSaveStatus('offline');
+          return false;
+        }
         if(cloudUser && window.__firebaseDb){
           try {
+            setSaveStatus('saving');
             await window.__firebaseSetDoc(window.__firebaseDoc(window.__firebaseDb,'users',cloudUser.uid,'teacherPlanner',name), cleanData(data), {merge:true});
+            delete pendingCloudSavesRef.current[name];
+            setLastSavedAt(new Date());
+            setSaveStatus('saved');
+            if (saveStatusTimerRef.current) clearTimeout(saveStatusTimerRef.current);
+            saveStatusTimerRef.current = setTimeout(() => setSaveStatus(navigator.onLine ? 'saved' : 'offline'), 2500);
+            return true;
           } catch(e){
             const code = e?.code || '';
-            if (code === 'unavailable' || code === 'deadline-exceeded' || !navigator.onLine) { return; }
+            pendingCloudSavesRef.current[name] = data;
+            if (code === 'unavailable' || code === 'deadline-exceeded' || !navigator.onLine) { setSaveStatus('offline'); return false; }
             console.error('保存エラー:', name, e);
+            setSaveStatus('error');
             showToast('⚠️ 保存に失敗しました。ネットワークを確認してください。');
+            return false;
           }
         }
+        return false;
       };
       saveToFirestoreRef.current = saveToFirestore;
+
+      const retryPendingCloudSaves = async () => {
+        if (!navigator.onLine || !cloudUser || !cloudDataLoaded.current) { setSaveStatus('offline'); return; }
+        const entries = Object.entries(pendingCloudSavesRef.current);
+        if (!entries.length) { setSaveStatus('saved'); return; }
+        setSaveStatus('saving');
+        for (const [name, data] of entries) await saveToFirestore(name, data);
+        if (Object.keys(pendingCloudSavesRef.current).length === 0) {
+          setSaveStatus('saved');
+          showToast('☁️ 未同期の変更を保存しました');
+        }
+      };
+
+      useEffect(() => {
+        if (isOnline) retryPendingCloudSaves();
+        else setSaveStatus('offline');
+      }, [isOnline, cloudUser]);
 
       const saveAll = (t,ts,w,ws) => { if (!isUndoRedo.current) pushUndo(getCurrentSnapshot()); setBaseTemplate(t); setTemplateSettings(ts); setWeeklyData(w); setWeeklySettings(ws); saveToFirestore('template',{baseTemplate:t,templateSettings:ts}); saveToFirestore('weekly',{weeklyData:w,weeklySettings:ws}); saveToLocal({baseTemplate:t,templateSettings:ts,weeklyData:w,weeklySettings:ws}); };
       const saveTodos = (nt) => { if (!isUndoRedo.current) pushUndo(getCurrentSnapshot()); setTodos(nt); saveToFirestore('todos',{todos:nt}); saveToLocal({todos:nt}); };
@@ -2510,6 +2601,39 @@
         setTempColor(targetData.color || '');
       };
 
+      // 授業を保存したあと、同じ週の前後の授業コマを続けて編集する。
+      // p1→p2…p6→翌日のp1の順で移動し、週の端では停止する。
+      const saveAndMoveEditCell = (direction) => {
+        if (!editingCell || editingCell.isTemplate || !editingCell.periodId.startsWith('p')) return;
+        const periodIds = ['p1','p2','p3','p4','p5','p6'];
+        const currentPeriodIndex = periodIds.indexOf(editingCell.periodId);
+        if (currentPeriodIndex < 0) return;
+
+        let nextDayIndex = editingCell.dayIndex;
+        let nextPeriodIndex = currentPeriodIndex + direction;
+        if (nextPeriodIndex >= periodIds.length) { nextPeriodIndex = 0; nextDayIndex += 1; }
+        if (nextPeriodIndex < 0) { nextPeriodIndex = periodIds.length - 1; nextDayIndex -= 1; }
+        if (nextDayIndex < 0 || nextDayIndex > 4) {
+          showToast(direction > 0 ? 'この週の最後の授業です' : 'この週の最初の授業です');
+          return;
+        }
+
+        const currentEdit = editingCell;
+        const data = { subject:tempSubject, memo:tempMemo, startTime:tempStartTime, endTime:tempEndTime, handwriting:tempHandwriting, color:tempColor||'' };
+        handleSaveCell(data);
+
+        const nextDate = new Date(currentEdit.dateStr);
+        nextDate.setDate(nextDate.getDate() + (nextDayIndex - currentEdit.dayIndex));
+        const nextDateStr = formatDate(nextDate);
+        const nextPeriodId = periodIds[nextPeriodIndex];
+        const nextRow = ROWS.find(r => r.id === nextPeriodId);
+        const nextSetting = getDaySetting(nextDateStr, nextDayIndex);
+        const nextData = getCellData(nextDateStr, nextPeriodId, nextDayIndex);
+        setTimeout(() => {
+          openEditModal(nextData, nextDateStr, nextRow, nextDayIndex, DAYS[nextDayIndex], isNoClassType(nextSetting.type));
+        }, 0);
+      };
+
       // 教科名（接頭辞のクラス＋単元サフィックスを含む）から単元計画の教科を割り出す
       const matchCellSyllabus = (subjStr) => {
         const base = (subjStr || '').split('（')[0].trim();
@@ -2548,6 +2672,17 @@
       const copyTodosToClipboard = () => { const pending = todos.filter(t => !t.completed); if (!pending.length) { showToast('未完了のタスクがありません'); return; } const text = pending.map(t => { let line = t.important ? `⭐ ${t.text}` : t.text; if (t.dueDate) line += ` (期限: ${t.dueDate})`; return line; }).join('\n'); const textArea = document.createElement("textarea"); textArea.value = text; document.body.appendChild(textArea); textArea.select(); try { document.execCommand('copy'); showToast('📋 TODOをコピーしました！'); } catch (err) { showToast('コピーに失敗しました。'); } document.body.removeChild(textArea); };
 
       const incompleteTodos = useMemo(() => todos.filter(t => !t.completed), [todos]);
+      const todoSummary = useMemo(() => {
+        const weekEnd = new Date(getJSTDate());
+        weekEnd.setDate(weekEnd.getDate() + 7);
+        const weekEndStr = formatDate(weekEnd);
+        return {
+          overdue: incompleteTodos.filter(t => t.dueDate && t.dueDate < todayStr).length,
+          today: incompleteTodos.filter(t => t.dueDate === todayStr).length,
+          week: incompleteTodos.filter(t => t.dueDate && t.dueDate > todayStr && t.dueDate <= weekEndStr).length,
+          noDate: incompleteTodos.filter(t => !t.dueDate).length,
+        };
+      }, [incompleteTodos, todayStr]);
 
       const combinedNotes = useMemo(() => { const c=[...notesData.map(n=>({...n,type:'note'}))]; Object.keys(weeklyData).forEach(k=>{if(k.endsWith('-diary')){const ds=k.replace('-diary','');const d=weeklyData[k];if(d?.memo?.trim())c.push({id:`diary-${ds}`,type:'diary',title:`${new Date(ds).getMonth()+1}月${new Date(ds).getDate()}日のメモ`,content:d.memo,updatedAt:new Date(ds).getTime()+86399000,dateStr:ds});}}); return c.sort((a,b)=>b.updatedAt-a.updatedAt); }, [notesData, weeklyData]);
 
@@ -2966,11 +3101,11 @@
           else if(row.id==='afterschool'){customStyle={flex:'4',minHeight:'2.5rem'};rh='';fc='';}
         } else {
           if (isMobile && activeTab === 'weekly') {
-            if (row.id === 'event') { rh = 'h-7 shrink-0'; fc = 'flex-none'; rb = ''; }
+            if (row.id === 'event') { rh = 'h-8 shrink-0'; fc = 'flex-none'; rb = ''; }
             else if (row.id === 'morning') { rh = 'h-7 shrink-0'; fc = 'flex-none'; rb = ''; }
             else if (row.id === 'lunch') { rh = 'h-8 shrink-0'; fc = 'flex-none'; rb = 'bg-amber-50/20 dark:bg-amber-900/10'; }
-            else if (row.id === 'afterschool') { rh = 'h-[4rem] shrink-0'; fc = 'flex-none'; rb = ''; }
-            else { rh = 'h-10 shrink-0'; fc = 'flex-none'; rb = ''; }
+            else if (row.id === 'afterschool') { rh = 'h-16 shrink-0'; fc = 'flex-none'; rb = ''; }
+            else { rh = 'h-11 shrink-0'; fc = 'flex-none'; rb = ''; }
           } else {
             if (row.id === 'event') { customStyle={flex:'2.5',minHeight:'2.5rem'}; rh=''; fc=''; rb=''; }
             else if (row.id === 'morning') { customStyle={flex:'1.5',minHeight:'1.5rem'}; rh=''; fc=''; rb=''; }
@@ -2988,7 +3123,7 @@
           <div key={row.id} className={`flex w-full ${fc} ${rh} ${rb} ${zClass} ${borderBottomClassRow}${customStyle.flex ? ' overflow-hidden' : ''}`} style={customStyle}>
             <div className="w-10 sm:w-16 lg:w-20 border-r border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-900/80 shrink-0 sticky left-0 z-20 gap-0.5">
               <div className="text-sm sm:text-xl leading-none">{row.id.startsWith('p')?<span className="text-[11px] sm:text-base text-slate-600 dark:text-slate-300 font-black">{row.id.replace('p','')}</span>:row.icon}</div>
-              <div className="text-[7px] sm:text-[10px] font-black text-slate-500 dark:text-slate-400">{row.name}</div>
+              <div className="text-[8px] sm:text-[10px] font-black text-slate-600 dark:text-slate-300">{row.name}</div>
             </div>
             <div className="flex-1 grid min-w-0" style={{ gridTemplateColumns: 'repeat(19, minmax(0, 1fr))' }}>
               {DAYS.map((day,i)=>{
@@ -3038,7 +3173,7 @@
                 const fontSizeClass = row.id === 'event' ? getEventFontSize(data.subject, isMobile, true) : (row.id === 'lunch' || row.id === 'morning') ? getEventFontSize(data.subject, isMobile) : getDynamicFontSize(data.subject, isMobile, activeTab === 'weekly');
 
                 return (
-                  <div key={i} onClick={()=>{if(isMobile && activeTab==='weekly' && hasData) openViewModal(data,ds,row,i,day,isH); else openEditModal(data,ds,row,i,day,isH,null);}} className={`min-w-0 ${cf} border-r border-slate-200 dark:border-slate-700 last:border-r-0 p-0.5 sm:p-1 cursor-pointer flex flex-col justify-start relative ${overflowClass} ${activeTab==='weekly'&&isT?'bg-blue-50/30 dark:bg-blue-900/10':''} ${cellBg} hover:bg-slate-100/80 dark:hover:bg-slate-700/30 transition-colors h-full`}>
+                  <div key={i} onClick={()=>{if(isMobile && activeTab==='weekly' && hasData) openViewModal(data,ds,row,i,day,isH); else openEditModal(data,ds,row,i,day,isH,null);}} className={`min-w-0 ${cf} border-r border-slate-200 dark:border-slate-700 last:border-r-0 p-0.5 sm:p-1 cursor-pointer flex flex-col justify-start relative ${overflowClass} ${activeTab==='weekly'&&isT?'today-column':''} ${cellBg} hover:bg-slate-100/80 dark:hover:bg-slate-700/30 transition-colors h-full`}>
                     {hasData && (
                       <div className={`cell-card ${blockClasses} rounded-md sm:rounded-lg flex flex-col px-0.5 py-0.5 sm:px-1 sm:py-1 border-l-[3px] sm:border-l-[4px] transition-colors ${row.id === 'morning' ? 'overflow-visible' : 'overflow-y-auto'} ${row.id !== 'afterschool' ? 'hide-scrollbar' : ''} ${blockBg} ${blockBorder}`} style={{...blockStyle, boxShadow:'0 1px 3px rgba(0,0,0,0.08), 0 1px 1px rgba(0,0,0,0.04)'}}>
                         {row.id === 'event' ? (
@@ -3053,7 +3188,7 @@
                           <div className={`space-y-1.5 flex flex-col ${activeTab === 'weekly' ? '' : 'h-full justify-start'}`}>
                             {(data.events?.length?data.events:[{subject:data.subject,start:data.startTime}]).filter(e=>e.subject).slice().sort((a,b)=>(a.startTime||'99:99').localeCompare(b.startTime||'99:99')).map((e,idx)=>(
                               <div key={idx} className="flex flex-col">
-                                {e.startTime && <div className={`text-[6px] sm:text-[9px] font-mono font-bold leading-none opacity-90 ${blockText} mb-0.5`}>{e.startTime}{e.endTime?`-${e.endTime}`:''}</div>}
+                                {e.startTime && <div className={`text-[8px] sm:text-[9px] font-mono font-bold leading-none opacity-80 ${blockText} mb-0.5`}>{e.startTime}{e.endTime?`-${e.endTime}`:''}</div>}
                                 <div className={`${fontSizeClass} font-black mt-0.5 break-words ${activeTab === 'weekly' && row.id !== 'event' ? 'whitespace-pre-wrap line-clamp-3 overflow-hidden' : ''} ${blockText}`} title={e.subject}>{e.subject}</div>
                               </div>
                             ))}
@@ -3062,7 +3197,7 @@
                           <div className={`flex flex-col min-w-0 ${row.id === 'morning' || row.id === 'lunch' ? 'justify-center' : activeTab === 'weekly' ? 'justify-start' : 'justify-center h-full'}`}>
                             {/* 授業コマ（p1〜p6）の時刻表示は不要。休日の予定は時間帯が本質なので表示を残す */}
                             {(data.startTime || data.endTime) && row.id !== 'lunch' && row.id !== 'morning' && (!row.id.startsWith('p') || isH) && (
-                              <div className={`text-[6px] sm:text-[9px] font-mono font-bold opacity-90 shrink-0 ${blockText} mb-0.5`}>
+                              <div className={`text-[8px] sm:text-[9px] font-mono font-bold opacity-80 shrink-0 ${blockText} mb-0.5`}>
                                 {data.startTime}{data.startTime && data.endTime ? '-' : ''}{data.endTime}
                               </div>
                             )}
@@ -3076,14 +3211,14 @@
                                 <div className="flex flex-col min-w-0" title={data.subject}>
                                   <div className="flex items-baseline gap-1 min-w-0">
                                     <span className={`${fontSizeClass} font-black ${blockText} truncate`}>{sm[1]}</span>
-                                    <span className={`text-[8px] sm:text-[9px] font-black shrink-0 ${blockText} opacity-70 bg-white/50 dark:bg-black/20 px-1 rounded`}>{sm[3]}/{sm[4]}</span>
+                                    <span className={`text-[8px] sm:text-[9px] font-black shrink-0 ${blockText} opacity-75 bg-white/60 dark:bg-black/20 px-1 rounded`}>{sm[3]}/{sm[4]}</span>
                                   </div>
-                                  <div className={`text-[7px] sm:text-[8px] font-bold ${blockText} opacity-70 leading-tight line-clamp-2 break-words`}>{sm[2]}</div>
+                                  <div className={`text-[8px] sm:text-[9px] font-bold ${blockText} opacity-75 leading-tight line-clamp-2 break-words`}>{sm[2]}</div>
                                 </div>
                               );
                               return <div className={`${fontSizeClass} font-black break-words ${row.id === 'lunch' || row.id === 'morning' ? 'leading-[1.1]' : ''} ${activeTab === 'weekly' && row.id !== 'event' ? 'whitespace-pre-wrap line-clamp-3 overflow-hidden' : ''} ${blockText}`} title={data.subject}>{data.subject}</div>;
                             })()}
-                            {data.memo && row.id !== 'lunch' && <div className={`text-[6px] sm:text-[9px] font-bold mt-0.5 opacity-80 break-words ${activeTab === 'weekly' && row.id !== 'event' ? 'line-clamp-2 overflow-hidden' : 'line-clamp-1'} ${blockText}`}>{data.memo}</div>}
+                            {data.memo && row.id !== 'lunch' && <div className={`text-[8px] sm:text-[9px] font-bold mt-0.5 opacity-80 break-words leading-tight ${activeTab === 'weekly' && row.id !== 'event' ? 'line-clamp-2 overflow-hidden' : 'line-clamp-1'} ${blockText}`}>{data.memo}</div>}
                           </div>
                         )}
                       </div>
@@ -3170,10 +3305,10 @@
                         const color = COLORS[idx % COLORS.length];
                         return (
                           <div key={idx} onClick={(ev)=>{ev.stopPropagation(); openEditModal(getCellData(dateStr,e.pid,i),dateStr,ROWS.find(r=>r.id===e.pid),i,day,true,null);}}
-                               className="absolute left-1 right-1 sm:left-1.5 sm:right-1.5 rounded shadow-md cursor-pointer hover:shadow-lg z-40 hover:z-50 overflow-y-auto hide-scrollbar flex flex-col p-1 sm:p-1.5 transition-all bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600"
-                               style={{ top: `${topPct}%`, height: `${heightPct}%`, minHeight:'32px', borderLeft: `4px solid ${color}` }}>
-                            {e.start && <div className="text-[7px] sm:text-[9px] font-mono font-bold leading-none mb-1 opacity-90 shrink-0" style={{color}}>{e.start}{e.end?`-${e.end}`:''}</div>}
-                            <div className={`${getDynamicFontSize(e.subject, isMobile)} font-black leading-tight text-slate-800 dark:text-slate-200 break-words whitespace-pre-wrap`}>{e.subject}</div>
+                               className="absolute left-1 right-1 sm:left-1.5 sm:right-1.5 rounded shadow-md cursor-pointer hover:shadow-lg z-40 hover:z-50 overflow-hidden flex flex-col px-1 py-0.5 sm:px-1.5 sm:py-1 transition-all bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600"
+                               style={{ top: `${topPct}%`, height: `${heightPct}%`, minHeight:'34px', borderLeft: `4px solid ${color}` }}>
+                            {e.start && <div className="text-[7px] sm:text-[9px] font-mono font-bold leading-none mb-0.5 opacity-90 shrink-0" style={{color}}>{e.start}{e.end?`-${e.end}`:''}</div>}
+                            <div className={`${getDynamicFontSize(e.subject, isMobile)} font-black leading-[1.05] text-slate-800 dark:text-slate-200 break-words line-clamp-2`}>{e.subject}</div>
                           </div>
                         )
                       })}
@@ -3255,6 +3390,10 @@
                 <button onClick={() => setShowTodo(true)} className="bg-slate-100 dark:bg-slate-700 hover:bg-blue-50 dark:hover:bg-blue-900/30 border border-slate-200 dark:border-slate-600 hover:border-blue-300 px-1.5 sm:px-2.5 py-1 h-7 rounded-md text-[10px] font-bold text-slate-600 dark:text-slate-300 hover:text-blue-700 dark:hover:text-blue-300 transition-all flex items-center gap-1 sm:gap-1.5 active:scale-95 relative" title="TODO">
                   <span className="text-sm leading-none">📝</span><span className="hidden lg:inline">TODO</span>
                   {todos.filter(t=>!t.completed).length > 0 && <span className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center shadow border-2 border-white dark:border-slate-800">{todos.filter(t=>!t.completed).length}</span>}
+                </button>
+                <button onClick={saveStatus==='error'||saveStatus==='offline' ? retryPendingCloudSaves : undefined} className={`h-7 px-2 rounded-md border text-[9px] sm:text-[10px] font-black flex items-center gap-1 whitespace-nowrap transition-colors ${saveStatus==='saving'?'bg-blue-50 text-blue-700 border-blue-200':saveStatus==='error'?'bg-rose-50 text-rose-700 border-rose-300 hover:bg-rose-100':saveStatus==='offline'?'bg-amber-50 text-amber-700 border-amber-300 hover:bg-amber-100':'bg-emerald-50 text-emerald-700 border-emerald-200'}`} title={lastSavedAt ? `最終保存 ${lastSavedAt.toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'})}` : '保存状態'}>
+                  <span>{saveStatus==='saving'?'↻':saveStatus==='error'?'!':saveStatus==='offline'?'○':'✓'}</span>
+                  <span className="hidden xl:inline">{saveStatus==='saving'?'保存中':saveStatus==='error'?'再試行':saveStatus==='offline'?'端末に保存':'保存済み'}</span>
                 </button>
               </div>
             </div>
@@ -3346,7 +3485,7 @@
             {/* 🌟 週案 または 基本設定 */}
             {(activeTab === 'weekly' || activeTab === 'template') && (
               <div className={`flex flex-col ${activeTab === 'weekly' ? 'md:flex-row min-h-0' : 'md:flex-row md:justify-center md:items-start overflow-y-auto pb-24 md:overflow-hidden md:pb-0'} h-full w-full ${isMobile && activeTab === 'weekly' ? 'p-1 gap-1' : 'p-2 sm:p-3 lg:p-4 gap-3 sm:gap-4'}`}>
-                <div className={`${activeTab === 'template' ? 'w-full max-w-[1000px] md:w-[60%] shrink-0 h-auto md:h-full' : 'flex-1 min-h-0'} bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden flex flex-col min-w-0`}>
+                <div className={`${activeTab === 'template' ? 'w-full max-w-[1000px] md:w-[60%] shrink-0 h-auto md:h-full' : 'flex-1 min-h-0 weekly-panel'} bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden flex flex-col min-w-0`}>
                   <div className={`flex bg-slate-50 dark:bg-slate-900/60 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-40 justify-between items-center shrink-0 ${isMobile && activeTab === 'weekly' ? 'px-1.5 py-1.5' : 'px-3 py-2'}`}>
                     {activeTab === 'weekly' ? (
                       <div className="flex items-center gap-2 w-full overflow-hidden">
@@ -3411,7 +3550,7 @@
                           const setting=getDaySetting(ds,i); const style=SCHEDULE_TYPES[setting.type];
                           const isHoliday = activeTab==='weekly' && setting.type==='holiday';
                           const isWorkday = activeTab==='weekly' && setting.type==='work';
-                          const headerBg = isHoliday ? 'bg-rose-50/80 dark:bg-rose-900/20' : isWorkday ? 'bg-emerald-50/80 dark:bg-emerald-900/20' : (activeTab==='weekly'&&isT ? 'bg-blue-50/80 dark:bg-blue-900/20' : '');
+                          const headerBg = isHoliday ? 'bg-rose-50/80 dark:bg-rose-900/20' : isWorkday ? 'bg-emerald-50/80 dark:bg-emerald-900/20' : (activeTab==='weekly'&&isT ? 'today-column' : '');
 
                           return (
                             <div key={d} className={`min-w-0 ${cf} flex flex-col justify-center text-center border-r border-slate-200 dark:border-slate-700 last:border-0 ${headerBg} ${isMobile && activeTab === 'weekly' ? 'py-0.5 px-0.5' : 'py-1.5 px-1'}`}>
@@ -4256,6 +4395,16 @@
                         <p className="text-xs text-slate-600 mb-4 font-bold">手元の端末に全データを保存、または復元します。万が一のデータ消失に備えて定期的にバックアップしてください。</p>
                         
                         <div className="space-y-3">
+                          <div className="flex items-center justify-between rounded-xl bg-white border border-blue-200 px-3 py-2">
+                            <div>
+                              <div className="text-xs font-black text-slate-700">自動バックアップ</div>
+                              <div className="text-[10px] font-bold text-slate-500">6時間ごと・最大4世代</div>
+                            </div>
+                            <span className="text-sm font-black text-blue-700">{autoBackupCount}件</span>
+                          </div>
+                          <button onClick={restoreLatestAutoBackup} disabled={autoBackupCount===0} className="w-full bg-indigo-50 text-indigo-700 border border-indigo-300 py-2.5 rounded-xl font-black shadow-sm hover:bg-indigo-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+                            🕘 最新の自動バックアップに戻す
+                          </button>
                           <button onClick={exportData} className="w-full bg-blue-600 text-white py-2.5 rounded-xl font-black shadow-md hover:bg-blue-700 transition-colors flex items-center justify-center gap-2">
                             <span>📥 データをダウンロード</span>
                           </button>
@@ -4501,6 +4650,19 @@
                 <button onClick={exportToGoogleCalendar} className="text-[10px] font-bold bg-green-50 text-green-700 border border-green-200 px-3 py-1.5 rounded-lg shadow-sm hover:bg-green-100">📅 カレンダー出力</button>
                 <button onClick={() => setShowTodo(false)} className="text-slate-400 hover:text-slate-600 text-2xl font-bold ml-2 transition-colors">&times;</button>
               </div>
+            </div>
+            <div className="grid grid-cols-4 gap-2 px-5 py-3 bg-white border-b border-slate-200">
+              {[
+                {label:'期限超過',count:todoSummary.overdue,cls:'text-rose-700 bg-rose-50 border-rose-200'},
+                {label:'今日',count:todoSummary.today,cls:'text-amber-700 bg-amber-50 border-amber-200'},
+                {label:'7日以内',count:todoSummary.week,cls:'text-blue-700 bg-blue-50 border-blue-200'},
+                {label:'期限なし',count:todoSummary.noDate,cls:'text-slate-600 bg-slate-50 border-slate-200'},
+              ].map(item => (
+                <div key={item.label} className={`rounded-xl border px-2 py-2 text-center ${item.cls}`}>
+                  <div className="text-lg font-black leading-none">{item.count}</div>
+                  <div className="text-[9px] sm:text-[10px] font-bold mt-1 whitespace-nowrap">{item.label}</div>
+                </div>
+              ))}
             </div>
             <div className="flex-1 overflow-y-auto p-5 space-y-4">
               {incompleteTodos.map((t, index) => {
@@ -5189,7 +5351,15 @@
                 
                 {editingCell.periodId.startsWith('p') ? (
                   <div className="sticky bottom-0 z-20 bg-white -mx-5 sm:-mx-8 px-5 sm:px-8 -mb-5 sm:-mb-8 mt-5 sm:mt-6 pt-3 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:pb-8 border-t border-slate-200 space-y-2.5 shadow-[0_-4px_12px_rgba(15,23,42,0.06)]">
-                    <button onClick={()=>{const data={subject:tempSubject,memo:tempMemo,startTime:tempStartTime,endTime:tempEndTime,handwriting:tempHandwriting,color:tempColor||''}; handleSaveCell(data); showToast('✅ 確定しました');}} className="w-full py-3.5 bg-blue-600 text-white rounded-xl font-black text-sm sm:text-base shadow-md active:scale-[0.98] transition-transform hover:bg-blue-700">確定する</button>
+                    {!editingCell.isTemplate ? (
+                      <div className="grid grid-cols-[1fr_1.35fr_1fr] gap-2">
+                        <button onClick={()=>saveAndMoveEditCell(-1)} disabled={editingCell.dayIndex===0&&editingCell.periodId==='p1'} className="py-3 bg-slate-100 text-slate-700 border border-slate-300 rounded-xl font-black text-xs sm:text-sm shadow-sm hover:bg-slate-200 active:scale-95 transition-all disabled:opacity-35 disabled:cursor-not-allowed">← 前へ</button>
+                        <button onClick={()=>{const data={subject:tempSubject,memo:tempMemo,startTime:tempStartTime,endTime:tempEndTime,handwriting:tempHandwriting,color:tempColor||''}; handleSaveCell(data); showToast('✅ 保存しました');}} className="py-3 bg-blue-600 text-white rounded-xl font-black text-sm sm:text-base shadow-md active:scale-[0.98] transition-transform hover:bg-blue-700">保存</button>
+                        <button onClick={()=>saveAndMoveEditCell(1)} disabled={editingCell.dayIndex===4&&editingCell.periodId==='p6'} className="py-3 bg-indigo-50 text-indigo-700 border border-indigo-300 rounded-xl font-black text-xs sm:text-sm shadow-sm hover:bg-indigo-100 active:scale-95 transition-all disabled:opacity-35 disabled:cursor-not-allowed">次へ →</button>
+                      </div>
+                    ) : (
+                      <button onClick={()=>{const data={subject:tempSubject,memo:tempMemo,startTime:tempStartTime,endTime:tempEndTime,handwriting:tempHandwriting,color:tempColor||''}; handleSaveCell(data); showToast('✅ 確定しました');}} className="w-full py-3.5 bg-blue-600 text-white rounded-xl font-black text-sm sm:text-base shadow-md active:scale-[0.98] transition-transform hover:bg-blue-700">確定する</button>
+                    )}
                     <div className="flex gap-2">
                       <button onClick={()=>{ const m=matchCellSyllabus(tempSubject); const base = m && m.subj ? `${m.cls||''}${m.subj.name}` : (tempSubject.split('（')[0] || ''); const text = base ? `自習（${base}）` : '自習'; handleSaveCell({subject:text,memo:tempMemo,startTime:tempStartTime,endTime:tempEndTime,handwriting:tempHandwriting,color:'special'}); showToast('📖 自習にしました'); }} className="flex-1 py-2.5 bg-amber-50 border border-amber-300 text-amber-700 rounded-xl font-black text-xs sm:text-sm shadow-sm active:scale-95 transition-transform hover:bg-amber-100">自習</button>
                       <button onClick={()=>{handleSaveCell({subject:'',memo:'',startTime:'',endTime:'',events:[],color:''}); showToast('⬜ 空きコマにしました');}} className="flex-1 py-2.5 bg-rose-50 border border-rose-200 text-rose-600 rounded-xl font-black text-xs sm:text-sm shadow-sm active:scale-95 transition-transform hover:bg-rose-100">空きコマ</button>
