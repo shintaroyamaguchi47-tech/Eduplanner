@@ -915,6 +915,8 @@
       const [googleCalAutoSync, setGoogleCalAutoSync] = useState(() => { try { return localStorage.getItem('eduplanner_googleCalAutoSync') !== '0'; } catch (e) { return true; } });
       const [googleCalLastSync, setGoogleCalLastSync] = useState(() => { try { return localStorage.getItem('eduplanner_googleCalLastSync') || ''; } catch (e) { return ''; } });
       const [googleCalSyncing, setGoogleCalSyncing] = useState(false);
+      // TODOをGoogleカレンダーの「タスク」として登録する（オフのときは従来どおり終日予定として登録）
+      const [googleTasksSync, setGoogleTasksSync] = useState(() => { try { return localStorage.getItem('eduplanner_googleTasksSync') === '1'; } catch (e) { return false; } });
       const gisTokenClientRef = useRef(null);
       const gisTokenClientIdRef = useRef('');
       const gisTokenResolveRef = useRef(null);
@@ -1033,6 +1035,11 @@
 
       // Googleカレンダー自動同期: アプリを開いたときに今日から1週間の予定と未完了TODOを反映
       const GCAL_SYNC_TAG = 'eduplannerSync';
+      const GCAL_SCOPE = 'https://www.googleapis.com/auth/calendar.events';
+      const GTASKS_SCOPE = 'https://www.googleapis.com/auth/tasks';
+      const GTASKS_API = 'https://tasks.googleapis.com/tasks/v1';
+      // Googleタスクには拡張プロパティがないため、メモ欄の印でEduPlanner由来のタスクを見分ける
+      const GTASKS_MARK_RE = /\[EduPlanner:(todo-[^\]]+)\]/;
 
       const waitForGis = (timeoutMs = 6000) => new Promise((resolve) => {
         const start = Date.now();
@@ -1044,12 +1051,13 @@
         check();
       });
 
-      const getGisTokenClient = () => {
-        if (gisTokenClientRef.current && gisTokenClientIdRef.current === googleClientId) return gisTokenClientRef.current;
+      const getGisTokenClient = (scope) => {
+        const cacheKey = `${googleClientId}|${scope}`;
+        if (gisTokenClientRef.current && gisTokenClientIdRef.current === cacheKey) return gisTokenClientRef.current;
         if (!window.google?.accounts?.oauth2 || !googleClientId) return null;
         const client = window.google.accounts.oauth2.initTokenClient({
           client_id: googleClientId,
-          scope: 'https://www.googleapis.com/auth/calendar.events',
+          scope,
           callback: (resp) => {
             const resolve = gisTokenResolveRef.current;
             gisTokenResolveRef.current = null;
@@ -1057,14 +1065,14 @@
           },
         });
         gisTokenClientRef.current = client;
-        gisTokenClientIdRef.current = googleClientId;
+        gisTokenClientIdRef.current = cacheKey;
         return client;
       };
 
-      const requestGoogleToken = async (prompt) => {
+      const requestGoogleToken = async (prompt, scope = GCAL_SCOPE) => {
         const ready = await waitForGis();
         if (!ready) return { error: 'gis_not_ready' };
-        const client = getGisTokenClient();
+        const client = getGisTokenClient(scope);
         if (!client) return { error: 'no_client_id' };
         return new Promise((resolve) => {
           gisTokenResolveRef.current = resolve;
@@ -1217,7 +1225,109 @@
         if (!res.ok) throw new Error(`gcal_upsert_${res.status}`);
       };
 
-      const runGoogleCalendarSync = async ({ silent = false } = {}) => {
+      // ---- Googleタスク（Googleカレンダー右側の「ToDoリスト」）への同期 ----
+      const buildTodoTaskItems = () => todos.filter(t => t.text?.trim()).map(t => {
+        const noteLines = [];
+        if (t.tag) noteLines.push(`#${t.tag}`);
+        if (t.minutes) noteLines.push(`目安 ${t.minutes}分`);
+        noteLines.push(`[EduPlanner:todo-${t.id}]`);
+        return {
+          key: `todo-${t.id}`,
+          title: `${t.important ? '★ ' : ''}${t.text}`.trim(),
+          notes: noteLines.join('\n'),
+          due: t.dueDate ? `${t.dueDate}T00:00:00.000Z` : null,
+          completed: !!t.completed,
+        };
+      });
+
+      const gtasksFetch = async (token, path, options = {}) => {
+        const res = await fetch(`${GTASKS_API}${path}`, {
+          ...options,
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', ...(options.headers || {}) },
+        });
+        return res;
+      };
+
+      const deleteGoogleTask = async (token, taskListId, taskId) => {
+        const res = await gtasksFetch(token, `/lists/${taskListId}/tasks/${taskId}`, { method: 'DELETE' });
+        if (!res.ok && res.status !== 404 && res.status !== 410) throw new Error(`gtasks_delete_${res.status}`);
+      };
+
+      // 既定のタスクリストのIDを取得（'@default' が使えない環境があるため実IDを引く）
+      const fetchDefaultTaskListId = async (token) => {
+        const res = await gtasksFetch(token, '/users/@me/lists?maxResults=1');
+        if (!res.ok) throw new Error(`gtasks_lists_${res.status}`);
+        const data = await res.json();
+        return data.items?.[0]?.id || '@default';
+      };
+
+      // EduPlannerが作った（メモに印のある）タスクを全件取得し、key→タスクのマップを返す
+      const fetchSyncedGoogleTasks = async (token, taskListId) => {
+        const map = {};
+        const duplicateIds = [];
+        let pageToken = '';
+        do {
+          const params = new URLSearchParams({ maxResults: '100', showCompleted: 'true', showHidden: 'true' });
+          if (pageToken) params.set('pageToken', pageToken);
+          const res = await gtasksFetch(token, `/lists/${taskListId}/tasks?${params.toString()}`);
+          if (!res.ok) throw new Error(`gtasks_list_${res.status}`);
+          const data = await res.json();
+          (data.items || []).forEach(task => {
+            const m = (task.notes || '').match(GTASKS_MARK_RE);
+            if (!m) return;
+            if (map[m[1]]) duplicateIds.push(task.id);
+            else map[m[1]] = task;
+          });
+          pageToken = data.nextPageToken || '';
+        } while (pageToken);
+        // 過去の同期で二重登録されたタスクを掃除する
+        for (const id of duplicateIds) await deleteGoogleTask(token, taskListId, id);
+        return map;
+      };
+
+      const upsertGoogleTask = async (token, taskListId, existing, item) => {
+        if (!existing) {
+          // 完了済みのTODOをわざわざ作り直さない（アプリ側で完了→Google側は未作成のまま）
+          if (item.completed) return false;
+          const body = { title: item.title, notes: item.notes, status: 'needsAction' };
+          if (item.due) body.due = item.due;
+          const res = await gtasksFetch(token, `/lists/${taskListId}/tasks`, { method: 'POST', body: JSON.stringify(body) });
+          if (!res.ok) throw new Error(`gtasks_insert_${res.status}`);
+          return true;
+        }
+        const sameDue = (existing.due || '').slice(0, 10) === (item.due || '').slice(0, 10);
+        const sameStatus = (existing.status === 'completed') === item.completed;
+        if (existing.title === item.title && (existing.notes || '') === item.notes && sameDue && sameStatus) return false;
+        const body = {
+          title: item.title,
+          notes: item.notes,
+          due: item.due,
+          status: item.completed ? 'completed' : 'needsAction',
+        };
+        if (!item.completed) body.completed = null;
+        const res = await gtasksFetch(token, `/lists/${taskListId}/tasks/${existing.id}`, { method: 'PATCH', body: JSON.stringify(body) });
+        if (!res.ok) throw new Error(`gtasks_patch_${res.status}`);
+        return true;
+      };
+
+      const syncTodosToGoogleTasks = async (token) => {
+        const taskListId = await fetchDefaultTaskListId(token);
+        const items = buildTodoTaskItems();
+        const existingMap = await fetchSyncedGoogleTasks(token, taskListId);
+
+        // アプリ側で削除されたTODOはGoogleタスクからも消す（完了したものは完了状態にして残す）
+        const currentKeys = new Set(items.map(it => it.key));
+        for (const key of Object.keys(existingMap)) {
+          if (currentKeys.has(key)) continue;
+          await deleteGoogleTask(token, taskListId, existingMap[key].id);
+        }
+        for (const item of items) {
+          await upsertGoogleTask(token, taskListId, existingMap[item.key], item);
+        }
+        return items.filter(it => !it.completed).length;
+      };
+
+      const runGoogleCalendarSync = async ({ silent = false, tasksEnabled } = {}) => {
         if (!googleClientId.trim()) {
           if (!silent) showToast('先にGoogle OAuthクライアントIDを入力してください');
           return false;
@@ -1226,18 +1336,25 @@
         googleCalSyncInFlightRef.current = true;
         setGoogleCalSyncing(true);
         try {
-          let tokenResp = await requestGoogleToken(silent ? '' : 'consent');
+          const useTasks = tasksEnabled === undefined ? googleTasksSync : tasksEnabled;
+          const scope = useTasks ? `${GCAL_SCOPE} ${GTASKS_SCOPE}` : GCAL_SCOPE;
+          let tokenResp = await requestGoogleToken(silent ? '' : 'consent', scope);
           if (!tokenResp || tokenResp.error || !tokenResp.access_token) {
             if (!silent) showToast('Googleカレンダーとの連携に失敗しました。もう一度お試しください');
             return false;
           }
           const token = tokenResp.access_token;
+          // タスクの権限が許可されなかった場合は、TODOは従来どおりカレンダーの予定として登録する
+          const tasksGranted = useTasks && (tokenResp.scope || '').split(' ').includes(GTASKS_SCOPE);
+          if (useTasks && !tasksGranted && !silent) {
+            showToast('Googleタスクへのアクセスが許可されていません。TODOはカレンダーの予定として登録します');
+          }
 
           const startDate = getJSTDate();
           const rangeEnd = new Date(startDate); rangeEnd.setDate(rangeEnd.getDate() + 7);
 
           const scheduleEvents = buildScheduleEventsForSync(startDate, 7);
-          const todoEvents = buildTodoEventsForSync();
+          const todoEvents = tasksGranted ? [] : buildTodoEventsForSync();
           const allItems = [...scheduleEvents, ...todoEvents];
 
           const existingMap = await fetchSyncedGcalEvents(token);
@@ -1267,10 +1384,16 @@
             await upsertGcalEvent(token, existingMap, item);
           }
 
+          let taskCount = 0;
+          if (tasksGranted) taskCount = await syncTodosToGoogleTasks(token);
+
           const nowIso = new Date().toISOString();
           setGoogleCalLastSync(nowIso);
           try { localStorage.setItem('eduplanner_googleCalLastSync', nowIso); } catch (e) {}
-          if (!silent) showToast(`Googleカレンダーに${scheduleEvents.length + todoEvents.length}件を同期しました`);
+          if (!silent) {
+            const msg = `Googleカレンダーに${scheduleEvents.length + todoEvents.length}件を同期しました`;
+            showToast(tasksGranted ? `${msg}（TODO ${taskCount}件はGoogleタスクに登録）` : msg);
+          }
           return true;
         } catch (e) {
           console.error('Google Calendar sync error:', e);
@@ -1310,6 +1433,17 @@
         setGoogleCalAutoSync(next);
         try { localStorage.setItem('eduplanner_googleCalAutoSync', next ? '1' : '0'); } catch (e) {}
         saveToFirestore('extra', { googleCalSettings: { autoSync: next } });
+      };
+
+      const toggleGoogleTasksSync = async () => {
+        const next = !googleTasksSync;
+        setGoogleTasksSync(next);
+        try { localStorage.setItem('eduplanner_googleTasksSync', next ? '1' : '0'); } catch (e) {}
+        saveToFirestore('extra', { googleCalSettings: { tasksSync: next } });
+        // 要求するスコープが変わるので、トークンクライアントを作り直して許可を取り直す
+        gisTokenClientRef.current = null;
+        if (next) await runGoogleCalendarSync({ silent: false, tasksEnabled: true });
+        else showToast('TODOは今後カレンダーの予定として登録されます（Googleタスクに登録済みのものは残ります）');
       };
 
       const todayStr = formatDate(getJSTDate());
@@ -1606,6 +1740,7 @@
                 if (typeof g.clientId === 'string' && g.clientId) { setGoogleClientId(g.clientId); try { localStorage.setItem('eduplanner_googleClientId', g.clientId); } catch(e) {} }
                 if (typeof g.connected === 'boolean') { setGoogleCalConnected(g.connected); try { localStorage.setItem('eduplanner_googleCalConnected', g.connected ? '1' : '0'); } catch(e) {} }
                 if (typeof g.autoSync === 'boolean') { setGoogleCalAutoSync(g.autoSync); try { localStorage.setItem('eduplanner_googleCalAutoSync', g.autoSync ? '1' : '0'); } catch(e) {} }
+                if (typeof g.tasksSync === 'boolean') { setGoogleTasksSync(g.tasksSync); try { localStorage.setItem('eduplanner_googleTasksSync', g.tasksSync ? '1' : '0'); } catch(e) {} }
               }
             }
             markLoaded('extra', s.exists());
@@ -4329,7 +4464,7 @@
                       <div className="border border-emerald-200 bg-emerald-50/50 rounded-2xl p-5 shadow-sm md:col-span-2 dark:bg-emerald-900/20 dark:border-emerald-800">
                         <h3 className="text-lg font-black text-emerald-900 dark:text-emerald-300 mb-2 flex items-center gap-2">📅 Googleカレンダー自動同期</h3>
                         <p className="text-xs text-slate-600 dark:text-slate-400 mb-4 font-bold">
-                          アプリを開いたときに、今日から1週間分の予定と未完了のTODOを自動でGoogleカレンダーに反映します（アプリを開いていない間は同期されません）。EduPlanner側で作成・更新した予定のみを対象とし、あなたがGoogleカレンダー側で直接追加した予定は削除されません。
+                          アプリを開いたときに、今日から1週間分の予定と未完了のTODOを自動でGoogleカレンダーに反映します（アプリを開いていない間は同期されません）。TODOはカレンダーの終日予定、または下の設定で「Googleタスク」として登録できます。EduPlanner側で作成・更新した予定のみを対象とし、あなたがGoogleカレンダー側で直接追加した予定は削除されません。
                         </p>
 
                         <div className="space-y-3">
@@ -4367,6 +4502,16 @@
                                 </div>
                                 <button onClick={toggleGoogleCalAutoSync} className={`w-14 h-8 rounded-full transition-colors relative shadow-inner shrink-0 ${googleCalAutoSync ? 'bg-emerald-600' : 'bg-slate-300'}`}>
                                   <div className={`absolute top-1 left-1 w-6 h-6 rounded-full bg-white shadow-sm transition-transform ${googleCalAutoSync ? 'translate-x-6' : 'translate-x-0'}`}></div>
+                                </button>
+                              </div>
+
+                              <div className="flex items-center justify-between pt-2 border-t border-emerald-100 dark:border-emerald-800">
+                                <div className="pr-3">
+                                  <div className="font-bold text-slate-800 dark:text-slate-200 text-sm">TODOを「Googleタスク」に登録する</div>
+                                  <div className="text-xs text-slate-500 dark:text-slate-400 font-bold">オンにすると、TODOはカレンダーの予定ではなくGoogleカレンダー内の「ToDoリスト（Googleタスク）」に期日つきで登録されます。アプリで完了にするとGoogle側も完了、削除するとGoogle側も削除されます。初回はタスクへのアクセス許可を求められます。</div>
+                                </div>
+                                <button onClick={toggleGoogleTasksSync} disabled={googleCalSyncing} className={`w-14 h-8 rounded-full transition-colors relative shadow-inner shrink-0 disabled:opacity-40 ${googleTasksSync ? 'bg-emerald-600' : 'bg-slate-300'}`}>
+                                  <div className={`absolute top-1 left-1 w-6 h-6 rounded-full bg-white shadow-sm transition-transform ${googleTasksSync ? 'translate-x-6' : 'translate-x-0'}`}></div>
                                 </button>
                               </div>
                               <button onClick={() => runGoogleCalendarSync({ silent: false })} disabled={googleCalSyncing}
