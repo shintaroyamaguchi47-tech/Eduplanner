@@ -924,6 +924,7 @@
       const [showHandwritingPad, setShowHandwritingPad] = useState(false);
       const [unitPlanSubjIdx, setUnitPlanSubjIdx] = useState(0);
       const [unitPlanShowSettings, setUnitPlanShowSettings] = useState(false);
+      const [collapsedUnits, setCollapsedUnits] = useState({});
 
       const [editingWeekMemo, setEditingWeekMemo] = useState(null);
       const [showWeekMemoPad, setShowWeekMemoPad] = useState(false);
@@ -2793,6 +2794,114 @@
         return { ...m, subj: syllabusData[m.idx] };
       };
 
+      // 週案のコマ文字列（例: 201社会（単元名 3/5））から、単元計画に登録した
+      // その時間の学習活動・内容を引く。単元が見つからなければ null。
+      const CELL_UNIT_PAT = /^(.+?)（(.+)\s+(\d+)\/(\d+)）$/;
+      const getCellLessonInfo = (subjStr) => {
+        const m = (subjStr || '').match(CELL_UNIT_PAT);
+        if (!m) return null;
+        const subj = matchCellSyllabus(subjStr)?.subj;
+        if (!subj || subj.type !== 'auto' || !subj.units?.length) return null;
+        const unitIdx = subj.units.findIndex(u => u.name === m[2]);
+        if (unitIdx < 0) return null;
+        const hour = parseInt(m[3], 10);
+        return { subj, unitIdx, unit: subj.units[unitIdx], hour, content: (subj.units[unitIdx].lessonContents || [])[hour - 1] || '' };
+      };
+
+      // 時数を変えたとき、学習活動・内容の行数を時数に合わせる
+      const withHours = (unit, hours) => {
+        const h = Math.max(1, hours);
+        const lc = [...(unit.lessonContents || [])];
+        while (lc.length < h) lc.push('');
+        return { ...unit, hours: h, lessonContents: lc.slice(0, h) };
+      };
+
+      // 単元の並び替え。各クラスの進度が同じ単元を指したままになるよう付け替える
+      const moveUnit = (subjIdx, from, to) => {
+        const u = [...syllabusData];
+        const s = u[subjIdx];
+        const units = [...(s.units || [])];
+        if (from === to || to < 0 || to >= units.length) return;
+        const [moved] = units.splice(from, 1);
+        units.splice(to, 0, moved);
+        const remap = (idx) => {
+          if (idx === from) return to;
+          if (from < idx && idx <= to) return idx - 1;
+          if (to <= idx && idx < from) return idx + 1;
+          return idx;
+        };
+        const cp = { ...(s.classProgress || {}) };
+        Object.keys(cp).forEach(k => { cp[k] = { ...cp[k], currentUnitIdx: remap(cp[k].currentUnitIdx || 0) }; });
+        u[subjIdx] = { ...s, units, rawText: formatUnits(units), classProgress: cp, currentUnitIdx: remap(s.currentUnitIdx || 0) };
+        saveSyllabus(u);
+      };
+
+      // 単元の削除。進度が後ろの単元を指していたら1つ前へ詰める
+      const removeUnit = (subjIdx, unitIdx) => {
+        const u = [...syllabusData];
+        const s = u[subjIdx];
+        const units = (s.units || []).filter((_, x) => x !== unitIdx);
+        const adjust = (pr) => {
+          let nu = pr.currentUnitIdx || 0, nh = pr.currentHour || 1;
+          if (unitIdx < nu) nu = Math.max(0, nu - 1);
+          else if (unitIdx === nu) { nh = 1; if (nu >= units.length) nu = Math.max(0, units.length - 1); }
+          return { currentUnitIdx: nu, currentHour: nh };
+        };
+        const cp = { ...(s.classProgress || {}) };
+        Object.keys(cp).forEach(k => { cp[k] = adjust(cp[k]); });
+        const g = adjust({ currentUnitIdx: s.currentUnitIdx || 0, currentHour: s.currentHour || 1 });
+        u[subjIdx] = { ...s, units, rawText: formatUnits(units), classProgress: cp, currentUnitIdx: g.currentUnitIdx, currentHour: g.currentHour };
+        saveSyllabus(u);
+      };
+
+      // 1つの単元を差し替える
+      const updateUnit = (subjIdx, unitIdx, nextUnit, persist = true) => {
+        const u = [...syllabusData];
+        const units = u[subjIdx].units.map((x, i) => i === unitIdx ? nextUnit : x);
+        u[subjIdx] = { ...u[subjIdx], units, rawText: formatUnits(units) };
+        if (persist) saveSyllabus(u); else setSyllabusData(u);
+      };
+
+      // 単元名を変更する。週案に入力済みのコマは単元名で単元計画と照合しているので、
+      // 表記も一緒に書き換えて紐付けが切れないようにする。
+      const commitUnitName = (subjIdx, unitIdx, newName) => {
+        const s = syllabusData[subjIdx];
+        const oldName = s?.units?.[unitIdx]?.name;
+        const nm = (newName || '').trim();
+        if (!s || !oldName || !nm || nm === oldName) return;
+        const u = [...syllabusData];
+        const units = u[subjIdx].units.map((x, i) => i === unitIdx ? { ...x, name: nm } : x);
+        u[subjIdx] = { ...u[subjIdx], units, rawText: formatUnits(units) };
+
+        const esc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const prefixes = s.classes?.length ? s.classes : [''];
+        const head = `(?:${prefixes.map(esc).join('|')})${esc(s.name)}（`;
+        const re = new RegExp(`^(${head})${esc(oldName)}((?: \\d+/\\d+| 単元テスト)）)$`);
+        const nd = { ...weeklyData };
+        let changed = 0;
+        Object.keys(nd).forEach(k => {
+          const cell = nd[k];
+          const m = cell?.subject?.match(re);
+          if (m) { nd[k] = { ...cell, subject: `${m[1]}${nm}${m[2]}` }; changed++; }
+        });
+
+        saveSyllabus(u);
+        if (changed) {
+          saveAll(baseTemplate, templateSettings, nd, weeklySettings);
+          showToast(`✏️ 週案の${changed}コマも「${nm}」に更新しました`);
+        }
+      };
+
+      // 「単元名,時数」を1行ずつ並べたテキストから単元をまとめて登録する
+      // 区切りは , 、 全角読点 タブ / 空白 のいずれでも可。時数の指定がなければ1時間扱い。
+      const parseUnitsText = (text) => (text || '').split('\n').map(line => {
+        const t = line.trim();
+        if (!t) return null;
+        const m = t.match(/^(.*?)[\s,、\t]+(\d+)\s*(?:時間|時|h|H)?$/);
+        if (m && m[1].trim()) return { name: m[1].trim(), hours: Math.max(1, parseInt(m[2], 10)), lessonContents: [] };
+        return { name: t, hours: 1, lessonContents: [] };
+      }).filter(Boolean);
+
       const saveNoteQuietly = (note) => { if(!note) return; const editor = document.getElementById('note-editor'); const currentContent = editor ? editor.innerHTML : note.content || ''; const noteToSave = {...note, content: currentContent}; if(!noteToSave.title.trim()&&!noteToSave.content.trim()) return; if(noteToSave.type==='diary'){ const wk=`${noteToSave.dateStr}-diary`; const nd={...weeklyData,[wk]:{...(weeklyData[wk]||{}),memo:noteToSave.content,useTemplate:false}}; setWeeklyData(nd); saveAll(baseTemplate,templateSettings,nd,weeklySettings); } else { const isN=!notesData.some(n=>n.id===noteToSave.id); const ts=Date.now(); const nn=isN?[{...noteToSave,type:'note',updatedAt:ts},...notesData]:notesData.map(n=>n.id===noteToSave.id?{...noteToSave,updatedAt:ts}:n); saveNotes(nn); } };
       const triggerNoteAutoSave = (note) => { if(noteAutoSaveTimerRef.current) clearTimeout(noteAutoSaveTimerRef.current); setNoteAutoSaveStatus('editing'); noteAutoSaveTimerRef.current = setTimeout(() => { saveNoteQuietly(note); setNoteAutoSaveStatus('saved'); setTimeout(() => setNoteAutoSaveStatus(''), 2000); }, 1000); };
       const handleSaveNote = () => { if(noteAutoSaveTimerRef.current) clearTimeout(noteAutoSaveTimerRef.current); if(!editingNote.title.trim()&&!editingNote.content.trim()){ setEditingNote(null); return; } const editor = document.getElementById('note-editor'); const currentContent = editor ? editor.innerHTML : editingNote.content || ''; const noteToSave = {...editingNote, content: currentContent}; if(noteToSave.type==='diary'){ const wk=`${noteToSave.dateStr}-diary`; const nd={...weeklyData,[wk]:{...(weeklyData[wk]||{}),memo:noteToSave.content,useTemplate:false}}; setWeeklyData(nd); saveAll(baseTemplate,templateSettings,nd,weeklySettings); showToast('メモを更新しました'); } else { const isN=!notesData.some(n=>n.id===noteToSave.id); const ts=Date.now(); const nn=isN?[{...noteToSave,type:'note',updatedAt:ts},...notesData]:notesData.map(n=>n.id===noteToSave.id?{...noteToSave,updatedAt:ts}:n); saveNotes(nn); showToast('ノートを保存しました'); } setEditingNote(null); };
@@ -3352,18 +3461,24 @@
                               </div>
                             )}
                             {(() => {
-                              const sm = row.id.startsWith('p') && data.subject.match(/^(.+?)（(.+)\s+(\d+)\/(\d+)）$/);
+                              const sm = row.id.startsWith('p') && data.subject.match(CELL_UNIT_PAT);
+                              // 単元計画に入力した「学習活動・内容」をコマにも出す
+                              const lesson = sm ? getCellLessonInfo(data.subject) : null;
+                              const lessonText = lesson?.content || '';
                               if (isMobile && activeTab === 'weekly' && row.id.startsWith('p')) {
                                 const label = sm ? sm[1] : data.subject.split('\n')[0];
-                                return <div className={`text-[10px] font-black ${blockText} line-clamp-2 break-words leading-tight`} title={data.subject}>{label}</div>;
+                                return <div className={`text-[10px] font-black ${blockText} line-clamp-2 break-words leading-tight`} title={lessonText ? `${data.subject}\n${lessonText}` : data.subject}>{label}</div>;
                               }
                               if (sm) return (
-                                <div className="flex flex-col min-w-0" title={data.subject}>
+                                <div className="flex flex-col min-w-0" title={lessonText ? `${data.subject}\n${lessonText}` : data.subject}>
                                   <div className="flex items-baseline gap-1 min-w-0">
                                     <span className={`${fontSizeClass} font-black ${blockText} truncate`}>{sm[1]}</span>
                                     <span className={`text-[8px] sm:text-[9px] font-black shrink-0 ${blockText} opacity-75 bg-white/60 dark:bg-black/20 px-1 rounded`}>{sm[3]}/{sm[4]}</span>
                                   </div>
                                   <div className={`text-[8px] sm:text-[9px] font-bold ${blockText} opacity-75 leading-tight line-clamp-2 break-words`}>{sm[2]}</div>
+                                  {lessonText && (
+                                    <div className={`text-[8px] sm:text-[9px] font-bold ${blockText} opacity-70 leading-tight line-clamp-2 break-words mt-0.5 pl-1 border-l-2 border-current/25`}>{lessonText}</div>
+                                  )}
                                 </div>
                               );
                               return <div className={`${fontSizeClass} font-black break-words ${row.id === 'lunch' || row.id === 'morning' ? 'leading-[1.1]' : ''} ${activeTab === 'weekly' && row.id !== 'event' ? 'whitespace-pre-wrap line-clamp-3 overflow-hidden' : ''} ${blockText}`} title={data.subject}>{data.subject}</div>;
@@ -4368,25 +4483,24 @@
                                 </div>
                               );
                             })}
-                            {/* 単元管理 */}
+                            {/* 単元をまとめて登録（1行に「単元名,時数」） */}
                             <div>
-                              <div className="text-[11px] font-black text-slate-500 mb-2">単元一覧</div>
-                              <div className="space-y-1.5">
-                                {(subj.units||[]).map((unit,ui)=>(
-                                  <div key={ui} className="flex items-center gap-2 p-2 bg-slate-50 rounded-xl border border-slate-200">
-                                    <input value={unit.name} onChange={e=>{const u=[...syllabusData];u[subjRealIdx].units[ui]={...unit,name:e.target.value};setSyllabusData(u);}} onBlur={()=>saveSyllabus(syllabusData)} className="flex-1 min-w-0 text-sm font-black bg-transparent outline-none border-b border-transparent focus:border-blue-400 text-slate-700" />
-                                    <div className="flex items-center gap-1 shrink-0">
-                                      <input type="number" value={unit.hours} min="1" onChange={e=>{const u=[...syllabusData];u[subjRealIdx].units[ui]={...unit,hours:Math.max(1,parseInt(e.target.value)||1)};u[subjRealIdx].rawText=formatUnits(u[subjRealIdx].units);saveSyllabus(u);}} className="w-10 text-center text-xs font-black border border-slate-300 rounded-lg py-1 bg-white outline-none focus:border-blue-400" />
-                                      <span className="text-[10px] font-bold text-slate-500">時間</span>
-                                    </div>
-                                    <button onClick={()=>{const u=[...syllabusData];const curUnits=u[subjRealIdx].units;const newUnits=curUnits.filter((_,x)=>x!==ui);const adjustProg=(cp)=>{let nu=cp.currentUnitIdx;let nh=cp.currentHour;if(ui<nu){nu=Math.max(0,nu-1);}else if(ui===nu){nh=1;if(nu>=newUnits.length)nu=Math.max(0,newUnits.length-1);}return{currentUnitIdx:nu,currentHour:nh};};const newClassProgress={...(u[subjRealIdx].classProgress||{})};Object.keys(newClassProgress).forEach(k=>{newClassProgress[k]=adjustProg(newClassProgress[k]);});const globalProg=adjustProg({currentUnitIdx:u[subjRealIdx].currentUnitIdx||0,currentHour:u[subjRealIdx].currentHour||1});u[subjRealIdx]={...u[subjRealIdx],units:newUnits,rawText:formatUnits(newUnits),classProgress:newClassProgress,currentUnitIdx:globalProg.currentUnitIdx,currentHour:globalProg.currentHour};saveSyllabus(u);}} className="text-slate-400 hover:text-rose-500 text-xs font-black shrink-0">✕</button>
-                                  </div>
-                                ))}
-                              </div>
-                              <div className="flex gap-2 items-center bg-blue-50 p-3 rounded-xl border border-blue-200 mt-2">
-                                <input id={`up-unit-name-${subj.id}`} placeholder="単元名" className="flex-1 text-sm font-bold p-2 border border-slate-300 rounded-lg outline-none focus:border-blue-500 bg-white" />
-                                <input id={`up-unit-hours-${subj.id}`} type="number" min="1" defaultValue="1" placeholder="時数" className="w-16 text-sm font-bold p-2 border border-slate-300 rounded-lg outline-none focus:border-blue-500 bg-white text-center" />
-                                <button onClick={()=>{const nameEl=document.getElementById(`up-unit-name-${subj.id}`);const hoursEl=document.getElementById(`up-unit-hours-${subj.id}`);const nm=nameEl.value.trim();const hr=Math.max(1,parseInt(hoursEl.value)||1);if(nm){const u=[...syllabusData];const newUnits=[...(u[subjRealIdx].units||[]),{name:nm,hours:hr}];u[subjRealIdx]={...u[subjRealIdx],units:newUnits,rawText:formatUnits(newUnits)};saveSyllabus(u);nameEl.value='';hoursEl.value='1';}}} className="bg-blue-600 text-white px-4 py-2 rounded-lg font-black text-sm shadow-sm hover:bg-blue-700 active:scale-95 shrink-0">追加</button>
+                              <div className="text-[11px] font-black text-slate-500 mb-1">単元をまとめて登録</div>
+                              <p className="text-[10px] text-slate-400 font-bold mb-2 leading-relaxed">1行に1単元を「単元名,時数」の形で入力します（区切りは , 、 タブ 空白のいずれでも可）。時数を省くと1時間になります。既存の単元の後ろに追加されます。</p>
+                              <textarea id={`up-bulk-${subj.id}`} rows={4} placeholder={'単元名A,5\n単元名B,3'}
+                                className="w-full text-sm font-bold p-2.5 border border-slate-300 rounded-xl outline-none focus:border-blue-500 bg-white resize-y placeholder-slate-300 leading-relaxed" />
+                              <div className="flex justify-end mt-2">
+                                <button onClick={()=>{
+                                  const el = document.getElementById(`up-bulk-${subj.id}`);
+                                  const parsed = parseUnitsText(el.value);
+                                  if (!parsed.length) { showToast('⚠️ 単元を読み取れませんでした'); return; }
+                                  const u = [...syllabusData];
+                                  const newUnits = [...(u[subjRealIdx].units || []), ...parsed];
+                                  u[subjRealIdx] = {...u[subjRealIdx], units: newUnits, rawText: formatUnits(newUnits)};
+                                  saveSyllabus(u);
+                                  el.value = '';
+                                  showToast(`📚 ${parsed.length}単元を追加しました`);
+                                }} className="bg-blue-600 text-white px-4 py-2 rounded-lg font-black text-sm shadow-sm hover:bg-blue-700 active:scale-95">まとめて追加</button>
                               </div>
                             </div>
                           </>)}
@@ -4404,14 +4518,45 @@
                         </div>
                       )}
 
-                      {/* 単元計画テーブル（自動カウント型のみ） */}
-                      {subj.type === 'auto' && subj.units?.length > 0 && (<>
-                        {clsList.length > 0 && (
+                      {/* 単元カード（自動カウント型のみ） */}
+                      {subj.type === 'auto' && (() => {
+                        const setUnitHours = (uIdx, unit, next) => {
+                          const n = Math.max(1, next);
+                          if (n === unit.hours) return;
+                          if (n < unit.hours) {
+                            const dropped = (unit.lessonContents || []).slice(n).filter(x => x && x.trim());
+                            if (dropped.length && !window.confirm(`後ろ${unit.hours - n}時間分の学習活動・内容が消えます。よろしいですか？`)) return;
+                          }
+                          updateUnit(subjRealIdx, uIdx, withHours(unit, n));
+                        };
+                        const removeHour = (uIdx, unit, hIdx) => {
+                          if (unit.hours <= 1) return;
+                          const lc = [...(unit.lessonContents || [])];
+                          while (lc.length < unit.hours) lc.push('');
+                          lc.splice(hIdx, 1);
+                          updateUnit(subjRealIdx, uIdx, { ...unit, hours: unit.hours - 1, lessonContents: lc });
+                        };
+                        const addUnit = () => {
+                          const nameEl = document.getElementById(`up-unit-name-${subj.id}`);
+                          const hoursEl = document.getElementById(`up-unit-hours-${subj.id}`);
+                          const nm = nameEl.value.trim();
+                          if (!nm) { nameEl.focus(); return; }
+                          const hr = Math.max(1, parseInt(hoursEl.value) || 1);
+                          const u = [...syllabusData];
+                          const newUnits = [...(u[subjRealIdx].units || []), { name: nm, hours: hr, lessonContents: Array(hr).fill('') }];
+                          u[subjRealIdx] = { ...u[subjRealIdx], units: newUnits, rawText: formatUnits(newUnits) };
+                          saveSyllabus(u);
+                          nameEl.value = ''; hoursEl.value = '1'; nameEl.focus();
+                        };
+                        const units = subj.units || [];
+                        return (<>
+                        {/* クラスごとの現在位置 */}
+                        {clsList.length > 0 && units.length > 0 && (
                           <div className="flex flex-wrap gap-2 mb-4">
                             {clsList.map(cls => {
                               const prog = getClassProgress(subj, cls);
-                              const unit = subj.units[prog.currentUnitIdx];
-                              const isDone = prog.currentUnitIdx >= subj.units.length;
+                              const unit = units[prog.currentUnitIdx];
+                              const isDone = prog.currentUnitIdx >= units.length;
                               return (
                                 <div key={cls} className={`border rounded-xl px-3 py-1.5 text-xs font-bold shadow-sm ${isDone ? 'bg-emerald-50 border-emerald-300 text-emerald-800' : 'bg-white border-indigo-200 text-slate-700'}`}>
                                   <span className="font-black text-indigo-700">[{cls}]</span> {isDone ? '全単元完了 ✅' : unit ? `${unit.name} ${prog.currentHour}/${unit.hours}時間目` : '—'}
@@ -4420,20 +4565,51 @@
                             })}
                           </div>
                         )}
-                        <div className="space-y-5">
-                          {subj.units.map((unit, uIdx) => {
+
+                        <div className="space-y-4">
+                          {units.map((unit, uIdx) => {
                             const progList = clsList.map(cls => getClassProgress(subj, cls));
                             const allDone = clsList.length > 0 && progList.every(p => p.currentUnitIdx > uIdx);
                             const anyActive = progList.some(p => p.currentUnitIdx === uIdx);
                             const borderCol = allDone ? 'border-emerald-300' : anyActive ? 'border-blue-400' : 'border-slate-200';
                             const headBg = allDone ? 'bg-emerald-50 border-emerald-200' : anyActive ? 'bg-blue-50 border-blue-200' : 'bg-slate-50 border-slate-200';
+                            const collapseKey = `${subj.id}_${uIdx}`;
+                            const collapsed = !!collapsedUnits[collapseKey];
+                            const filledCount = (unit.lessonContents || []).slice(0, unit.hours).filter(x => x && x.trim()).length;
                             return (
                               <div key={uIdx} className={`bg-white border ${borderCol} rounded-2xl shadow-sm overflow-hidden`}>
-                                <div className={`px-4 py-3 flex items-center gap-3 border-b ${headBg}`}>
-                                  <span className="text-base">{allDone ? '✅' : anyActive ? '▶️' : '📖'}</span>
-                                  <span className="font-black text-slate-800 flex-1 text-base">{unit.name}</span>
-                                  <span className="text-xs font-bold text-slate-500 shrink-0">全{unit.hours}時間</span>
+                                <div className={`px-3 py-2.5 flex items-center gap-2 border-b ${headBg}`}>
+                                  <button onClick={() => setCollapsedUnits(c => ({ ...c, [collapseKey]: !collapsed }))}
+                                    title={collapsed ? '開く' : '畳む'}
+                                    className="shrink-0 w-6 h-6 flex items-center justify-center rounded-lg text-slate-500 hover:bg-white/70 text-[10px] font-black">
+                                    {collapsed ? '▶' : '▼'}
+                                  </button>
+                                  <span className="text-base shrink-0">{allDone ? '✅' : anyActive ? '▶️' : '📖'}</span>
+                                  {/* 単元名はここで直接編集できる。変更すると週案に入力済みのコマの表記も追従する */}
+                                  <input key={`un-${subj.id}-${uIdx}-${unit.name}`} defaultValue={unit.name}
+                                    onBlur={e => commitUnitName(subjRealIdx, uIdx, e.target.value)}
+                                    onKeyDown={e => { if (e.key === 'Enter') e.target.blur(); }}
+                                    title="単元名（変更すると週案の表記も一緒に変わります）"
+                                    className="flex-1 min-w-0 font-black text-slate-800 text-base bg-transparent outline-none border-b border-transparent focus:border-blue-400 focus:bg-white/70 rounded px-1 py-0.5" />
+                                  <div className="shrink-0 flex items-center gap-0.5 bg-white border border-slate-300 rounded-lg overflow-hidden shadow-sm">
+                                    <button onClick={() => setUnitHours(uIdx, unit, unit.hours - 1)} disabled={unit.hours <= 1}
+                                      className="w-6 h-7 text-slate-500 font-black hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed">−</button>
+                                    <span className="px-1 text-xs font-black text-slate-700 tabular-nums">{unit.hours}<span className="text-[9px] font-bold text-slate-400 ml-px">時間</span></span>
+                                    <button onClick={() => setUnitHours(uIdx, unit, unit.hours + 1)}
+                                      className="w-6 h-7 text-slate-500 font-black hover:bg-slate-100">＋</button>
+                                  </div>
+                                  <span className={`shrink-0 text-[10px] font-black px-1.5 py-0.5 rounded-lg ${filledCount === unit.hours ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-500'}`}
+                                    title="学習活動・内容を入力済みの時間数">📝 {filledCount}/{unit.hours}</span>
+                                  <div className="shrink-0 flex items-center">
+                                    <button onClick={() => moveUnit(subjRealIdx, uIdx, uIdx - 1)} disabled={uIdx === 0} title="上へ"
+                                      className="w-6 h-7 text-slate-400 hover:text-slate-700 font-black text-xs disabled:opacity-25 disabled:cursor-not-allowed">↑</button>
+                                    <button onClick={() => moveUnit(subjRealIdx, uIdx, uIdx + 1)} disabled={uIdx === units.length - 1} title="下へ"
+                                      className="w-6 h-7 text-slate-400 hover:text-slate-700 font-black text-xs disabled:opacity-25 disabled:cursor-not-allowed">↓</button>
+                                    <button onClick={() => { if (window.confirm(`単元「${unit.name}」を削除しますか？`)) removeUnit(subjRealIdx, uIdx); }} title="この単元を削除"
+                                      className="w-6 h-7 text-slate-300 hover:text-rose-500 font-black text-xs">✕</button>
+                                  </div>
                                 </div>
+                                {!collapsed && (<>
                                 <div className="overflow-x-auto">
                                   <table className="w-full">
                                     <thead>
@@ -4441,6 +4617,7 @@
                                         <th className="text-[11px] font-black text-slate-500 px-3 py-2 text-center w-8 shrink-0">時</th>
                                         <th className="text-[11px] font-black text-slate-500 px-3 py-2 min-w-[200px]">学習活動・内容</th>
                                         {clsList.map(cls => <th key={cls} className="text-[11px] font-black text-indigo-600 px-2 py-2 text-center min-w-[72px]">{cls}</th>)}
+                                        <th className="w-7"></th>
                                       </tr>
                                     </thead>
                                     <tbody>
@@ -4449,24 +4626,20 @@
                                         const content = (unit.lessonContents || [])[hIdx] || '';
                                         const anyCurrentRow = progList.some(p => p.currentUnitIdx === uIdx && p.currentHour === h);
                                         return (
-                                          <tr key={hIdx} className={`border-b border-slate-100 last:border-0 transition-colors ${anyCurrentRow ? 'bg-blue-50/40' : 'hover:bg-slate-50/30'}`}>
+                                          <tr key={hIdx} className={`border-b border-slate-100 last:border-0 transition-colors group/row ${anyCurrentRow ? 'bg-blue-50/40' : 'hover:bg-slate-50/30'}`}>
                                             <td className={`text-center text-xs font-black px-3 py-2 ${anyCurrentRow ? 'text-blue-600' : 'text-slate-400'}`}>{h}</td>
                                             <td className="px-2 py-1.5">
                                               <textarea
                                                 value={content}
                                                 onChange={e => {
-                                                  const up = [...syllabusData];
-                                                  const unitCopy = {...up[subjRealIdx].units[uIdx]};
-                                                  const lc = [...((unitCopy.lessonContents || Array(unitCopy.hours).fill('')))];
-                                                  while (lc.length < unitCopy.hours) lc.push('');
+                                                  const lc = [...((unit.lessonContents || Array(unit.hours).fill('')))];
+                                                  while (lc.length < unit.hours) lc.push('');
                                                   lc[hIdx] = e.target.value;
-                                                  unitCopy.lessonContents = lc;
-                                                  up[subjRealIdx] = {...up[subjRealIdx], units: up[subjRealIdx].units.map((u,ii)=>ii===uIdx?unitCopy:u)};
-                                                  setSyllabusData(up);
+                                                  updateUnit(subjRealIdx, uIdx, { ...unit, lessonContents: lc }, false);
                                                 }}
                                                 onBlur={() => saveSyllabus(syllabusData)}
                                                 rows={2}
-                                                placeholder="学習内容を入力..."
+                                                placeholder="学習内容を入力...（週案のコマにも表示されます）"
                                                 className="w-full min-w-[180px] text-xs text-slate-700 font-medium bg-transparent outline-none resize-none placeholder-slate-300 focus:bg-white focus:rounded-lg focus:border focus:border-blue-300 focus:px-2 py-0.5 transition-all"
                                               />
                                             </td>
@@ -4486,28 +4659,54 @@
                                                 </td>
                                               );
                                             })}
+                                            <td className="px-1 py-2 text-center">
+                                              <button onClick={() => removeHour(uIdx, unit, hIdx)} disabled={unit.hours <= 1} title="この時間を削除"
+                                                className="text-slate-200 hover:text-rose-500 group-hover/row:text-slate-400 text-xs font-black disabled:opacity-0 disabled:cursor-not-allowed transition-colors">✕</button>
+                                            </td>
                                           </tr>
                                         );
                                       })}
                                     </tbody>
                                   </table>
                                 </div>
+                                <button onClick={() => setUnitHours(uIdx, unit, unit.hours + 1)}
+                                  className="w-full py-2 text-[11px] font-black text-slate-400 hover:text-blue-600 hover:bg-blue-50/50 border-t border-dashed border-slate-200 transition-colors">
+                                  ＋ 1時間追加
+                                </button>
+                                </>)}
                               </div>
                             );
                           })}
                         </div>
-                        <div className="mt-5 flex justify-end pb-4">
-                          <button onClick={() => { saveSyllabus(syllabusData); showToast('✅ 保存しました'); }}
-                            className="bg-blue-600 text-white px-6 py-2.5 rounded-xl font-black shadow-md hover:bg-blue-700 active:scale-95 transition-all">
-                            保存
-                          </button>
+
+                        {/* 単元を追加（一覧の続きとして入力できる） */}
+                        <div className="mt-4 flex gap-2 items-center bg-white p-3 rounded-2xl border border-dashed border-slate-300">
+                          <span className="text-base shrink-0">➕</span>
+                          <input id={`up-unit-name-${subj.id}`} placeholder="単元名" onKeyDown={e => { if (e.key === 'Enter') addUnit(); }}
+                            className="flex-1 min-w-0 text-sm font-bold p-2 border border-slate-300 rounded-lg outline-none focus:border-blue-500 bg-white" />
+                          <div className="flex items-center gap-1 shrink-0">
+                            <input id={`up-unit-hours-${subj.id}`} type="number" min="1" defaultValue="1" onKeyDown={e => { if (e.key === 'Enter') addUnit(); }}
+                              className="w-14 text-sm font-bold p-2 border border-slate-300 rounded-lg outline-none focus:border-blue-500 bg-white text-center" />
+                            <span className="text-[10px] font-bold text-slate-500">時間</span>
+                          </div>
+                          <button onClick={addUnit} className="bg-blue-600 text-white px-4 py-2 rounded-lg font-black text-sm shadow-sm hover:bg-blue-700 active:scale-95 shrink-0">追加</button>
                         </div>
-                      </>)}
-                      {subj.type === 'auto' && (!subj.units || subj.units.length === 0) && (
-                        <div className="text-center py-10 text-slate-400 text-sm">
-                          ⚙️ 教科設定から単元を追加してください
-                        </div>
-                      )}
+                        {units.length === 0 && (
+                          <p className="text-center text-xs text-slate-400 font-bold mt-3">
+                            まだ単元がありません。上の欄から追加するか、⚙️ 教科設定の「単元をまとめて登録」で一括登録できます。
+                          </p>
+                        )}
+                        {units.length > 0 && (
+                          <div className="mt-5 flex items-center justify-end gap-3 pb-4">
+                            <span className="text-[10px] font-bold text-slate-400">入力内容は自動で保存されます</span>
+                            <button onClick={() => { saveSyllabus(syllabusData); showToast('✅ 保存しました'); }}
+                              className="bg-blue-600 text-white px-6 py-2.5 rounded-xl font-black shadow-md hover:bg-blue-700 active:scale-95 transition-all">
+                              保存
+                            </button>
+                          </div>
+                        )}
+                        </>);
+                      })()}
                     </>)}
                     {allSubjects.length === 0 && (
                       <div className="text-center py-10 text-slate-400 text-sm">上のフォームから最初の教科を追加してください</div>
@@ -5209,7 +5408,10 @@
                           <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs">▼</span>
                         </div>
                         {selLesson && selLesson.content && (
-                          <div className="mt-2 bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs text-slate-600 leading-relaxed whitespace-pre-wrap">{selLesson.content}</div>
+                          <div className="mt-2 bg-indigo-50 border border-indigo-200 rounded-lg p-3">
+                            <div className="text-[10px] font-black text-indigo-500 mb-1">📝 学習活動・内容（単元計画）</div>
+                            <div className="text-xs text-slate-700 font-bold leading-relaxed whitespace-pre-wrap">{selLesson.content}</div>
+                          </div>
                         )}
                       </div>
                     )}
@@ -5575,7 +5777,8 @@
                       <div className="text-sm font-mono font-bold text-slate-500 dark:text-slate-400">{viewingCell.data.startTime}{viewingCell.data.endTime?`〜${viewingCell.data.endTime}`:''}</div>
                     )}
                     {(() => {
-                      const sm = viewingCell.row.id.startsWith('p') && viewingCell.data.subject.match(/^(.+?)（(.+)\s+(\d+)\/(\d+)）$/);
+                      const sm = viewingCell.row.id.startsWith('p') && viewingCell.data.subject.match(CELL_UNIT_PAT);
+                      const lessonText = sm ? (getCellLessonInfo(viewingCell.data.subject)?.content || '') : '';
                       if (sm) return (
                         <div>
                           <div className="text-2xl font-black text-slate-800 dark:text-slate-100 break-words leading-tight">{sm[1]}</div>
@@ -5588,6 +5791,12 @@
                               <span className="text-xs font-bold text-slate-500 dark:text-slate-400">{sm[3]}/{sm[4]}時間目</span>
                             </div>
                           </div>
+                          {lessonText && (
+                            <div className="mt-3 bg-indigo-50 dark:bg-indigo-900/20 rounded-xl p-3 border border-indigo-200 dark:border-indigo-800">
+                              <div className="text-xs font-bold text-indigo-500 dark:text-indigo-300 mb-1">📝 学習活動・内容（単元計画）</div>
+                              <div className="text-sm font-bold text-slate-700 dark:text-slate-200 break-words whitespace-pre-wrap leading-relaxed">{lessonText}</div>
+                            </div>
+                          )}
                         </div>
                       );
                       return <div className="text-2xl font-black text-slate-800 dark:text-slate-100 break-words leading-tight whitespace-pre-wrap">{viewingCell.data.subject}</div>;
