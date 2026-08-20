@@ -2416,7 +2416,10 @@
         showToast(`📚 ${filled}コマ自動入力しました`);
       };
 
-      // 指定の単元・時間目から週末まで自動入力
+      // 指定の単元・時間目から、以降の同じ教科のコマへ連続で自動入力
+      // 週末で止めず、基本時間割で同じ教科が入っているコマを週をまたいで順に埋める。
+      // 残りの全単元を埋め終わるか、探索上限日数に達したところで終了する。
+      const AUTO_FILL_HORIZON_DAYS = 180;
       const handleSmartAutoFillFrom = (subjIdx, cls, startUnitIdx, startHour) => {
         if (!editingCell || editingCell.isTemplate) return;
         const subj = syllabusData[subjIdx];
@@ -2429,33 +2432,42 @@
         const prefix = cls || '';
         const expectedTmpl = `${prefix}${subj.name}`;
 
+        // 開始位置から残りの全単元を終えるまでに必要なコマ数（＝埋める上限）
+        let remaining = 0;
+        for (let ui = startUnitIdx; ui < (subj.units?.length || 0); ui++) {
+          remaining += ui === startUnitIdx ? Math.max(0, subj.units[ui].hours - startHour + 1) : subj.units[ui].hours;
+        }
+        if (remaining <= 0) return;
+
         const currentSetting = getDaySetting(ds, di);
-        const slotsToFill = [{ dstr: ds, p: pid, dayIdx: di, setting: currentSetting }];
+        const slotsToFill = [{ dstr: ds, p: pid, setting: currentSetting }];
 
         const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const autoFillPat = new RegExp(`^${escRe(prefix)}${escRe(subj.name)}（.+ \\d+/\\d+）$`);
 
-        for (let i = 0; i < 7; i++) {
-          const cd = new Date(currentWeekStart); cd.setDate(cd.getDate() + i);
+        const [sy, sm, sd] = ds.split('-').map(Number);
+        const startDate = new Date(sy, sm - 1, sd);
+
+        for (let offset = 0; offset <= AUTO_FILL_HORIZON_DAYS && slotsToFill.length < remaining; offset++) {
+          const cd = new Date(startDate); cd.setDate(cd.getDate() + offset);
           const dstr = formatDate(cd);
-          if (dstr < ds) continue;
-          const setting = getDaySetting(dstr, i);
+          const dayIdx = cd.getDay() === 0 ? 6 : cd.getDay() - 1;
+          const setting = getDaySetting(dstr, dayIdx);
           if (isNoClassType(setting.type)) continue;
 
           for (const p of periodIds) {
-            if (dstr === ds && p === pid) continue;
-            if (dstr === ds && periodIds.indexOf(p) < periodIds.indexOf(pid)) continue;
-            const wk = `${dstr}-${p}`;
-            const existing = weeklyData[wk];
-            const tk = `${i}-${p}`;
-            const tmpl = baseTemplate[tk];
+            if (slotsToFill.length >= remaining) break;
+            // 編集中のコマ自身と、同じ日のそれより前の時限は対象外
+            if (dstr === ds && periodIds.indexOf(p) <= periodIds.indexOf(pid)) continue;
+            const existing = weeklyData[`${dstr}-${p}`];
+            const tmpl = baseTemplate[`${dayIdx}-${p}`];
             const tmplMatches = tmpl?.subject?.trim() === expectedTmpl;
-            const existingIsAutoFill = existing?.subject?.match(autoFillPat);
-            // テンプレートが一致して空セル、またはすでにこの科目の自動入力が入っているセル
-            if (tmplMatches && (!existing || existing.useTemplate || !existing.subject || existing.subject.trim() === '')) {
-              slotsToFill.push({ dstr, p, dayIdx: i, setting });
-            } else if (existingIsAutoFill) {
-              slotsToFill.push({ dstr, p, dayIdx: i, setting });
+            const isEmptyCell = !existing || existing.useTemplate || !existing.subject || existing.subject.trim() === '';
+            const existingIsAutoFill = !!existing?.subject?.match(autoFillPat);
+            // テンプレートが一致して空のコマ、またはすでにこの教科で自動入力されたコマ
+            // （単元テスト・自習など手入力したコマは飛ばして次のコマへ続ける）
+            if ((tmplMatches && isEmptyCell) || existingIsAutoFill) {
+              slotsToFill.push({ dstr, p, setting });
             }
           }
         }
@@ -2466,6 +2478,7 @@
         let curHour = startHour;
         let curUnitIdx = startUnitIdx;
         let filled = 0;
+        let lastUnitName = '';
 
         for (const { dstr, p, setting } of slotsToFill) {
           const unit = s.units?.[curUnitIdx];
@@ -2480,6 +2493,7 @@
             color: tempColor || existing.color || ''
           };
           filled++;
+          lastUnitName = unit.name;
           curHour++;
           if (curHour > unit.hours) { curHour = 1; curUnitIdx++; }
         }
@@ -2489,7 +2503,8 @@
         saveAll(baseTemplate, templateSettings, nd, weeklySettings);
         setEditingCell(null);
         setTempUnitPickerSel(null);
-        showToast(`📚 ${filled}コマ自動入力しました`);
+        const tail = curUnitIdx >= (s.units?.length || 0) ? '（全単元まで）' : `（${lastUnitName} まで）`;
+        showToast(`📚 ${filled}コマ自動入力しました${filled > 1 ? tail : ''}`);
       };
 
       // 単元テスト・自習・延長などの特別コマを挿入し、同週の後続セルを1コマずらす
@@ -5222,7 +5237,7 @@
                           {!editingCell.isTemplate && syllabusData.length > 0 && (
                             <div className="bg-blue-50/50 p-3 rounded-xl border border-blue-200 max-h-52 overflow-y-auto hide-scrollbar space-y-2 shadow-inner">
                               <div className="text-[11px] font-black text-blue-800 mb-1">📚 今週をまとめて自動入力</div>
-                              <div className="text-[10px] text-blue-600 mb-2">ボタンで現在コマ〜週末まで空きコマに連続入力　▸ 1コマのみは右ボタン</div>
+                              <div className="text-[10px] text-blue-600 mb-2">ボタンで現在コマから単元の続きを空きコマに連続入力（週をまたいで継続）　▸ 1コマのみは右ボタン</div>
                               {syllabusData.map((subj, subjIdx) => {
                                 if(subj.type==='auto') {
                                   const clsList = subj.classes && subj.classes.length > 0 ? subj.classes : [null];
@@ -5385,7 +5400,7 @@
                     {!editingCell.isTemplate && !editingCell.ih && editingCell.periodId.startsWith('p') && syllabusData.length > 0 && (
                       <div className="bg-blue-50/50 p-3 rounded-xl border border-blue-200 max-h-52 overflow-y-auto hide-scrollbar space-y-2 shadow-inner">
                         <div className="text-[11px] font-black text-blue-800 mb-1">📚 今週を自動入力</div>
-                        <div className="text-[10px] text-blue-600 mb-2">ボタンで現在コマ〜週末まで空きコマに連続入力　▸ 1コマのみは右ボタン</div>
+                        <div className="text-[10px] text-blue-600 mb-2">ボタンで現在コマから単元の続きを空きコマに連続入力（週をまたいで継続）　▸ 1コマのみは右ボタン</div>
                         {syllabusData.map((subj, subjIdx) => {
                           if(subj.type==='auto') {
                             const clsList = subj.classes && subj.classes.length > 0 ? subj.classes : [null];
@@ -5459,7 +5474,7 @@
                               onClick={() => handleSmartAutoFillFrom(subjIdx, cls, unitIdx, hour)}
                               disabled={isFinished}
                               className="flex-1 bg-indigo-600 text-white text-[12px] font-bold py-2 px-3 rounded-lg shadow-sm active:scale-95 hover:bg-indigo-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
-                              この時間目から週末まで自動入力
+                              この時間目から続けて自動入力
                             </button>
                             <button type="button"
                               onClick={() => { handleSaveCell({subject: tempSubject, memo: tempMemo, startTime: tempStartTime, endTime: tempEndTime, handwriting: tempHandwriting, color: tempColor||''}); setTempUnitPickerSel(null); }}
