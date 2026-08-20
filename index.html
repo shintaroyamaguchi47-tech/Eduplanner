@@ -214,6 +214,13 @@
     // 授業コマ（基本時間割）を適用しない日課。休業(出勤)は勤務日だが授業コマなし
     const isNoClassType = (t) => t === 'holiday' || t === 'work';
 
+    // スマホ用レイアウトに切り替える幅。Tailwind の md（768px）と同じ基準にそろえる。
+    // window.innerWidth は iPadなどで画面を拡大している間「見えている幅」を返すため、
+    // CSS のブレークポイント（レイアウト幅）とずれて、広い画面なのにスマホ用の
+    // 表示になることがある。判定は matchMedia（＝CSSと同じ物差し）で行う。
+    const MOBILE_MEDIA_QUERY = '(max-width: 767.98px)';
+    const getIsMobileLayout = () => (typeof window.matchMedia === 'function' ? window.matchMedia(MOBILE_MEDIA_QUERY).matches : window.innerWidth < 768);
+
     const SCHEDULE_TIMES = {
       normal: { event:null, morning:{start:'08:15',end:'08:30'}, p1:{start:'08:40',end:'09:30'}, p2:{start:'09:40',end:'10:30'}, p3:{start:'10:40',end:'11:30'}, p4:{start:'11:40',end:'12:30'}, lunch:{start:'12:30',end:'13:35'}, p5:{start:'13:35',end:'14:25'}, p6:{start:'14:35',end:'15:25'}, afterschool:{start:'16:00',end:''} },
       short: { event:null, morning:{start:'08:15',end:'08:30'}, p1:{start:'08:40',end:'09:25'}, p2:{start:'09:35',end:'10:20'}, p3:{start:'10:30',end:'11:15'}, p4:{start:'11:25',end:'12:10'}, lunch:{start:'12:10',end:'13:15'}, p5:{start:'13:15',end:'14:00'}, p6:{start:'14:10',end:'14:55'}, afterschool:{start:'15:30',end:''} },
@@ -934,7 +941,7 @@
     // メインアプリ コンポーネント
     // ============================
     function TeacherPlanner() {
-      const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+      const [isMobile, setIsMobile] = useState(getIsMobileLayout);
       const [authLoading, setAuthLoading] = useState(true);
       const [isAutoLoggingIn, setIsAutoLoggingIn] = useState(false);
       const [dataLoadStatus, setDataLoadStatus] = useState('idle');
@@ -1707,7 +1714,9 @@
       }, [getCurrentSnapshot, applySnapshot]);
 
       useEffect(() => {
-        const hRes = () => setIsMobile(window.innerWidth < 768);
+        const hRes = () => setIsMobile(getIsMobileLayout());
+        const mq = typeof window.matchMedia === 'function' ? window.matchMedia(MOBILE_MEDIA_QUERY) : null;
+        if (mq) { if (mq.addEventListener) mq.addEventListener('change', hRes); else if (mq.addListener) mq.addListener(hRes); }
         const hOn = () => setIsOnline(true); const hOff = () => setIsOnline(false);
         const hKey = (e) => {
           if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); handleUndo(); }
@@ -1716,7 +1725,7 @@
         };
         window.addEventListener('resize', hRes); window.addEventListener('online', hOn); window.addEventListener('offline', hOff);
         window.addEventListener('keydown', hKey);
-        return () => { window.removeEventListener('resize', hRes); window.removeEventListener('online', hOn); window.removeEventListener('offline', hOff); window.removeEventListener('keydown', hKey); };
+        return () => { window.removeEventListener('resize', hRes); window.removeEventListener('online', hOn); window.removeEventListener('offline', hOff); window.removeEventListener('keydown', hKey); if (mq) { if (mq.removeEventListener) mq.removeEventListener('change', hRes); else if (mq.removeListener) mq.removeListener(hRes); } };
       }, [handleUndo, handleRedo]);
 
       useEffect(() => {
@@ -3619,11 +3628,13 @@
           else if(row.id==='afterschool'){customStyle={flex:'4',minHeight:'2.5rem'};rh='';fc='';}
         } else {
           if (isMobile && activeTab === 'weekly') {
-            if (row.id === 'event') { rh = 'h-8 shrink-0'; fc = 'flex-none'; rb = ''; }
-            else if (row.id === 'morning') { rh = 'h-7 shrink-0'; fc = 'flex-none'; rb = ''; }
-            else if (row.id === 'lunch') { rh = 'h-8 shrink-0'; fc = 'flex-none'; rb = 'bg-amber-50/20 dark:bg-amber-900/10'; }
-            else if (row.id === 'afterschool') { rh = 'h-16 shrink-0'; fc = 'flex-none'; rb = ''; }
-            else { rh = 'h-11 shrink-0'; fc = 'flex-none'; rb = ''; }
+            // 高さは固定せず、最低の高さを保ったまま画面いっぱいに伸ばす。
+            // （固定にすると、横長の画面で表の下に大きな余白ができる）
+            if (row.id === 'event') { customStyle={flex:'2.5',minHeight:'2rem'}; rh=''; fc=''; rb=''; }
+            else if (row.id === 'morning') { customStyle={flex:'1.5',minHeight:'1.75rem'}; rh=''; fc=''; rb=''; }
+            else if (row.id === 'lunch') { customStyle={flex:'1.5',minHeight:'1.75rem'}; rh=''; fc=''; rb='bg-amber-50/20 dark:bg-amber-900/10'; }
+            else if (row.id === 'afterschool') { customStyle={flex:'4',minHeight:'4rem'}; rh=''; fc=''; rb=''; }
+            else { customStyle={flex:'4',minHeight:'2.75rem'}; rh=''; fc=''; rb=''; }
           } else {
             if (row.id === 'event') { customStyle={flex:'2.5',minHeight:'2.5rem'}; rh=''; fc=''; rb=''; }
             else if (row.id === 'morning') { customStyle={flex:'1.5',minHeight:'1.5rem'}; rh=''; fc=''; rb=''; }
@@ -3633,15 +3644,17 @@
           }
         }
         
+        // 背の低い行（朝・昼休）は、アイコンと行名を横並びにして見出しが切れないようにする
+        const isShortRow = row.id === 'morning' || row.id === 'lunch';
         const zClass = row.id === 'event' ? 'relative z-50' : 'relative z-0';
         const isLastInGroup = row.id === 'afterschool';
         const borderBottomClassRow = isLastInGroup ? '' : 'border-b border-slate-200 dark:border-slate-700';
 
         return (
           <div key={row.id} className={`flex w-full ${fc} ${rh} ${rb} ${zClass} ${borderBottomClassRow}${customStyle.flex ? ' overflow-hidden' : ''}`} style={customStyle}>
-            <div className="w-10 sm:w-16 lg:w-20 border-r border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-900/80 shrink-0 sticky left-0 z-20 gap-0.5">
-              <div className="text-sm sm:text-xl leading-none">{row.id.startsWith('p')?<span className="text-[11px] sm:text-base text-slate-600 dark:text-slate-300 font-black">{row.id.replace('p','')}</span>:row.icon}</div>
-              <div className="text-[8px] sm:text-[10px] font-black text-slate-600 dark:text-slate-300">{row.name}</div>
+            <div className={`w-10 sm:w-16 lg:w-20 border-r border-slate-200 dark:border-slate-700 flex items-center justify-center bg-slate-50 dark:bg-slate-900/80 shrink-0 sticky left-0 z-20 overflow-hidden ${isShortRow ? 'flex-row gap-1' : 'flex-col gap-0.5'}`}>
+              <div className={`leading-none ${isShortRow ? 'text-[11px] sm:text-sm' : 'text-sm sm:text-xl'}`}>{row.id.startsWith('p')?<span className="text-[11px] sm:text-base text-slate-600 dark:text-slate-300 font-black">{row.id.replace('p','')}</span>:row.icon}</div>
+              <div className="text-[8px] sm:text-[10px] font-black text-slate-600 dark:text-slate-300 leading-none whitespace-nowrap">{row.name}</div>
             </div>
             <div className="flex-1 grid min-w-0" style={{ gridTemplateColumns: 'repeat(19, minmax(0, 1fr))' }}>
               {DAYS.map((day,i)=>{
@@ -4126,9 +4139,11 @@
                       </div>
                     </div>
 
-                    <div className={`flex flex-col relative ${activeTab === 'template' || !isMobile ? 'flex-1 min-h-0' : 'pb-4'}`}>
+                    <div className="flex flex-col relative flex-1 min-h-0">
                       {renderRow(ROWS.find(r => r.id === 'event'))}
-                      <div className="flex flex-col relative min-h-0" style={(activeTab === 'template' || !isMobile) ? {flex: '21 1 0%'} : undefined}>
+                      {/* 朝〜6限。minHeight は中の行の最低の高さの合計。これより狭いときは
+                          行がつぶれる代わりに表全体が縦スクロールする */}
+                      <div className="flex flex-col relative min-h-0" style={{flex: '21 1 0%', minHeight: activeTab === 'template' ? '18.5rem' : (isMobile ? '20rem' : '21.5rem')}}>
                         {ROWS.filter(r => r.id !== 'diary' && r.id !== 'event' && r.id !== 'afterschool').map(row => renderRow(row))}
                         {activeTab === 'weekly' && renderHolidayOverlays()}
                       </div>
