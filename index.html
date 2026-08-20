@@ -1646,6 +1646,15 @@
       const isUndoRedo = useRef(false);
       const cloudDataLoaded = useRef(false);
       const saveToFirestoreRef = useRef(null);
+      const saveWeeklyDocsRef = useRef(null);
+      // 週案は年度ごとのドキュメント（weekly_2026 など）に分けて保存する。
+      // Firestoreは1ドキュメント1MiBが上限で、手書きが画像として同じ中に入るため、
+      // 1本にまとめたままでは年を重ねると保存できなくなり、毎回の保存も全年度ぶんの送信になる。
+      const weeklyPartsRef = useRef({});      // 年度 -> クラウドから読んだ内容
+      const weeklySavedRef = useRef({});      // 年度 -> 最後に保存した内容（変化のない年度は送らない）
+      const weeklyYearsRef = useRef(null);    // 目次ドキュメントに載っている年度
+      const weeklyMigratedRef = useRef(false);
+      const weeklyMigrationRunRef = useRef(false);
       const MAX_HISTORY = 30;
       
       const pushUndo = useCallback((snapshot) => {
@@ -1670,7 +1679,7 @@
         setBaseTemplate(snap.baseTemplate);
         setTemplateSettings(snap.templateSettings);
         if (saveToFirestoreRef.current) {
-          saveToFirestoreRef.current('weekly', { weeklyData: snap.weeklyData, weeklySettings: snap.weeklySettings });
+          if (saveWeeklyDocsRef.current) saveWeeklyDocsRef.current(snap.weeklyData, snap.weeklySettings);
           saveToFirestoreRef.current('template', { baseTemplate: snap.baseTemplate, templateSettings: snap.templateSettings });
           saveToFirestoreRef.current('todos', { todos: snap.todos });
         }
@@ -1807,7 +1816,7 @@
         setDataLoadStatus('loading');
         const { uid, db } = cloudUser; let unsubs = [];
         let hasData = false; let localFallbackUsed = false;
-        const loaded = { template: false, weekly: false, todos: false, notes: false, syllabus: false, quickMemos: false, extra: false };
+        const loaded = { template: false, weekly: false, weeklyYears: false, todos: false, notes: false, syllabus: false, quickMemos: false, extra: false };
         const cacheToLocal = () => {
           try {
             const snap = { baseTemplate, templateSettings, weeklyData, weeklySettings, todos, notesData, syllabusData, quickMemos, yearlyData, documents, vacations };
@@ -1839,7 +1848,51 @@
         const listen = async () => {
           const { doc, onSnapshot } = await _importDynamic("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
           unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','template'), s => { if (localFallbackUsed) return; if(s.exists()){ const d=s.data(); if(d.baseTemplate) setBaseTemplate(d.baseTemplate); if(d.templateSettings) setTemplateSettings(d.templateSettings); } markLoaded('template', s.exists()); }));
-          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','weekly'), s => { if (localFallbackUsed) return; if(s.exists()){ const d=s.data(); if(d.weeklyData) setWeeklyData(d.weeklyData); if(d.weeklySettings) setWeeklySettings(d.weeklySettings); } markLoaded('weekly', s.exists()); }));
+          // 週案は「移行前の旧ドキュメント」と「年度ごとのドキュメント」を合わせて読む。
+          // 移行後は旧ドキュメントには書き込まないが、移行前の控えとして残しておく
+          const applyWeeklyParts = () => {
+            const parts = weeklyPartsRef.current;
+            const order = ['legacy', ...Object.keys(parts).filter(k => k !== 'legacy').sort()];
+            const data = {}; const settings = {};
+            order.forEach(k => {
+              const part = parts[k];
+              if (!part) return;
+              if (k === 'legacy' && weeklyMigratedRef.current) return;
+              Object.assign(data, part.weeklyData || {});
+              Object.assign(settings, part.weeklySettings || {});
+            });
+            setWeeklyData(data); setWeeklySettings(settings);
+            weeklySavedRef.current = {};
+            Object.entries(splitWeeklyByYear(data, settings)).forEach(([y, p]) => { weeklySavedRef.current[y] = JSON.stringify(p); });
+          };
+          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','weekly'), s => {
+            if (localFallbackUsed) return;
+            if (s.exists()) { const d = s.data(); weeklyPartsRef.current.legacy = { weeklyData: d.weeklyData || {}, weeklySettings: d.weeklySettings || {} }; applyWeeklyParts(); }
+            markLoaded('weekly', s.exists());
+          }));
+          const yearUnsubs = {};
+          const pendingYears = new Set();
+          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','weeklyIndex'), s => {
+            if (localFallbackUsed) return;
+            const idx = s.exists() ? s.data() : null;
+            weeklyMigratedRef.current = !!(idx && idx.migrated);
+            const years = (idx && Array.isArray(idx.years)) ? idx.years.map(String) : [];
+            weeklyYearsRef.current = years.length ? years : weeklyYearsRef.current;
+            if (!years.length) { markLoaded('weeklyYears', false); return; }
+            years.forEach(y => {
+              if (yearUnsubs[y]) return;
+              pendingYears.add(y);
+              yearUnsubs[y] = onSnapshot(doc(db,'users',uid,'teacherPlanner',`weekly_${y}`), ys => {
+                if (localFallbackUsed) return;
+                const d = ys.exists() ? ys.data() : {};
+                weeklyPartsRef.current[y] = { weeklyData: d.weeklyData || {}, weeklySettings: d.weeklySettings || {} };
+                applyWeeklyParts();
+                pendingYears.delete(y);
+                if (pendingYears.size === 0) markLoaded('weeklyYears', ys.exists());
+              });
+              unsubs.push(() => yearUnsubs[y]());
+            });
+          }));
           unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','todos'), s => { if (localFallbackUsed) return; if(s.exists()&&Array.isArray(s.data().todos)) setTodos(s.data().todos); markLoaded('todos', s.exists()); }));
           unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','notes'), s => { if (localFallbackUsed) return; if(s.exists()&&Array.isArray(s.data().notes)) setNotesData(s.data().notes); markLoaded('notes', s.exists()); }));
           unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','syllabus'), s => { if (localFallbackUsed) return; if(s.exists()&&Array.isArray(s.data().syllabus)) setSyllabusData(s.data().syllabus); markLoaded('syllabus', s.exists()); }));
@@ -1874,6 +1927,31 @@
         };
         listen(); return () => { clearTimeout(timeout); unsubs.forEach(u=>u()); cloudDataLoaded.current = false; };
       }, [cloudUser]);
+
+      // 旧ドキュメント1本にまとまっている週案を、初回だけ年度ごとのドキュメントに書き出す。
+      // 旧ドキュメントは移行前の控えとして残し、年度ぶんの保存がすべて成功してから
+      // 目次に migrated を立てる（途中で失敗したら次の起動でやり直す）
+      useEffect(() => {
+        if (dataLoadStatus !== 'loaded') return;
+        if (weeklyMigratedRef.current || weeklyMigrationRunRef.current) return;
+        const parts = splitWeeklyByYear(weeklyData, weeklySettings);
+        const years = Object.keys(parts);
+        if (!years.length) return;
+        weeklyMigrationRunRef.current = true;
+        (async () => {
+          const results = await Promise.all(years.map(y => {
+            weeklySavedRef.current[y] = JSON.stringify(parts[y]);
+            return saveToFirestore(`weekly_${y}`, parts[y]);
+          }));
+          if (results.every(Boolean)) {
+            weeklyMigratedRef.current = true;
+            weeklyYearsRef.current = years;
+            saveToFirestore('weeklyIndex', { years, migrated: true });
+          } else {
+            weeklyMigrationRunRef.current = false;
+          }
+        })();
+      }, [dataLoadStatus]);
 
       // データ読み込み完了後、Googleカレンダー連携済みなら今日まだ同期していない場合に自動で1回だけ同期する
       useEffect(() => {
@@ -1917,7 +1995,7 @@
           localStorage.setItem('ep_local_data', JSON.stringify(latest.data));
           const d = latest.data;
           saveToFirestore('template', { baseTemplate:d.baseTemplate, templateSettings:d.templateSettings });
-          saveToFirestore('weekly', { weeklyData:d.weeklyData, weeklySettings:d.weeklySettings });
+          saveWeeklyDocs(d.weeklyData, d.weeklySettings);
           saveToFirestore('todos', { todos:d.todos });
           saveToFirestore('notes', { notes:d.notesData });
           saveToFirestore('syllabus', { syllabus:d.syllabusData });
@@ -1975,7 +2053,37 @@
         else setSaveStatus('offline');
       }, [isOnline, cloudUser]);
 
-      const saveAll = (t,ts,w,ws) => { if (!isUndoRedo.current) pushUndo(getCurrentSnapshot()); setBaseTemplate(t); setTemplateSettings(ts); setWeeklyData(w); setWeeklySettings(ws); saveToFirestore('template',{baseTemplate:t,templateSettings:ts}); saveToFirestore('weekly',{weeklyData:w,weeklySettings:ws}); saveToLocal({baseTemplate:t,templateSettings:ts,weeklyData:w,weeklySettings:ws}); };
+      // 週案のキーは "YYYY-MM-DD-<行>"、週の設定は "YYYY-MM-DD"。日付として読めないキーは
+      // 取りこぼさないように 'other' にまとめる
+      const splitWeeklyByYear = (w, ws) => {
+        const parts = {};
+        const bucket = (y) => (parts[y] = parts[y] || { weeklyData: {}, weeklySettings: {} });
+        const yearOfKey = (k) => (/^\d{4}-\d{2}-\d{2}/.test(k) ? String(getSchoolYearOf(k.slice(0, 10))) : 'other');
+        Object.entries(w || {}).forEach(([k, v]) => { bucket(yearOfKey(k)).weeklyData[k] = v; });
+        Object.entries(ws || {}).forEach(([k, v]) => { bucket(yearOfKey(k)).weeklySettings[k] = v; });
+        return parts;
+      };
+
+      // 変化のあった年度だけを保存し、年度が増えたときは目次も更新する
+      const saveWeeklyDocs = (w, ws) => {
+        const parts = splitWeeklyByYear(w, ws);
+        const years = Object.keys(parts);
+        years.forEach(y => {
+          const json = JSON.stringify(parts[y]);
+          if (weeklySavedRef.current[y] === json) return;
+          weeklySavedRef.current[y] = json;
+          saveToFirestore(`weekly_${y}`, parts[y]);
+        });
+        const prev = weeklyYearsRef.current;
+        if (!prev || years.some(y => prev.indexOf(y) === -1)) {
+          const merged = prev ? [...new Set([...prev, ...years])] : years;
+          weeklyYearsRef.current = merged;
+          saveToFirestore('weeklyIndex', { years: merged, migrated: true });
+        }
+      };
+      saveWeeklyDocsRef.current = saveWeeklyDocs;
+
+      const saveAll = (t,ts,w,ws) => { if (!isUndoRedo.current) pushUndo(getCurrentSnapshot()); setBaseTemplate(t); setTemplateSettings(ts); setWeeklyData(w); setWeeklySettings(ws); saveToFirestore('template',{baseTemplate:t,templateSettings:ts}); saveWeeklyDocs(w,ws); saveToLocal({baseTemplate:t,templateSettings:ts,weeklyData:w,weeklySettings:ws}); };
       const saveTodos = (nt) => { if (!isUndoRedo.current) pushUndo(getCurrentSnapshot()); setTodos(nt); saveToFirestore('todos',{todos:nt}); saveToLocal({todos:nt}); };
       const saveNotes = (nn) => { setNotesData(nn); saveToFirestore('notes',{notes:nn}); saveToLocal({notesData:nn}); };
       const saveSyllabus = (ns) => { setSyllabusData(ns); saveToFirestore('syllabus',{syllabus:ns}); saveToLocal({syllabusData:ns}); };
@@ -2165,7 +2273,7 @@
               if (data.quickMemos) setQuickMemos(data.quickMemos);
               
               saveToFirestore('template', { baseTemplate: data.baseTemplate, templateSettings: data.templateSettings });
-              saveToFirestore('weekly', { weeklyData: data.weeklyData, weeklySettings: data.weeklySettings });
+              saveWeeklyDocs(data.weeklyData, data.weeklySettings);
               saveToFirestore('todos', { todos: data.todos });
               saveToFirestore('notes', { notes: data.notesData });
               saveToFirestore('syllabus', { syllabus: data.syllabusData });
