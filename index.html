@@ -274,8 +274,61 @@
       { id: 'v6', name: '学年末休業', start: '2027-03-20', end: '2027-03-31' }
     ];
 
-    const JAPAN_HOLIDAYS = { "2025-1-1":"🎌 元日","2025-1-13":"🎌 成人の日","2025-2-11":"🎌 建国記念の日","2025-2-23":"🎌 天皇誕生日","2025-2-24":"🎌 振替休日","2025-3-20":"🎌 春分の日","2025-4-29":"🎌 昭和の日","2025-5-3":"🎌 憲法記念日","2025-5-4":"🎌 みどりの日","2025-5-5":"🎌 こどもの日","2025-5-6":"🎌 振替休日","2025-7-21":"🎌 海の日","2025-8-11":"🎌 山の日","2025-9-15":"🎌 敬老の日","2025-9-23":"🎌 秋分の日","2025-10-13":"🎌 スポーツの日","2025-11-3":"🎌 文化の日","2025-11-23":"🎌 勤労感謝の日","2025-11-24":"🎌 振替休日","2026-1-1":"🎌 元日","2026-1-12":"🎌 成人の日","2026-2-11":"🎌 建国記念の日","2026-2-23":"🎌 天皇誕生日","2026-3-20":"🎌 春分の日","2026-4-29":"🎌 昭和の日","2026-5-3":"🎌 憲法記念日","2026-5-4":"🎌 みどりの日","2026-5-5":"🎌 こどもの日","2026-5-6":"🎌 振替休日","2026-7-20":"🎌 海の日","2026-8-11":"🎌 山の日","2026-9-21":"🎌 敬老の日","2026-9-22":"🎌 国民の休日","2026-9-23":"🎌 秋分の日","2026-10-12":"🎌 スポーツの日","2026-11-3":"🎌 文化の日","2026-11-23":"🎌 勤労感謝の日" };
-    const getHolidayName = (y, m, d) => JAPAN_HOLIDAYS[`${y}-${m}-${d}`] || null;
+    // 国民の祝日は祝日法から計算する。年ごとの一覧を初回だけ組み立ててキャッシュする。
+    // 春分・秋分は国立天文台の近似式（1980〜2099年で有効）。
+    // 五輪年のような法改正での臨時移動が決まったときは HOLIDAY_OVERRIDES に "2020-7-23":"海の日" の形で書けば計算結果より優先される。
+    const HOLIDAY_OVERRIDES = {};
+    const FIXED_HOLIDAYS = [
+      [1,1,'元日'], [2,11,'建国記念の日'], [2,23,'天皇誕生日'], [4,29,'昭和の日'],
+      [5,3,'憲法記念日'], [5,4,'みどりの日'], [5,5,'こどもの日'], [8,11,'山の日'],
+      [11,3,'文化の日'], [11,23,'勤労感謝の日'],
+    ];
+    // ハッピーマンデー: [月, 第何月曜, 名称]
+    const HAPPY_MONDAY_HOLIDAYS = [ [1,2,'成人の日'], [7,3,'海の日'], [9,3,'敬老の日'], [10,2,'スポーツの日'] ];
+    const getNthMondayDate = (y, m, nth) => {
+      const first = new Date(y, m - 1, 1);
+      return 1 + ((8 - first.getDay()) % 7) + (nth - 1) * 7;
+    };
+    const getEquinoxDate = (y, isSpring) =>
+      Math.floor((isSpring ? 20.8431 : 23.2488) + 0.242194 * (y - 1980) - Math.floor((y - 1980) / 4));
+
+    const buildYearHolidays = (y) => {
+      const map = {};
+      FIXED_HOLIDAYS.forEach(([m, d, name]) => { map[`${m}-${d}`] = name; });
+      HAPPY_MONDAY_HOLIDAYS.forEach(([m, nth, name]) => { map[`${m}-${getNthMondayDate(y, m, nth)}`] = name; });
+      map[`3-${getEquinoxDate(y, true)}`] = '春分の日';
+      map[`9-${getEquinoxDate(y, false)}`] = '秋分の日';
+      // 振替休日: 日曜と重なった祝日の次の、祝日でない日
+      Object.keys(map).forEach(key => {
+        const [m, d] = key.split('-').map(Number);
+        if (new Date(y, m - 1, d).getDay() !== 0) return;
+        const dt = new Date(y, m - 1, d);
+        do { dt.setDate(dt.getDate() + 1); } while (map[`${dt.getMonth() + 1}-${dt.getDate()}`]);
+        map[`${dt.getMonth() + 1}-${dt.getDate()}`] = '振替休日';
+      });
+      // 国民の休日: 前後を祝日に挟まれた平日（敬老の日と秋分の日の間など）
+      for (let m = 1; m <= 12; m++) {
+        for (let d = 1; d <= 31; d++) {
+          const dt = new Date(y, m - 1, d);
+          if (dt.getMonth() !== m - 1 || dt.getDay() === 0 || map[`${m}-${d}`]) continue;
+          const prev = new Date(y, m - 1, d - 1), next = new Date(y, m - 1, d + 1);
+          if (map[`${prev.getMonth() + 1}-${prev.getDate()}`] && map[`${next.getMonth() + 1}-${next.getDate()}`]) map[`${m}-${d}`] = '国民の休日';
+        }
+      }
+      Object.entries(HOLIDAY_OVERRIDES).forEach(([key, name]) => {
+        const [oy, om, od] = key.split('-').map(Number);
+        if (oy !== y) return;
+        if (name) map[`${om}-${od}`] = name; else delete map[`${om}-${od}`];
+      });
+      return map;
+    };
+
+    const holidayCacheByYear = {};
+    const getHolidayName = (y, m, d) => {
+      if (!holidayCacheByYear[y]) holidayCacheByYear[y] = buildYearHolidays(Number(y));
+      const name = holidayCacheByYear[y][`${m}-${d}`];
+      return name ? `🎌 ${name}` : null;
+    };
 
     // 長期休業期間の日課: 平日は「休業(出勤)」、土日祝は「休日」
     const getVacationDaySetting = (ds, di, vacations) => {
