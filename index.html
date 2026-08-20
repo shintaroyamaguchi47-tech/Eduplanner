@@ -234,6 +234,25 @@
     const TODO_TAGS = ['授業準備', '学年業務', '部活', '会議・事務', '生徒・保護者', 'その他'];
     const DEFAULT_TEMPLATE_SETTINGS = { 0:{type:'normal',clean:false}, 1:{type:'normal',clean:true}, 2:{type:'normal',clean:true}, 3:{type:'normal',clean:false}, 4:{type:'normal',clean:true}, 5:{type:'holiday',clean:false}, 6:{type:'holiday',clean:false} };
 
+    // 年度（4月始まり）の判定
+    const getSchoolYearOf = (ds) => { const [y, m] = ds.split('-').map(Number); return m < 4 ? y - 1 : y; };
+
+    // 基本時間割と曜日ごとの日課は年度ごとに持つ。
+    // 旧形式（{"0-p1":{...}} のフラットな形）は年度をまたいだ共通設定として扱い、
+    // ある年度を編集した時点で、その年度ぶんだけが切り出される（それ以前の年度は編集前のまま残る）。
+    // 新形式: { byYear:true, base:{...切り出し前の設定...}, years:{ "2026":{...}, "2027":{...} } }
+    // 設定のない年度は、それ以前で最も新しい年度の設定を引き継ぐ。
+    const isYearKeyedMap = (m) => !!(m && m.byYear && m.years);
+    const resolveYearMap = (m, sy, fallback) => {
+      if (!isYearKeyedMap(m)) return m || fallback;
+      let hit = null;
+      Object.keys(m.years).forEach(k => { const y = Number(k); if (Number.isFinite(y) && y <= sy && (hit === null || y > hit)) hit = y; });
+      return (hit === null ? m.base : m.years[String(hit)]) || fallback;
+    };
+    const setYearMap = (m, sy, next) => isYearKeyedMap(m)
+      ? { ...m, years: { ...m.years, [String(sy)]: next } }
+      : { byYear: true, base: m || {}, years: { [String(sy)]: next } };
+
     const getYearlyEventText = (yData, ds) => {
       const [y, m, d] = ds.split('-').map(Number);
       const sy = m < 4 ? y - 1 : y;
@@ -522,13 +541,13 @@
         if (getHolidayName(y,m,d) || isYearlyHoliday(ds, yearlyData)) return { type:'holiday' };
         const inferred = getInferredDaySetting(yearlyData, ds);
         if (inferred) return inferred;
-        return templateSettings[di] || DEFAULT_TEMPLATE_SETTINGS[di];
+        return resolveYearMap(templateSettings, getSchoolYearOf(ds), DEFAULT_TEMPLATE_SETTINGS)[di] || DEFAULT_TEMPLATE_SETTINGS[di];
       };
 
       const setting = getDaySetting(todayStr, dayIdx);
       
       const getCellData = (ds, pid, di) => {
-        const wKey = `${ds}-${pid}`; const tKey = `${di}-${pid}`; let base = baseTemplate[tKey] || { subject:'', memo:'' };
+        const wKey = `${ds}-${pid}`; const tKey = `${di}-${pid}`; let base = resolveYearMap(baseTemplate, getSchoolYearOf(ds), {})[tKey] || { subject:'', memo:'' };
         if (pid === 'event') { const [y,m,d] = ds.split('-').map(Number); const sy = m < 4 ? y - 1 : y; const ye = yearlyData[sy]?.[`${m}-${d}`]; if (ye) base = { ...base, subject: ye }; }
         else if (isNoClassType(getDaySetting(ds, di).type)) base = { subject:'', memo:'' };
         const override = weeklyData[wKey]; return (override && !override.useTemplate) ? override : base;
@@ -793,10 +812,10 @@
         if (getHolidayName(y,m,d) || isYearlyHoliday(ds, yearlyData)) return { type:'holiday' };
         const inferred = getInferredDaySetting(yearlyData, ds);
         if (inferred) return inferred;
-        return templateSettings[di] || DEFAULT_TEMPLATE_SETTINGS[di];
+        return resolveYearMap(templateSettings, getSchoolYearOf(ds), DEFAULT_TEMPLATE_SETTINGS)[di] || DEFAULT_TEMPLATE_SETTINGS[di];
       };
       const getCellDataLocal = (ds, pid, di) => {
-        const wKey = `${ds}-${pid}`; const tKey = `${di}-${pid}`; let base = baseTemplate[tKey] || { subject:'', memo:'' };
+        const wKey = `${ds}-${pid}`; const tKey = `${di}-${pid}`; let base = resolveYearMap(baseTemplate, getSchoolYearOf(ds), {})[tKey] || { subject:'', memo:'' };
         if (pid === 'event') { const [y,m,d] = ds.split('-').map(Number); const sy = m < 4 ? y - 1 : y; const ye = yearlyData[sy]?.[`${m}-${d}`]; if (ye) base = { ...base, subject: ye }; }
         else if (isNoClassType(getDaySettingLocal(ds, di).type)) base = { subject:'', memo:'' };
         const override = weeklyData[wKey]; return (override && !override.useTemplate) ? override : base;
@@ -1538,6 +1557,12 @@
 
       const todayStr = formatDate(getJSTDate());
       const schoolYear = currentMonth.getMonth() < 3 ? currentMonth.getFullYear() - 1 : currentMonth.getFullYear();
+      // 基本時間割・日課テンプレートの編集対象年度。週案で開いている週の年度に合わせる
+      const templateSchoolYear = getSchoolYearOf(formatDate(currentWeekStart));
+      const activeTemplate = resolveYearMap(baseTemplate, templateSchoolYear, {});
+      const activeTemplateSettings = resolveYearMap(templateSettings, templateSchoolYear, DEFAULT_TEMPLATE_SETTINGS);
+      const getTemplateFor = (ds) => resolveYearMap(baseTemplate, getSchoolYearOf(ds), {});
+      const getTemplateSettingsFor = (ds) => resolveYearMap(templateSettings, getSchoolYearOf(ds), DEFAULT_TEMPLATE_SETTINGS);
 
       const getDynamicFontSize = (text, isMobile, isWeekly = false) => {
         if (!text) return isMobile ? 'text-[10px]' : isWeekly ? 'text-[10px]' : 'text-sm';
@@ -2152,7 +2177,8 @@
         if (isYearlyHoliday(ds, yearlyData)) return {type:'holiday'};
         const inferred = getInferredDaySetting(yearlyData, ds);
         if (inferred) return inferred;
-        return templateSettings[di] || DEFAULT_TEMPLATE_SETTINGS[di]; 
+        const daySettings = activeTab === 'template' ? activeTemplateSettings : getTemplateSettingsFor(ds);
+        return daySettings[di] || DEFAULT_TEMPLATE_SETTINGS[di];
       };
       const syncEventToYearly = (dateStr, nextSubject) => {
         if (!dateStr) return;
@@ -2184,7 +2210,7 @@
       const getCellData = (ds, pid, di) => { 
         const wk=`${ds}-${pid}`; 
         const tk=`${di}-${pid}`; 
-        let base = baseTemplate[tk] || { subject:'', memo:'' }; 
+        let base = (activeTab === 'template' ? activeTemplate : getTemplateFor(ds))[tk] || { subject:'', memo:'' }; 
         if (activeTab === 'template') return base; 
 
         const set = getDaySetting(ds, di);
@@ -2269,10 +2295,10 @@
         const periodIds = ['p1','p2','p3','p4','p5','p6'];
         let total = 0;
         for (let di = 0; di < 7; di++) {
-          const set = templateSettings[di] || DEFAULT_TEMPLATE_SETTINGS[di];
+          const set = activeTemplateSettings[di] || DEFAULT_TEMPLATE_SETTINGS[di];
           if (set && isNoClassType(set.type)) continue;
           for (const pid of periodIds) {
-            const raw = (baseTemplate[`${di}-${pid}`]?.subject || '').trim();
+            const raw = (activeTemplate[`${di}-${pid}`]?.subject || '').trim();
             if (!raw) continue;
             const t = matchCountTarget(raw, targetsByLength);
             if (t) { counts[t]++; total++; }
@@ -2385,12 +2411,12 @@
       };
       
       const getPeriodTime = (setting, pid) => SCHEDULE_TIMES[setting.type]?.[pid];
-      const handleSettingChange = (ds, di, ns) => { if(activeTab==='template'){ const n={...templateSettings,[di]:ns}; setTemplateSettings(n); saveAll(baseTemplate,n,weeklyData,weeklySettings); } else { const n={...weeklySettings,[ds]:ns}; setWeeklySettings(n); saveAll(baseTemplate,templateSettings,weeklyData,n); } };
+      const handleSettingChange = (ds, di, ns) => { if(activeTab==='template'){ const n=setYearMap(templateSettings, templateSchoolYear, {...activeTemplateSettings,[di]:ns}); setTemplateSettings(n); saveAll(baseTemplate,n,weeklyData,weeklySettings); } else { const n={...weeklySettings,[ds]:ns}; setWeeklySettings(n); saveAll(baseTemplate,templateSettings,weeklyData,n); } };
       const LEAVE_PRESET_TIMES = { '年休': { start: '08:15', end: '16:45' }, '半休（午前）': { start: '08:15', end: '12:15' }, '半休（午後）': { start: '12:15', end: '16:45' }, '特別休暇': { start: '08:15', end: '16:45' } };
       const openLeaveModal = (ds, di) => { const ls = (getDaySetting(ds, di).leaves || []).map(l => ({...l})); if (ls.length === 0) ls.push({ label: '年休', start: '', end: '' }); setTempLeaves(ls); setEditingLeaveDay({ dateStr: ds, dayIndex: di }); };
       const handleSaveLeaves = () => { if (!editingLeaveDay) return; const { dateStr, dayIndex } = editingLeaveDay; const incomplete = tempLeaves.some(l => (l.start && !l.end) || (!l.start && l.end)); if (incomplete) { showToast('開始と終了の時刻を両方入力してください'); return; } const cleaned = tempLeaves.filter(l => l.start && l.end).map(l => ({ label: (l.label || '').trim() || '休暇', start: l.start, end: l.end })); if (tempLeaves.length > 0 && cleaned.length === 0) { showToast('開始と終了の時刻を入力してください'); return; } const ns = { ...getDaySetting(dateStr, dayIndex) }; if (cleaned.length > 0) ns.leaves = cleaned; else delete ns.leaves; handleSettingChange(dateStr, dayIndex, ns); setEditingLeaveDay(null); showToast(cleaned.length > 0 ? '休暇を設定しました' : '休暇を解除しました'); };
       
-      const handleSaveCell = (d) => { let syllabusUp=[...syllabusData]; let ch=false; if(!editingCell.isTemplate && d.subject){ for(let i=0;i<syllabusUp.length;i++){ let s=syllabusUp[i]; if(s.type==='auto') { const tryMatch = (prefix, cls) => { const prog = getClassProgress(s, cls); const unit = s.units?.[prog.currentUnitIdx]; if(!unit) return false; const exp=`${prefix}${s.name}（${unit.name} ${prog.currentHour}/${unit.hours}）`; if(d.subject===exp){ let nh=prog.currentHour+1; let nu=prog.currentUnitIdx; if(nh>unit.hours){nh=1;nu++;} syllabusUp[i]=setClassProgress(syllabusUp[i],cls,nu,nh); return true; } return false; }; if(s.classes&&s.classes.length>0){ for(const cls of s.classes){ if(tryMatch(cls,cls)){ch=true;break;} } }else{ if(tryMatch('',null)){ch=true;} } if(ch) break; }else if(s.type==='history'){ const pat=s.classes&&s.classes.length>0 ? `^(?:${s.classes.join('|')})?${s.name}（(.+)）$` : `^${s.name}（(.+)）$`; const m=d.subject.match(new RegExp(pat)); if(m){ let h=s.history||[]; if(!h.includes(m[1])){ syllabusUp[i]={...s,history:[m[1],...h].slice(0,15)}; ch=true; } } } } } if(editingCell.isTemplate){ const n={...baseTemplate,[`${editingCell.dayIndex}-${editingCell.periodId}`]:d}; saveAll(n,templateSettings,weeklyData,weeklySettings); } else { if(editingCell.periodId==='event') syncEventToYearly(editingCell.dateStr, d.subject || ''); let n={...weeklyData,[`${editingCell.dateStr}-${editingCell.periodId}`]:{...d,useTemplate:false}}; if(editingCell.periodId.startsWith('p')){ const li=getCellLessonInfo(d.subject); if(li){ let nu=li.unitIdx, nh=li.hour+1; if(nh>li.unit.hours){ nh=1; nu++; } const res=fillUnitSequence({weekly:n, subj:li.subj, cls:li.cls, startUnitIdx:nu, startHour:nh, fromDateStr:editingCell.dateStr, fromPid:editingCell.periodId, startSlot:null, color:''}); if(res.filled){ n=res.weekly; syllabusUp=syllabusUp.map((x,ix)=>ix===li.idx?setClassProgress(x,li.cls,res.endUnitIdx,res.endHour):x); ch=true; } } } saveAll(baseTemplate,templateSettings,n,weeklySettings); } if(ch) saveSyllabus(syllabusUp); setEditingCell(null); };
+      const handleSaveCell = (d) => { let syllabusUp=[...syllabusData]; let ch=false; if(!editingCell.isTemplate && d.subject){ for(let i=0;i<syllabusUp.length;i++){ let s=syllabusUp[i]; if(s.type==='auto') { const tryMatch = (prefix, cls) => { const prog = getClassProgress(s, cls); const unit = s.units?.[prog.currentUnitIdx]; if(!unit) return false; const exp=`${prefix}${s.name}（${unit.name} ${prog.currentHour}/${unit.hours}）`; if(d.subject===exp){ let nh=prog.currentHour+1; let nu=prog.currentUnitIdx; if(nh>unit.hours){nh=1;nu++;} syllabusUp[i]=setClassProgress(syllabusUp[i],cls,nu,nh); return true; } return false; }; if(s.classes&&s.classes.length>0){ for(const cls of s.classes){ if(tryMatch(cls,cls)){ch=true;break;} } }else{ if(tryMatch('',null)){ch=true;} } if(ch) break; }else if(s.type==='history'){ const pat=s.classes&&s.classes.length>0 ? `^(?:${s.classes.join('|')})?${s.name}（(.+)）$` : `^${s.name}（(.+)）$`; const m=d.subject.match(new RegExp(pat)); if(m){ let h=s.history||[]; if(!h.includes(m[1])){ syllabusUp[i]={...s,history:[m[1],...h].slice(0,15)}; ch=true; } } } } } if(editingCell.isTemplate){ const n=setYearMap(baseTemplate, templateSchoolYear, {...activeTemplate,[`${editingCell.dayIndex}-${editingCell.periodId}`]:d}); saveAll(n,templateSettings,weeklyData,weeklySettings); } else { if(editingCell.periodId==='event') syncEventToYearly(editingCell.dateStr, d.subject || ''); let n={...weeklyData,[`${editingCell.dateStr}-${editingCell.periodId}`]:{...d,useTemplate:false}}; if(editingCell.periodId.startsWith('p')){ const li=getCellLessonInfo(d.subject); if(li){ let nu=li.unitIdx, nh=li.hour+1; if(nh>li.unit.hours){ nh=1; nu++; } const res=fillUnitSequence({weekly:n, subj:li.subj, cls:li.cls, startUnitIdx:nu, startHour:nh, fromDateStr:editingCell.dateStr, fromPid:editingCell.periodId, startSlot:null, color:''}); if(res.filled){ n=res.weekly; syllabusUp=syllabusUp.map((x,ix)=>ix===li.idx?setClassProgress(x,li.cls,res.endUnitIdx,res.endHour):x); ch=true; } } } saveAll(baseTemplate,templateSettings,n,weeklySettings); } if(ch) saveSyllabus(syllabusUp); setEditingCell(null); };
 
       // 週全体スマート自動入力：現在コマを含め今週のテンプレート一致する空きコマに連続入力
       const handleSmartAutoFill = (subjIdx, cls = null) => {
@@ -2423,7 +2449,7 @@
 
             // テンプレート一致チェック
             const tk = `${i}-${p}`;
-            const tmpl = baseTemplate[tk];
+            const tmpl = getTemplateFor(dstr)[tk];
             if (!tmpl || !tmpl.subject || tmpl.subject.trim() !== expectedTmpl) continue;
 
             // 空きコマのみ対象（既に別内容があるセルはスキップ）
@@ -2509,7 +2535,7 @@
             // 起点のコマと、同じ日のそれより前の時限は対象外
             if (dstr === fromDateStr && periodIds.indexOf(p) <= fromPIdx) continue;
             const existing = weekly[`${dstr}-${p}`];
-            const tmpl = baseTemplate[`${dayIdx}-${p}`];
+            const tmpl = getTemplateFor(dstr)[`${dayIdx}-${p}`];
             const tmplMatches = tmpl?.subject?.trim() === expectedTmpl;
             const isEmptyCell = !existing || existing.useTemplate || !existing.subject || existing.subject.trim() === '';
             const existingIsAutoFill = !!existing?.subject?.match(autoFillPat);
@@ -2683,7 +2709,7 @@
             if (ov && !ov.useTemplate) continue;
 
             const tk = `${i}-${pid}`;
-            const tmpl = baseTemplate[tk];
+            const tmpl = getTemplateFor(ds)[tk];
             if (!tmpl || !tmpl.subject || !tmpl.subject.trim()) continue;
             const tSubj = tmpl.subject.trim();
 
@@ -2743,7 +2769,7 @@
               if (ov && !ov.useTemplate) continue;
 
               const tk = `${i}-${pid}`;
-              const tmpl = baseTemplate[tk];
+              const tmpl = getTemplateFor(ds)[tk];
               if (!tmpl || !tmpl.subject || !tmpl.subject.trim()) continue;
               const tSubj = tmpl.subject.trim();
 
@@ -2777,7 +2803,7 @@
         showToast(`📚 ${filled}コマ自動入力しました`);
       };
 
-      const handleCopyDay = (target,source) => { if(source==='') return; const sIdx=parseInt(source); const ns={...weeklySettings,[target]:{...(templateSettings[sIdx]||DEFAULT_TEMPLATE_SETTINGS[sIdx]),routine:sIdx}}; const nd={...weeklyData}; ROWS.forEach(r=>{ nd[`${target}-${r.id}`]={...(baseTemplate[`${sIdx}-${r.id}`]||{}),useTemplate:false}; }); setWeeklySettings(ns); setWeeklyData(nd); saveAll(baseTemplate,templateSettings,nd,ns); };
+      const handleCopyDay = (target,source) => { if(source==='') return; const sIdx=parseInt(source); const tgtSettings=getTemplateSettingsFor(target); const tgtTemplate=getTemplateFor(target); const ns={...weeklySettings,[target]:{...(tgtSettings[sIdx]||DEFAULT_TEMPLATE_SETTINGS[sIdx]),routine:sIdx}}; const nd={...weeklyData}; ROWS.forEach(r=>{ nd[`${target}-${r.id}`]={...(tgtTemplate[`${sIdx}-${r.id}`]||{}),useTemplate:false}; }); setWeeklySettings(ns); setWeeklyData(nd); saveAll(baseTemplate,templateSettings,nd,ns); };
       const handleRevertDay = (target) => {
         const nd = {...weeklyData}; const ns = {...weeklySettings};
         delete ns[target];
@@ -2797,7 +2823,7 @@
       // これにより「金曜1限を開いて水曜1限のテンプレートを参照し、確定するで金曜1限に保存」という操作が可能になる。
       const navigateEditCell = (di, pid) => {
         if (!editingCell) return;
-        const targetData = baseTemplate[`${di}-${pid}`] || { subject:'', memo:'' };
+        const targetData = (editingCell.isTemplate ? activeTemplate : getTemplateFor(editingCell.dateStr))[`${di}-${pid}`] || { subject:'', memo:'' };
         setNavTabDay(di);
         setNavTabPeriod(pid);
         setTempSubject(targetData.subject || '');
@@ -3851,7 +3877,7 @@
                       </div>
                     ) : (
                       <div className="w-full flex justify-center">
-                        <div className="text-xs sm:text-sm font-black text-purple-700 dark:text-purple-300 flex items-center gap-2 py-1.5 px-5 bg-purple-50 dark:bg-purple-900/20 rounded-xl border border-purple-200 dark:border-purple-700">⚙️ 基本設定モード (来週以降のベース時間割)</div>
+                        <div className="text-xs sm:text-sm font-black text-purple-700 dark:text-purple-300 flex items-center gap-2 py-1.5 px-5 bg-purple-50 dark:bg-purple-900/20 rounded-xl border border-purple-200 dark:border-purple-700">⚙️ 基本設定モード ({templateSchoolYear}年度のベース時間割)</div>
                       </div>
                     )}
                   </div>
@@ -5421,7 +5447,7 @@
                         }
                       });
                       for (let i = 0; i < 7; i++) for (const p of ['p1','p2','p3','p4','p5','p6','morning']) {
-                        const s = baseTemplate[`${i}-${p}`]?.subject?.trim();
+                        const s = (editingCell.isTemplate ? activeTemplate : getTemplateFor(editingCell.dateStr))[`${i}-${p}`]?.subject?.trim();
                         if (!s) continue;
                         const base = s.split('（')[0].trim();
                         if (!base || seen.has(base)) continue;
@@ -5613,7 +5639,7 @@
                       const templateSubjects = [];
                       for (let i = 0; i < 7; i++) {
                         for (const p of ['p1','p2','p3','p4','p5','p6','morning']) {
-                          const val = baseTemplate[`${i}-${p}`];
+                          const val = activeTemplate[`${i}-${p}`];
                           const s = val?.subject?.trim();
                           if (s && !seen.has(s)) { seen.add(s); templateSubjects.push(s); }
                         }
