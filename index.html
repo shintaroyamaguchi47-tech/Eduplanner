@@ -2337,7 +2337,7 @@
       const openLeaveModal = (ds, di) => { const ls = (getDaySetting(ds, di).leaves || []).map(l => ({...l})); if (ls.length === 0) ls.push({ label: '年休', start: '', end: '' }); setTempLeaves(ls); setEditingLeaveDay({ dateStr: ds, dayIndex: di }); };
       const handleSaveLeaves = () => { if (!editingLeaveDay) return; const { dateStr, dayIndex } = editingLeaveDay; const incomplete = tempLeaves.some(l => (l.start && !l.end) || (!l.start && l.end)); if (incomplete) { showToast('開始と終了の時刻を両方入力してください'); return; } const cleaned = tempLeaves.filter(l => l.start && l.end).map(l => ({ label: (l.label || '').trim() || '休暇', start: l.start, end: l.end })); if (tempLeaves.length > 0 && cleaned.length === 0) { showToast('開始と終了の時刻を入力してください'); return; } const ns = { ...getDaySetting(dateStr, dayIndex) }; if (cleaned.length > 0) ns.leaves = cleaned; else delete ns.leaves; handleSettingChange(dateStr, dayIndex, ns); setEditingLeaveDay(null); showToast(cleaned.length > 0 ? '休暇を設定しました' : '休暇を解除しました'); };
       
-      const handleSaveCell = (d) => { let syllabusUp=[...syllabusData]; let ch=false; let matchedIdx=-1; let matchedCls=null; if(!editingCell.isTemplate && d.subject){ for(let i=0;i<syllabusUp.length;i++){ let s=syllabusUp[i]; if(s.type==='auto') { const tryMatch = (prefix, cls) => { const prog = getClassProgress(s, cls); const unit = s.units?.[prog.currentUnitIdx]; if(!unit) return false; const exp=`${prefix}${s.name}（${unit.name} ${prog.currentHour}/${unit.hours}）`; if(d.subject===exp){ let nh=prog.currentHour+1; let nu=prog.currentUnitIdx; if(nh>unit.hours){nh=1;nu++;} syllabusUp[i]=setClassProgress(syllabusUp[i],cls,nu,nh); return true; } return false; }; if(s.classes&&s.classes.length>0){ for(const cls of s.classes){ if(tryMatch(cls,cls)){ch=true;matchedIdx=i;matchedCls=cls;break;} } }else{ if(tryMatch('',null)){ch=true;matchedIdx=i;matchedCls=null;} } if(ch) break; }else if(s.type==='history'){ const pat=s.classes&&s.classes.length>0 ? `^(?:${s.classes.join('|')})?${s.name}（(.+)）$` : `^${s.name}（(.+)）$`; const m=d.subject.match(new RegExp(pat)); if(m){ let h=s.history||[]; if(!h.includes(m[1])){ syllabusUp[i]={...s,history:[m[1],...h].slice(0,15)}; ch=true; } } } } if(ch) saveSyllabus(syllabusUp); } if(editingCell.isTemplate){ const n={...baseTemplate,[`${editingCell.dayIndex}-${editingCell.periodId}`]:d}; saveAll(n,templateSettings,weeklyData,weeklySettings); } else { if(editingCell.periodId==='event') syncEventToYearly(editingCell.dateStr, d.subject || ''); let n={...weeklyData,[`${editingCell.dateStr}-${editingCell.periodId}`]:{...d,useTemplate:false}}; if(matchedIdx>=0 && editingCell.periodId.startsWith('p')){ const subj=syllabusUp[matchedIdx]; const prog=getClassProgress(subj,matchedCls); const unit=subj.units?.[prog.currentUnitIdx]; if(unit){ const prefix=matchedCls||''; const nextText=`${prefix}${subj.name}（${unit.name} ${prog.currentHour}/${unit.hours}）`; const tSubjName=`${prefix}${subj.name}`; const periodIds=['p1','p2','p3','p4','p5','p6']; const curDate=new Date(editingCell.dateStr); let found=false; for(let offset=1;offset<=60&&!found;offset++){ const nd2=new Date(curDate); nd2.setDate(nd2.getDate()+offset); const ds2=formatDate(nd2); const di2=nd2.getDay()===0?6:nd2.getDay()-1; const setting2=getDaySetting(ds2,di2); if(isNoClassType(setting2.type)) continue; for(const pid2 of periodIds){ const tk=`${di2}-${pid2}`; const tmpl=baseTemplate[tk]; if(!tmpl||!tmpl.subject||tmpl.subject.trim()!==tSubjName) continue; const wk2=`${ds2}-${pid2}`; const existing=n[wk2]; if(existing&&!existing.useTemplate) continue; const times=SCHEDULE_TIMES[setting2.type]?.[pid2]; n[wk2]={subject:nextText,memo:tmpl.memo||'',useTemplate:false,startTime:times?.start||'',endTime:times?.end||'',color:''}; found=true; break; } } } } saveAll(baseTemplate,templateSettings,n,weeklySettings); } setEditingCell(null); };
+      const handleSaveCell = (d) => { let syllabusUp=[...syllabusData]; let ch=false; if(!editingCell.isTemplate && d.subject){ for(let i=0;i<syllabusUp.length;i++){ let s=syllabusUp[i]; if(s.type==='auto') { const tryMatch = (prefix, cls) => { const prog = getClassProgress(s, cls); const unit = s.units?.[prog.currentUnitIdx]; if(!unit) return false; const exp=`${prefix}${s.name}（${unit.name} ${prog.currentHour}/${unit.hours}）`; if(d.subject===exp){ let nh=prog.currentHour+1; let nu=prog.currentUnitIdx; if(nh>unit.hours){nh=1;nu++;} syllabusUp[i]=setClassProgress(syllabusUp[i],cls,nu,nh); return true; } return false; }; if(s.classes&&s.classes.length>0){ for(const cls of s.classes){ if(tryMatch(cls,cls)){ch=true;break;} } }else{ if(tryMatch('',null)){ch=true;} } if(ch) break; }else if(s.type==='history'){ const pat=s.classes&&s.classes.length>0 ? `^(?:${s.classes.join('|')})?${s.name}（(.+)）$` : `^${s.name}（(.+)）$`; const m=d.subject.match(new RegExp(pat)); if(m){ let h=s.history||[]; if(!h.includes(m[1])){ syllabusUp[i]={...s,history:[m[1],...h].slice(0,15)}; ch=true; } } } } } if(editingCell.isTemplate){ const n={...baseTemplate,[`${editingCell.dayIndex}-${editingCell.periodId}`]:d}; saveAll(n,templateSettings,weeklyData,weeklySettings); } else { if(editingCell.periodId==='event') syncEventToYearly(editingCell.dateStr, d.subject || ''); let n={...weeklyData,[`${editingCell.dateStr}-${editingCell.periodId}`]:{...d,useTemplate:false}}; if(editingCell.periodId.startsWith('p')){ const li=getCellLessonInfo(d.subject); if(li){ let nu=li.unitIdx, nh=li.hour+1; if(nh>li.unit.hours){ nh=1; nu++; } const res=fillUnitSequence({weekly:n, subj:li.subj, cls:li.cls, startUnitIdx:nu, startHour:nh, fromDateStr:editingCell.dateStr, fromPid:editingCell.periodId, startSlot:null, color:''}); if(res.filled){ n=res.weekly; syllabusUp=syllabusUp.map((x,ix)=>ix===li.idx?setClassProgress(x,li.cls,res.endUnitIdx,res.endHour):x); ch=true; } } } saveAll(baseTemplate,templateSettings,n,weeklySettings); } if(ch) saveSyllabus(syllabusUp); setEditingCell(null); };
 
       // 週全体スマート自動入力：現在コマを含め今週のテンプレート一致する空きコマに連続入力
       const handleSmartAutoFill = (subjIdx, cls = null) => {
@@ -2417,39 +2417,34 @@
         showToast(`📚 ${filled}コマ自動入力しました`);
       };
 
-      // 指定の単元・時間目から、以降の同じ教科のコマへ連続で自動入力
-      // 週末で止めず、基本時間割で同じ教科が入っているコマを週をまたいで順に埋める。
-      // 残りの全単元を埋め終わるか、探索上限日数に達したところで終了する。
+      // 指定の単元・時間目から、以降の同じ教科のコマへ連続で自動入力する。
+      // 対象は「基本時間割で同じ教科が入っている空きコマ」と「すでにこの教科で自動入力済みのコマ」。
+      // 単元テスト・自習など手入力したコマは飛ばし、その次のコマから連番を続ける。
+      // 週末で止めず、残りの全単元を埋め終わるか探索上限日数に達するまで続ける。
       const AUTO_FILL_HORIZON_DAYS = 180;
-      const handleSmartAutoFillFrom = (subjIdx, cls, startUnitIdx, startHour) => {
-        if (!editingCell || editingCell.isTemplate) return;
-        const subj = syllabusData[subjIdx];
-        if (!subj || subj.type !== 'auto') return;
+      const fillUnitSequence = ({ weekly, subj, cls, startUnitIdx, startHour, fromDateStr, fromPid, startSlot, color }) => {
+        const noop = { weekly, filled: 0, endUnitIdx: startUnitIdx, endHour: startHour, lastUnitName: '' };
+        if (!subj || subj.type !== 'auto' || !subj.units?.length) return noop;
 
-        const ds = editingCell.dateStr;
-        const pid = editingCell.periodId;
-        const di = editingCell.dayIndex;
         const periodIds = ['p1','p2','p3','p4','p5','p6'];
         const prefix = cls || '';
         const expectedTmpl = `${prefix}${subj.name}`;
 
         // 開始位置から残りの全単元を終えるまでに必要なコマ数（＝埋める上限）
         let remaining = 0;
-        for (let ui = startUnitIdx; ui < (subj.units?.length || 0); ui++) {
+        for (let ui = startUnitIdx; ui < subj.units.length; ui++) {
           remaining += ui === startUnitIdx ? Math.max(0, subj.units[ui].hours - startHour + 1) : subj.units[ui].hours;
         }
-        if (remaining <= 0) return;
+        if (remaining <= 0) return noop;
 
-        const currentSetting = getDaySetting(ds, di);
-        const slotsToFill = [{ dstr: ds, p: pid, setting: currentSetting }];
-
-        const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const slots = startSlot ? [startSlot] : [];
+        const escRe = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const autoFillPat = new RegExp(`^${escRe(prefix)}${escRe(subj.name)}（.+ \\d+/\\d+）$`);
-
-        const [sy, sm, sd] = ds.split('-').map(Number);
+        const fromPIdx = periodIds.indexOf(fromPid);
+        const [sy, sm, sd] = fromDateStr.split('-').map(Number);
         const startDate = new Date(sy, sm - 1, sd);
 
-        for (let offset = 0; offset <= AUTO_FILL_HORIZON_DAYS && slotsToFill.length < remaining; offset++) {
+        for (let offset = 0; offset <= AUTO_FILL_HORIZON_DAYS && slots.length < remaining; offset++) {
           const cd = new Date(startDate); cd.setDate(cd.getDate() + offset);
           const dstr = formatDate(cd);
           const dayIdx = cd.getDay() === 0 ? 6 : cd.getDay() - 1;
@@ -2457,55 +2452,60 @@
           if (isNoClassType(setting.type)) continue;
 
           for (const p of periodIds) {
-            if (slotsToFill.length >= remaining) break;
-            // 編集中のコマ自身と、同じ日のそれより前の時限は対象外
-            if (dstr === ds && periodIds.indexOf(p) <= periodIds.indexOf(pid)) continue;
-            const existing = weeklyData[`${dstr}-${p}`];
+            if (slots.length >= remaining) break;
+            // 起点のコマと、同じ日のそれより前の時限は対象外
+            if (dstr === fromDateStr && periodIds.indexOf(p) <= fromPIdx) continue;
+            const existing = weekly[`${dstr}-${p}`];
             const tmpl = baseTemplate[`${dayIdx}-${p}`];
             const tmplMatches = tmpl?.subject?.trim() === expectedTmpl;
             const isEmptyCell = !existing || existing.useTemplate || !existing.subject || existing.subject.trim() === '';
             const existingIsAutoFill = !!existing?.subject?.match(autoFillPat);
-            // テンプレートが一致して空のコマ、またはすでにこの教科で自動入力されたコマ
-            // （単元テスト・自習など手入力したコマは飛ばして次のコマへ続ける）
-            if ((tmplMatches && isEmptyCell) || existingIsAutoFill) {
-              slotsToFill.push({ dstr, p, setting });
-            }
+            if ((tmplMatches && isEmptyCell) || existingIsAutoFill) slots.push({ dstr, p, setting });
           }
         }
 
-        let nd = { ...weeklyData };
-        let up = [...syllabusData];
-        const s = up[subjIdx];
-        let curHour = startHour;
-        let curUnitIdx = startUnitIdx;
-        let filled = 0;
-        let lastUnitName = '';
-
-        for (const { dstr, p, setting } of slotsToFill) {
-          const unit = s.units?.[curUnitIdx];
+        const nd = { ...weekly };
+        let curUnitIdx = startUnitIdx, curHour = startHour, filled = 0, lastUnitName = '';
+        for (const { dstr, p, setting } of slots) {
+          const unit = subj.units[curUnitIdx];
           if (!unit) break;
-          const text = `${prefix}${s.name}（${unit.name} ${curHour}/${unit.hours}）`;
           const times = SCHEDULE_TIMES[setting.type]?.[p];
           const existing = nd[`${dstr}-${p}`] || {};
           nd[`${dstr}-${p}`] = {
-            subject: text, memo: existing.memo || '', useTemplate: false,
+            subject: `${prefix}${subj.name}（${unit.name} ${curHour}/${unit.hours}）`,
+            memo: existing.memo || '',
+            useTemplate: false,
             startTime: times?.start || existing.startTime || '',
             endTime: times?.end || existing.endTime || '',
-            color: tempColor || existing.color || ''
+            color: color || existing.color || ''
           };
-          filled++;
-          lastUnitName = unit.name;
-          curHour++;
+          filled++; lastUnitName = unit.name; curHour++;
           if (curHour > unit.hours) { curHour = 1; curUnitIdx++; }
         }
+        return { weekly: nd, filled, endUnitIdx: curUnitIdx, endHour: curHour, lastUnitName };
+      };
 
-        up[subjIdx] = setClassProgress(s, cls, curUnitIdx, curHour);
+      // 単元計画パネルの「この時間目から続けて自動入力」。編集中のコマ自身も書き換える。
+      const handleSmartAutoFillFrom = (subjIdx, cls, startUnitIdx, startHour) => {
+        if (!editingCell || editingCell.isTemplate) return;
+        const subj = syllabusData[subjIdx];
+        if (!subj || subj.type !== 'auto') return;
+        const ds = editingCell.dateStr, pid = editingCell.periodId;
+        const res = fillUnitSequence({
+          weekly: weeklyData, subj, cls, startUnitIdx, startHour,
+          fromDateStr: ds, fromPid: pid,
+          startSlot: { dstr: ds, p: pid, setting: getDaySetting(ds, editingCell.dayIndex) },
+          color: tempColor,
+        });
+        if (!res.filled) return;
+        const up = [...syllabusData];
+        up[subjIdx] = setClassProgress(subj, cls, res.endUnitIdx, res.endHour);
         saveSyllabus(up);
-        saveAll(baseTemplate, templateSettings, nd, weeklySettings);
+        saveAll(baseTemplate, templateSettings, res.weekly, weeklySettings);
         setEditingCell(null);
         setTempUnitPickerSel(null);
-        const tail = curUnitIdx >= (s.units?.length || 0) ? '（全単元まで）' : `（${lastUnitName} まで）`;
-        showToast(`📚 ${filled}コマ自動入力しました${filled > 1 ? tail : ''}`);
+        const tail = res.endUnitIdx >= subj.units.length ? '（全単元まで）' : `（${res.lastUnitName} まで）`;
+        showToast(`📚 ${res.filled}コマ自動入力しました${res.filled > 1 ? tail : ''}`);
       };
 
       // 単元テスト・自習・延長などの特別コマを挿入し、同週の後続セルを1コマずらす
@@ -2800,12 +2800,13 @@
       const getCellLessonInfo = (subjStr) => {
         const m = (subjStr || '').match(CELL_UNIT_PAT);
         if (!m) return null;
-        const subj = matchCellSyllabus(subjStr)?.subj;
+        const match = matchCellSyllabus(subjStr);
+        const subj = match?.subj;
         if (!subj || subj.type !== 'auto' || !subj.units?.length) return null;
         const unitIdx = subj.units.findIndex(u => u.name === m[2]);
         if (unitIdx < 0) return null;
         const hour = parseInt(m[3], 10);
-        return { subj, unitIdx, unit: subj.units[unitIdx], hour, content: (subj.units[unitIdx].lessonContents || [])[hour - 1] || '' };
+        return { subj, idx: match.idx, cls: match.cls, unitIdx, unit: subj.units[unitIdx], hour, content: (subj.units[unitIdx].lessonContents || [])[hour - 1] || '' };
       };
 
       // 時数を変えたとき、学習活動・内容の行数を時数に合わせる
@@ -5298,14 +5299,12 @@
                   const unitSubj = match && match.subj?.type === 'auto' && match.subj.units?.length > 0 ? match.subj : null;
                   const clsLabel = match ? (match.cls || '全クラス') : '';
                   // 単元の各時間をフラット化して通し番号を付与
-                  let lessons = [];
-                  if (unitSubj) { let n = 0; unitSubj.units.forEach((u, ui) => { for (let h = 1; h <= u.hours; h++) { n++; lessons.push({ n, ui, h, unit: u, content: (u.lessonContents || [])[h-1] || '' }); } }); }
                   // 現在の選択を tempSubject のサフィックス（単元名 h/H）から復元
                   let selUi = -1, selH = -1;
                   const mm = (tempSubject || '').match(/（(.+?)\s+(\d+)\/(\d+)）\s*$/);
                   if (unitSubj && mm) { const ui = unitSubj.units.findIndex(u => u.name === mm[1]); if (ui >= 0) { selUi = ui; selH = parseInt(mm[2]); } }
                   const selValue = selUi >= 0 ? `${selUi}-${selH}` : '';
-                  const selLesson = lessons.find(l => l.ui === selUi && l.h === selH);
+                  const selLesson = unitSubj && selUi >= 0 && unitSubj.units[selUi] ? { unit: unitSubj.units[selUi], h: selH, content: (unitSubj.units[selUi].lessonContents || [])[selH - 1] || '' } : null;
                   return (
                   <div className="space-y-4">
                     {/* 曜日タブ（参照するテンプレートの曜日選択） */}
@@ -5403,7 +5402,15 @@
                         <div className="relative">
                           <select value={selValue} onChange={e=>{ const v=e.target.value; if(!v){ setTempSubject(unitSubj.name); setTempUnitPickerSel(null); return; } const [ui,h]=v.split('-').map(Number); const unit=unitSubj.units[ui]; const prefix=match.cls||''; setTempSubject(`${prefix}${unitSubj.name}（${unit.name} ${h}/${unit.hours}）`); setTempUnitPickerSel({ subjIdx: match.idx, cls: match.cls, unitIdx: ui, hour: h }); }} className="w-full appearance-none border border-slate-300 rounded-lg pl-3 pr-9 py-2.5 text-sm font-bold text-slate-800 bg-white outline-none focus:border-blue-500 shadow-sm">
                             <option value="">（単元と連携しない）</option>
-                            {lessons.map(l => { const label = l.content ? l.content.split('\n')[0] : l.unit.name; return <option key={`${l.ui}-${l.h}`} value={`${l.ui}-${l.h}`}>{`第${l.n}時：${label.length > 22 ? label.slice(0,22)+'…' : label}`}</option>; })}
+                            {unitSubj.units.map((u, ui) => (
+                              <optgroup key={ui} label={`${u.name}（全${u.hours}時間）`}>
+                                {Array.from({length: u.hours}, (_, hi) => {
+                                  const h = hi + 1;
+                                  const c = ((u.lessonContents || [])[hi] || '').split('\n')[0];
+                                  return <option key={h} value={`${ui}-${h}`}>{`${h}/${u.hours}時間目${c ? '：' + (c.length > 20 ? c.slice(0,20)+'…' : c) : ''}`}</option>;
+                                })}
+                              </optgroup>
+                            ))}
                           </select>
                           <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs">▼</span>
                         </div>
