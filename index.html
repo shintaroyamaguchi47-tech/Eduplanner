@@ -1815,6 +1815,11 @@
         if (!cloudUser) { cloudDataLoaded.current = false; setDataLoadStatus('idle'); return; }
         setDataLoadStatus('loading');
         const { uid, db } = cloudUser; let unsubs = [];
+        const resetWeeklyRefs = () => {
+          weeklyPartsRef.current = {}; weeklySavedRef.current = {}; weeklyYearsRef.current = null;
+          weeklyMigratedRef.current = false; weeklyMigrationRunRef.current = false;
+        };
+        resetWeeklyRefs();
         let hasData = false; let localFallbackUsed = false;
         const loaded = { template: false, weekly: false, weeklyYears: false, todos: false, notes: false, syllabus: false, quickMemos: false, extra: false };
         const cacheToLocal = () => {
@@ -1925,7 +1930,7 @@
             markLoaded('extra', s.exists());
           }));
         };
-        listen(); return () => { clearTimeout(timeout); unsubs.forEach(u=>u()); cloudDataLoaded.current = false; };
+        listen(); return () => { clearTimeout(timeout); unsubs.forEach(u=>u()); cloudDataLoaded.current = false; resetWeeklyRefs(); };
       }, [cloudUser]);
 
       // 旧ドキュメント1本にまとまっている週案を、初回だけ年度ごとのドキュメントに書き出す。
