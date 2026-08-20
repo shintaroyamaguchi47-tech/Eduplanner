@@ -234,6 +234,25 @@
     const TODO_TAGS = ['授業準備', '学年業務', '部活', '会議・事務', '生徒・保護者', 'その他'];
     const DEFAULT_TEMPLATE_SETTINGS = { 0:{type:'normal',clean:false}, 1:{type:'normal',clean:true}, 2:{type:'normal',clean:true}, 3:{type:'normal',clean:false}, 4:{type:'normal',clean:true}, 5:{type:'holiday',clean:false}, 6:{type:'holiday',clean:false} };
 
+    // 年度（4月始まり）の判定
+    const getSchoolYearOf = (ds) => { const [y, m] = ds.split('-').map(Number); return m < 4 ? y - 1 : y; };
+
+    // 基本時間割と曜日ごとの日課は年度ごとに持つ。
+    // 旧形式（{"0-p1":{...}} のフラットな形）は年度をまたいだ共通設定として扱い、
+    // ある年度を編集した時点で、その年度ぶんだけが切り出される（それ以前の年度は編集前のまま残る）。
+    // 新形式: { byYear:true, base:{...切り出し前の設定...}, years:{ "2026":{...}, "2027":{...} } }
+    // 設定のない年度は、それ以前で最も新しい年度の設定を引き継ぐ。
+    const isYearKeyedMap = (m) => !!(m && m.byYear && m.years);
+    const resolveYearMap = (m, sy, fallback) => {
+      if (!isYearKeyedMap(m)) return m || fallback;
+      let hit = null;
+      Object.keys(m.years).forEach(k => { const y = Number(k); if (Number.isFinite(y) && y <= sy && (hit === null || y > hit)) hit = y; });
+      return (hit === null ? m.base : m.years[String(hit)]) || fallback;
+    };
+    const setYearMap = (m, sy, next) => isYearKeyedMap(m)
+      ? { ...m, years: { ...m.years, [String(sy)]: next } }
+      : { byYear: true, base: m || {}, years: { [String(sy)]: next } };
+
     const getYearlyEventText = (yData, ds) => {
       const [y, m, d] = ds.split('-').map(Number);
       const sy = m < 4 ? y - 1 : y;
@@ -274,8 +293,61 @@
       { id: 'v6', name: '学年末休業', start: '2027-03-20', end: '2027-03-31' }
     ];
 
-    const JAPAN_HOLIDAYS = { "2025-1-1":"🎌 元日","2025-1-13":"🎌 成人の日","2025-2-11":"🎌 建国記念の日","2025-2-23":"🎌 天皇誕生日","2025-2-24":"🎌 振替休日","2025-3-20":"🎌 春分の日","2025-4-29":"🎌 昭和の日","2025-5-3":"🎌 憲法記念日","2025-5-4":"🎌 みどりの日","2025-5-5":"🎌 こどもの日","2025-5-6":"🎌 振替休日","2025-7-21":"🎌 海の日","2025-8-11":"🎌 山の日","2025-9-15":"🎌 敬老の日","2025-9-23":"🎌 秋分の日","2025-10-13":"🎌 スポーツの日","2025-11-3":"🎌 文化の日","2025-11-23":"🎌 勤労感謝の日","2025-11-24":"🎌 振替休日","2026-1-1":"🎌 元日","2026-1-12":"🎌 成人の日","2026-2-11":"🎌 建国記念の日","2026-2-23":"🎌 天皇誕生日","2026-3-20":"🎌 春分の日","2026-4-29":"🎌 昭和の日","2026-5-3":"🎌 憲法記念日","2026-5-4":"🎌 みどりの日","2026-5-5":"🎌 こどもの日","2026-5-6":"🎌 振替休日","2026-7-20":"🎌 海の日","2026-8-11":"🎌 山の日","2026-9-21":"🎌 敬老の日","2026-9-22":"🎌 国民の休日","2026-9-23":"🎌 秋分の日","2026-10-12":"🎌 スポーツの日","2026-11-3":"🎌 文化の日","2026-11-23":"🎌 勤労感謝の日" };
-    const getHolidayName = (y, m, d) => JAPAN_HOLIDAYS[`${y}-${m}-${d}`] || null;
+    // 国民の祝日は祝日法から計算する。年ごとの一覧を初回だけ組み立ててキャッシュする。
+    // 春分・秋分は国立天文台の近似式（1980〜2099年で有効）。
+    // 五輪年のような法改正での臨時移動が決まったときは HOLIDAY_OVERRIDES に "2020-7-23":"海の日" の形で書けば計算結果より優先される。
+    const HOLIDAY_OVERRIDES = {};
+    const FIXED_HOLIDAYS = [
+      [1,1,'元日'], [2,11,'建国記念の日'], [2,23,'天皇誕生日'], [4,29,'昭和の日'],
+      [5,3,'憲法記念日'], [5,4,'みどりの日'], [5,5,'こどもの日'], [8,11,'山の日'],
+      [11,3,'文化の日'], [11,23,'勤労感謝の日'],
+    ];
+    // ハッピーマンデー: [月, 第何月曜, 名称]
+    const HAPPY_MONDAY_HOLIDAYS = [ [1,2,'成人の日'], [7,3,'海の日'], [9,3,'敬老の日'], [10,2,'スポーツの日'] ];
+    const getNthMondayDate = (y, m, nth) => {
+      const first = new Date(y, m - 1, 1);
+      return 1 + ((8 - first.getDay()) % 7) + (nth - 1) * 7;
+    };
+    const getEquinoxDate = (y, isSpring) =>
+      Math.floor((isSpring ? 20.8431 : 23.2488) + 0.242194 * (y - 1980) - Math.floor((y - 1980) / 4));
+
+    const buildYearHolidays = (y) => {
+      const map = {};
+      FIXED_HOLIDAYS.forEach(([m, d, name]) => { map[`${m}-${d}`] = name; });
+      HAPPY_MONDAY_HOLIDAYS.forEach(([m, nth, name]) => { map[`${m}-${getNthMondayDate(y, m, nth)}`] = name; });
+      map[`3-${getEquinoxDate(y, true)}`] = '春分の日';
+      map[`9-${getEquinoxDate(y, false)}`] = '秋分の日';
+      // 振替休日: 日曜と重なった祝日の次の、祝日でない日
+      Object.keys(map).forEach(key => {
+        const [m, d] = key.split('-').map(Number);
+        if (new Date(y, m - 1, d).getDay() !== 0) return;
+        const dt = new Date(y, m - 1, d);
+        do { dt.setDate(dt.getDate() + 1); } while (map[`${dt.getMonth() + 1}-${dt.getDate()}`]);
+        map[`${dt.getMonth() + 1}-${dt.getDate()}`] = '振替休日';
+      });
+      // 国民の休日: 前後を祝日に挟まれた平日（敬老の日と秋分の日の間など）
+      for (let m = 1; m <= 12; m++) {
+        for (let d = 1; d <= 31; d++) {
+          const dt = new Date(y, m - 1, d);
+          if (dt.getMonth() !== m - 1 || dt.getDay() === 0 || map[`${m}-${d}`]) continue;
+          const prev = new Date(y, m - 1, d - 1), next = new Date(y, m - 1, d + 1);
+          if (map[`${prev.getMonth() + 1}-${prev.getDate()}`] && map[`${next.getMonth() + 1}-${next.getDate()}`]) map[`${m}-${d}`] = '国民の休日';
+        }
+      }
+      Object.entries(HOLIDAY_OVERRIDES).forEach(([key, name]) => {
+        const [oy, om, od] = key.split('-').map(Number);
+        if (oy !== y) return;
+        if (name) map[`${om}-${od}`] = name; else delete map[`${om}-${od}`];
+      });
+      return map;
+    };
+
+    const holidayCacheByYear = {};
+    const getHolidayName = (y, m, d) => {
+      if (!holidayCacheByYear[y]) holidayCacheByYear[y] = buildYearHolidays(Number(y));
+      const name = holidayCacheByYear[y][`${m}-${d}`];
+      return name ? `🎌 ${name}` : null;
+    };
 
     // 長期休業期間の日課: 平日は「休業(出勤)」、土日祝は「休日」
     const getVacationDaySetting = (ds, di, vacations) => {
@@ -469,13 +541,13 @@
         if (getHolidayName(y,m,d) || isYearlyHoliday(ds, yearlyData)) return { type:'holiday' };
         const inferred = getInferredDaySetting(yearlyData, ds);
         if (inferred) return inferred;
-        return templateSettings[di] || DEFAULT_TEMPLATE_SETTINGS[di];
+        return resolveYearMap(templateSettings, getSchoolYearOf(ds), DEFAULT_TEMPLATE_SETTINGS)[di] || DEFAULT_TEMPLATE_SETTINGS[di];
       };
 
       const setting = getDaySetting(todayStr, dayIdx);
       
       const getCellData = (ds, pid, di) => {
-        const wKey = `${ds}-${pid}`; const tKey = `${di}-${pid}`; let base = baseTemplate[tKey] || { subject:'', memo:'' };
+        const wKey = `${ds}-${pid}`; const tKey = `${di}-${pid}`; let base = resolveYearMap(baseTemplate, getSchoolYearOf(ds), {})[tKey] || { subject:'', memo:'' };
         if (pid === 'event') { const [y,m,d] = ds.split('-').map(Number); const sy = m < 4 ? y - 1 : y; const ye = yearlyData[sy]?.[`${m}-${d}`]; if (ye) base = { ...base, subject: ye }; }
         else if (isNoClassType(getDaySetting(ds, di).type)) base = { subject:'', memo:'' };
         const override = weeklyData[wKey]; return (override && !override.useTemplate) ? override : base;
@@ -740,10 +812,10 @@
         if (getHolidayName(y,m,d) || isYearlyHoliday(ds, yearlyData)) return { type:'holiday' };
         const inferred = getInferredDaySetting(yearlyData, ds);
         if (inferred) return inferred;
-        return templateSettings[di] || DEFAULT_TEMPLATE_SETTINGS[di];
+        return resolveYearMap(templateSettings, getSchoolYearOf(ds), DEFAULT_TEMPLATE_SETTINGS)[di] || DEFAULT_TEMPLATE_SETTINGS[di];
       };
       const getCellDataLocal = (ds, pid, di) => {
-        const wKey = `${ds}-${pid}`; const tKey = `${di}-${pid}`; let base = baseTemplate[tKey] || { subject:'', memo:'' };
+        const wKey = `${ds}-${pid}`; const tKey = `${di}-${pid}`; let base = resolveYearMap(baseTemplate, getSchoolYearOf(ds), {})[tKey] || { subject:'', memo:'' };
         if (pid === 'event') { const [y,m,d] = ds.split('-').map(Number); const sy = m < 4 ? y - 1 : y; const ye = yearlyData[sy]?.[`${m}-${d}`]; if (ye) base = { ...base, subject: ye }; }
         else if (isNoClassType(getDaySettingLocal(ds, di).type)) base = { subject:'', memo:'' };
         const override = weeklyData[wKey]; return (override && !override.useTemplate) ? override : base;
@@ -959,6 +1031,11 @@
       const [saveStatus, setSaveStatus] = useState(navigator.onLine ? 'saved' : 'offline');
       const [lastSavedAt, setLastSavedAt] = useState(null);
       const [autoBackupCount, setAutoBackupCount] = useState(() => { try { return JSON.parse(localStorage.getItem('ep_auto_backups') || '[]').length; } catch(e) { return 0; } });
+      const [showYearSetup, setShowYearSetup] = useState(false);
+      const [yearSetupTarget, setYearSetupTarget] = useState(() => { const t = getJSTDate(); return (t.getMonth() + 1 < 4 ? t.getFullYear() - 1 : t.getFullYear()) + 1; });
+      const [yearSetupOpts, setYearSetupOpts] = useState({ backup: true, template: true, events: false, syllabus: true, todos: true });
+      const [yearSetupVacs, setYearSetupVacs] = useState([{ name: '夏季休業', start: '', end: '' }, { name: '冬季休業', start: '', end: '' }, { name: '学年末休業', start: '', end: '' }]);
+      const [yearSetupResult, setYearSetupResult] = useState(null);
       const pendingCloudSavesRef = useRef({});
       const saveStatusTimerRef = useRef(null);
       const quickCanvasRef = useRef(null);
@@ -1485,6 +1562,25 @@
 
       const todayStr = formatDate(getJSTDate());
       const schoolYear = currentMonth.getMonth() < 3 ? currentMonth.getFullYear() - 1 : currentMonth.getFullYear();
+      // 基本時間割・日課テンプレートの編集対象年度。週案で開いている週の年度に合わせる
+      const templateSchoolYear = getSchoolYearOf(formatDate(currentWeekStart));
+      const activeTemplate = resolveYearMap(baseTemplate, templateSchoolYear, {});
+      const activeTemplateSettings = resolveYearMap(templateSettings, templateSchoolYear, DEFAULT_TEMPLATE_SETTINGS);
+      const getTemplateFor = (ds) => resolveYearMap(baseTemplate, getSchoolYearOf(ds), {});
+      const getTemplateSettingsFor = (ds) => resolveYearMap(templateSettings, getSchoolYearOf(ds), DEFAULT_TEMPLATE_SETTINGS);
+
+      // クラウド上の週案ドキュメントの大きさ。Firestoreは1ドキュメント1MiBが上限で、手書きは画像として同じ中に入る
+      const dataSizeInfo = useMemo(() => {
+        if (activeTab !== 'settings') return null;
+        let bytes = 0;
+        try { bytes = new TextEncoder().encode(JSON.stringify({ weeklyData, weeklySettings })).length; } catch (e) { return null; }
+        const limit = 1048576;
+        return {
+          label: bytes >= limit ? `${(bytes / limit).toFixed(2)}MB` : `${Math.round(bytes / 1024)}KB`,
+          percent: Math.min(100, Math.round((bytes / limit) * 100)),
+          warn: bytes > limit * 0.7,
+        };
+      }, [activeTab, weeklyData, weeklySettings]);
 
       const getDynamicFontSize = (text, isMobile, isWeekly = false) => {
         if (!text) return isMobile ? 'text-[10px]' : isWeekly ? 'text-[10px]' : 'text-sm';
@@ -1550,6 +1646,15 @@
       const isUndoRedo = useRef(false);
       const cloudDataLoaded = useRef(false);
       const saveToFirestoreRef = useRef(null);
+      const saveWeeklyDocsRef = useRef(null);
+      // 週案は年度ごとのドキュメント（weekly_2026 など）に分けて保存する。
+      // Firestoreは1ドキュメント1MiBが上限で、手書きが画像として同じ中に入るため、
+      // 1本にまとめたままでは年を重ねると保存できなくなり、毎回の保存も全年度ぶんの送信になる。
+      const weeklyPartsRef = useRef({});      // 年度 -> クラウドから読んだ内容
+      const weeklySavedRef = useRef({});      // 年度 -> 最後に保存した内容（変化のない年度は送らない）
+      const weeklyYearsRef = useRef(null);    // 目次ドキュメントに載っている年度
+      const weeklyMigratedRef = useRef(false);
+      const weeklyMigrationRunRef = useRef(false);
       const MAX_HISTORY = 30;
       
       const pushUndo = useCallback((snapshot) => {
@@ -1574,7 +1679,7 @@
         setBaseTemplate(snap.baseTemplate);
         setTemplateSettings(snap.templateSettings);
         if (saveToFirestoreRef.current) {
-          saveToFirestoreRef.current('weekly', { weeklyData: snap.weeklyData, weeklySettings: snap.weeklySettings });
+          if (saveWeeklyDocsRef.current) saveWeeklyDocsRef.current(snap.weeklyData, snap.weeklySettings);
           saveToFirestoreRef.current('template', { baseTemplate: snap.baseTemplate, templateSettings: snap.templateSettings });
           saveToFirestoreRef.current('todos', { todos: snap.todos });
         }
@@ -1710,8 +1815,13 @@
         if (!cloudUser) { cloudDataLoaded.current = false; setDataLoadStatus('idle'); return; }
         setDataLoadStatus('loading');
         const { uid, db } = cloudUser; let unsubs = [];
+        const resetWeeklyRefs = () => {
+          weeklyPartsRef.current = {}; weeklySavedRef.current = {}; weeklyYearsRef.current = null;
+          weeklyMigratedRef.current = false; weeklyMigrationRunRef.current = false;
+        };
+        resetWeeklyRefs();
         let hasData = false; let localFallbackUsed = false;
-        const loaded = { template: false, weekly: false, todos: false, notes: false, syllabus: false, quickMemos: false, extra: false };
+        const loaded = { template: false, weekly: false, weeklyYears: false, todos: false, notes: false, syllabus: false, quickMemos: false, extra: false };
         const cacheToLocal = () => {
           try {
             const snap = { baseTemplate, templateSettings, weeklyData, weeklySettings, todos, notesData, syllabusData, quickMemos, yearlyData, documents, vacations };
@@ -1743,7 +1853,51 @@
         const listen = async () => {
           const { doc, onSnapshot } = await _importDynamic("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
           unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','template'), s => { if (localFallbackUsed) return; if(s.exists()){ const d=s.data(); if(d.baseTemplate) setBaseTemplate(d.baseTemplate); if(d.templateSettings) setTemplateSettings(d.templateSettings); } markLoaded('template', s.exists()); }));
-          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','weekly'), s => { if (localFallbackUsed) return; if(s.exists()){ const d=s.data(); if(d.weeklyData) setWeeklyData(d.weeklyData); if(d.weeklySettings) setWeeklySettings(d.weeklySettings); } markLoaded('weekly', s.exists()); }));
+          // 週案は「移行前の旧ドキュメント」と「年度ごとのドキュメント」を合わせて読む。
+          // 移行後は旧ドキュメントには書き込まないが、移行前の控えとして残しておく
+          const applyWeeklyParts = () => {
+            const parts = weeklyPartsRef.current;
+            const order = ['legacy', ...Object.keys(parts).filter(k => k !== 'legacy').sort()];
+            const data = {}; const settings = {};
+            order.forEach(k => {
+              const part = parts[k];
+              if (!part) return;
+              if (k === 'legacy' && weeklyMigratedRef.current) return;
+              Object.assign(data, part.weeklyData || {});
+              Object.assign(settings, part.weeklySettings || {});
+            });
+            setWeeklyData(data); setWeeklySettings(settings);
+            weeklySavedRef.current = {};
+            Object.entries(splitWeeklyByYear(data, settings)).forEach(([y, p]) => { weeklySavedRef.current[y] = JSON.stringify(p); });
+          };
+          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','weekly'), s => {
+            if (localFallbackUsed) return;
+            if (s.exists()) { const d = s.data(); weeklyPartsRef.current.legacy = { weeklyData: d.weeklyData || {}, weeklySettings: d.weeklySettings || {} }; applyWeeklyParts(); }
+            markLoaded('weekly', s.exists());
+          }));
+          const yearUnsubs = {};
+          const pendingYears = new Set();
+          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','weeklyIndex'), s => {
+            if (localFallbackUsed) return;
+            const idx = s.exists() ? s.data() : null;
+            weeklyMigratedRef.current = !!(idx && idx.migrated);
+            const years = (idx && Array.isArray(idx.years)) ? idx.years.map(String) : [];
+            weeklyYearsRef.current = years.length ? years : weeklyYearsRef.current;
+            if (!years.length) { markLoaded('weeklyYears', false); return; }
+            years.forEach(y => {
+              if (yearUnsubs[y]) return;
+              pendingYears.add(y);
+              yearUnsubs[y] = onSnapshot(doc(db,'users',uid,'teacherPlanner',`weekly_${y}`), ys => {
+                if (localFallbackUsed) return;
+                const d = ys.exists() ? ys.data() : {};
+                weeklyPartsRef.current[y] = { weeklyData: d.weeklyData || {}, weeklySettings: d.weeklySettings || {} };
+                applyWeeklyParts();
+                pendingYears.delete(y);
+                if (pendingYears.size === 0) markLoaded('weeklyYears', ys.exists());
+              });
+              unsubs.push(() => yearUnsubs[y]());
+            });
+          }));
           unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','todos'), s => { if (localFallbackUsed) return; if(s.exists()&&Array.isArray(s.data().todos)) setTodos(s.data().todos); markLoaded('todos', s.exists()); }));
           unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','notes'), s => { if (localFallbackUsed) return; if(s.exists()&&Array.isArray(s.data().notes)) setNotesData(s.data().notes); markLoaded('notes', s.exists()); }));
           unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','syllabus'), s => { if (localFallbackUsed) return; if(s.exists()&&Array.isArray(s.data().syllabus)) setSyllabusData(s.data().syllabus); markLoaded('syllabus', s.exists()); }));
@@ -1776,8 +1930,33 @@
             markLoaded('extra', s.exists());
           }));
         };
-        listen(); return () => { clearTimeout(timeout); unsubs.forEach(u=>u()); cloudDataLoaded.current = false; };
+        listen(); return () => { clearTimeout(timeout); unsubs.forEach(u=>u()); cloudDataLoaded.current = false; resetWeeklyRefs(); };
       }, [cloudUser]);
+
+      // 旧ドキュメント1本にまとまっている週案を、初回だけ年度ごとのドキュメントに書き出す。
+      // 旧ドキュメントは移行前の控えとして残し、年度ぶんの保存がすべて成功してから
+      // 目次に migrated を立てる（途中で失敗したら次の起動でやり直す）
+      useEffect(() => {
+        if (dataLoadStatus !== 'loaded') return;
+        if (weeklyMigratedRef.current || weeklyMigrationRunRef.current) return;
+        const parts = splitWeeklyByYear(weeklyData, weeklySettings);
+        const years = Object.keys(parts);
+        if (!years.length) return;
+        weeklyMigrationRunRef.current = true;
+        (async () => {
+          const results = await Promise.all(years.map(y => {
+            weeklySavedRef.current[y] = JSON.stringify(parts[y]);
+            return saveToFirestore(`weekly_${y}`, parts[y]);
+          }));
+          if (results.every(Boolean)) {
+            weeklyMigratedRef.current = true;
+            weeklyYearsRef.current = years;
+            saveToFirestore('weeklyIndex', { years, migrated: true });
+          } else {
+            weeklyMigrationRunRef.current = false;
+          }
+        })();
+      }, [dataLoadStatus]);
 
       // データ読み込み完了後、Googleカレンダー連携済みなら今日まだ同期していない場合に自動で1回だけ同期する
       useEffect(() => {
@@ -1821,7 +2000,7 @@
           localStorage.setItem('ep_local_data', JSON.stringify(latest.data));
           const d = latest.data;
           saveToFirestore('template', { baseTemplate:d.baseTemplate, templateSettings:d.templateSettings });
-          saveToFirestore('weekly', { weeklyData:d.weeklyData, weeklySettings:d.weeklySettings });
+          saveWeeklyDocs(d.weeklyData, d.weeklySettings);
           saveToFirestore('todos', { todos:d.todos });
           saveToFirestore('notes', { notes:d.notesData });
           saveToFirestore('syllabus', { syllabus:d.syllabusData });
@@ -1879,7 +2058,37 @@
         else setSaveStatus('offline');
       }, [isOnline, cloudUser]);
 
-      const saveAll = (t,ts,w,ws) => { if (!isUndoRedo.current) pushUndo(getCurrentSnapshot()); setBaseTemplate(t); setTemplateSettings(ts); setWeeklyData(w); setWeeklySettings(ws); saveToFirestore('template',{baseTemplate:t,templateSettings:ts}); saveToFirestore('weekly',{weeklyData:w,weeklySettings:ws}); saveToLocal({baseTemplate:t,templateSettings:ts,weeklyData:w,weeklySettings:ws}); };
+      // 週案のキーは "YYYY-MM-DD-<行>"、週の設定は "YYYY-MM-DD"。日付として読めないキーは
+      // 取りこぼさないように 'other' にまとめる
+      const splitWeeklyByYear = (w, ws) => {
+        const parts = {};
+        const bucket = (y) => (parts[y] = parts[y] || { weeklyData: {}, weeklySettings: {} });
+        const yearOfKey = (k) => (/^\d{4}-\d{2}-\d{2}/.test(k) ? String(getSchoolYearOf(k.slice(0, 10))) : 'other');
+        Object.entries(w || {}).forEach(([k, v]) => { bucket(yearOfKey(k)).weeklyData[k] = v; });
+        Object.entries(ws || {}).forEach(([k, v]) => { bucket(yearOfKey(k)).weeklySettings[k] = v; });
+        return parts;
+      };
+
+      // 変化のあった年度だけを保存し、年度が増えたときは目次も更新する
+      const saveWeeklyDocs = (w, ws) => {
+        const parts = splitWeeklyByYear(w, ws);
+        const years = Object.keys(parts);
+        years.forEach(y => {
+          const json = JSON.stringify(parts[y]);
+          if (weeklySavedRef.current[y] === json) return;
+          weeklySavedRef.current[y] = json;
+          saveToFirestore(`weekly_${y}`, parts[y]);
+        });
+        const prev = weeklyYearsRef.current;
+        if (!prev || years.some(y => prev.indexOf(y) === -1)) {
+          const merged = prev ? [...new Set([...prev, ...years])] : years;
+          weeklyYearsRef.current = merged;
+          saveToFirestore('weeklyIndex', { years: merged, migrated: true });
+        }
+      };
+      saveWeeklyDocsRef.current = saveWeeklyDocs;
+
+      const saveAll = (t,ts,w,ws) => { if (!isUndoRedo.current) pushUndo(getCurrentSnapshot()); setBaseTemplate(t); setTemplateSettings(ts); setWeeklyData(w); setWeeklySettings(ws); saveToFirestore('template',{baseTemplate:t,templateSettings:ts}); saveWeeklyDocs(w,ws); saveToLocal({baseTemplate:t,templateSettings:ts,weeklyData:w,weeklySettings:ws}); };
       const saveTodos = (nt) => { if (!isUndoRedo.current) pushUndo(getCurrentSnapshot()); setTodos(nt); saveToFirestore('todos',{todos:nt}); saveToLocal({todos:nt}); };
       const saveNotes = (nn) => { setNotesData(nn); saveToFirestore('notes',{notes:nn}); saveToLocal({notesData:nn}); };
       const saveSyllabus = (ns) => { setSyllabusData(ns); saveToFirestore('syllabus',{syllabus:ns}); saveToLocal({syllabusData:ns}); };
@@ -2069,7 +2278,7 @@
               if (data.quickMemos) setQuickMemos(data.quickMemos);
               
               saveToFirestore('template', { baseTemplate: data.baseTemplate, templateSettings: data.templateSettings });
-              saveToFirestore('weekly', { weeklyData: data.weeklyData, weeklySettings: data.weeklySettings });
+              saveWeeklyDocs(data.weeklyData, data.weeklySettings);
               saveToFirestore('todos', { todos: data.todos });
               saveToFirestore('notes', { notes: data.notesData });
               saveToFirestore('syllabus', { syllabus: data.syllabusData });
@@ -2088,6 +2297,54 @@
         reader.readAsText(file);
       };
 
+      // 年度が変わるときの準備をまとめて行う。過去の年度の週案・記録には手を触れない
+      const runYearSetup = () => {
+        const y = Number(yearSetupTarget);
+        if (!Number.isFinite(y)) return;
+        if (!window.confirm(`${y}年度の準備を実行します。よろしいですか？`)) return;
+        const done = [];
+
+        if (yearSetupOpts.backup) { exportData(); done.push('データをダウンロードしました'); }
+
+        if (yearSetupOpts.template) {
+          const nt = setYearMap(baseTemplate, y, { ...resolveYearMap(baseTemplate, y, {}) });
+          const ns = setYearMap(templateSettings, y, { ...resolveYearMap(templateSettings, y, DEFAULT_TEMPLATE_SETTINGS) });
+          saveAll(nt, ns, weeklyData, weeklySettings);
+          done.push(`${y}年度の基本時間割・日課を切り出しました（内容は前年度のまま）`);
+        }
+
+        if (yearSetupOpts.todos) {
+          const rest = todos.filter(t => !t.completed);
+          if (rest.length !== todos.length) { saveTodos(rest); done.push(`完了済みのTODOを${todos.length - rest.length}件削除しました`); }
+          else done.push('削除する完了済みTODOはありませんでした');
+        }
+
+        let nextYearly = yearlyData;
+        if (yearSetupOpts.events) {
+          const prev = yearlyData[y - 1] || yearlyData[String(y - 1)];
+          if (prev) { nextYearly = { ...yearlyData, [y]: { ...prev, ...(yearlyData[y] || {}) } }; done.push(`${y - 1}年度の年間行事を${y}年度にコピーしました（曜日のずれは年間タブで直してください）`); }
+          else done.push(`${y - 1}年度の年間行事が見つかりませんでした`);
+        }
+
+        const addVacs = yearSetupVacs
+          .filter(v => v.start && v.end)
+          .map((v, i) => ({ id: `vac-${y}-${i}-${Date.now()}`, name: v.name, start: v.start, end: v.end }));
+        const nextVacations = addVacs.length ? [...vacations, ...addVacs] : vacations;
+        if (addVacs.length) done.push(`長期休業を${addVacs.length}件追加しました`);
+
+        if (nextYearly !== yearlyData || nextVacations !== vacations) saveExtraData(nextYearly, documents, nextVacations);
+
+        if (yearSetupOpts.syllabus) {
+          const reset = syllabusData.map(sub => ({ ...sub, currentUnitIdx: 0, currentHour: 1, classProgress: {} }));
+          saveSyllabus(reset);
+          done.push(`単元計画${reset.length}件の進度をリセットしました`);
+        }
+
+        setYearSetupResult({ year: y, done });
+        setYearSetupVacs(yearSetupVacs.map(v => ({ ...v, start: '', end: '' })));
+        showToast(`🌸 ${y}年度の準備が完了しました`);
+      };
+
       const isYearlyHoliday = (ds, yData) => isHolidayEventText(getYearlyEventText(yData, ds));
 
       const getDaySetting = (ds, di) => {
@@ -2099,7 +2356,8 @@
         if (isYearlyHoliday(ds, yearlyData)) return {type:'holiday'};
         const inferred = getInferredDaySetting(yearlyData, ds);
         if (inferred) return inferred;
-        return templateSettings[di] || DEFAULT_TEMPLATE_SETTINGS[di]; 
+        const daySettings = activeTab === 'template' ? activeTemplateSettings : getTemplateSettingsFor(ds);
+        return daySettings[di] || DEFAULT_TEMPLATE_SETTINGS[di];
       };
       const syncEventToYearly = (dateStr, nextSubject) => {
         if (!dateStr) return;
@@ -2131,7 +2389,7 @@
       const getCellData = (ds, pid, di) => { 
         const wk=`${ds}-${pid}`; 
         const tk=`${di}-${pid}`; 
-        let base = baseTemplate[tk] || { subject:'', memo:'' }; 
+        let base = (activeTab === 'template' ? activeTemplate : getTemplateFor(ds))[tk] || { subject:'', memo:'' }; 
         if (activeTab === 'template') return base; 
 
         const set = getDaySetting(ds, di);
@@ -2216,10 +2474,10 @@
         const periodIds = ['p1','p2','p3','p4','p5','p6'];
         let total = 0;
         for (let di = 0; di < 7; di++) {
-          const set = templateSettings[di] || DEFAULT_TEMPLATE_SETTINGS[di];
+          const set = activeTemplateSettings[di] || DEFAULT_TEMPLATE_SETTINGS[di];
           if (set && isNoClassType(set.type)) continue;
           for (const pid of periodIds) {
-            const raw = (baseTemplate[`${di}-${pid}`]?.subject || '').trim();
+            const raw = (activeTemplate[`${di}-${pid}`]?.subject || '').trim();
             if (!raw) continue;
             const t = matchCountTarget(raw, targetsByLength);
             if (t) { counts[t]++; total++; }
@@ -2332,12 +2590,12 @@
       };
       
       const getPeriodTime = (setting, pid) => SCHEDULE_TIMES[setting.type]?.[pid];
-      const handleSettingChange = (ds, di, ns) => { if(activeTab==='template'){ const n={...templateSettings,[di]:ns}; setTemplateSettings(n); saveAll(baseTemplate,n,weeklyData,weeklySettings); } else { const n={...weeklySettings,[ds]:ns}; setWeeklySettings(n); saveAll(baseTemplate,templateSettings,weeklyData,n); } };
+      const handleSettingChange = (ds, di, ns) => { if(activeTab==='template'){ const n=setYearMap(templateSettings, templateSchoolYear, {...activeTemplateSettings,[di]:ns}); setTemplateSettings(n); saveAll(baseTemplate,n,weeklyData,weeklySettings); } else { const n={...weeklySettings,[ds]:ns}; setWeeklySettings(n); saveAll(baseTemplate,templateSettings,weeklyData,n); } };
       const LEAVE_PRESET_TIMES = { '年休': { start: '08:15', end: '16:45' }, '半休（午前）': { start: '08:15', end: '12:15' }, '半休（午後）': { start: '12:15', end: '16:45' }, '特別休暇': { start: '08:15', end: '16:45' } };
       const openLeaveModal = (ds, di) => { const ls = (getDaySetting(ds, di).leaves || []).map(l => ({...l})); if (ls.length === 0) ls.push({ label: '年休', start: '', end: '' }); setTempLeaves(ls); setEditingLeaveDay({ dateStr: ds, dayIndex: di }); };
       const handleSaveLeaves = () => { if (!editingLeaveDay) return; const { dateStr, dayIndex } = editingLeaveDay; const incomplete = tempLeaves.some(l => (l.start && !l.end) || (!l.start && l.end)); if (incomplete) { showToast('開始と終了の時刻を両方入力してください'); return; } const cleaned = tempLeaves.filter(l => l.start && l.end).map(l => ({ label: (l.label || '').trim() || '休暇', start: l.start, end: l.end })); if (tempLeaves.length > 0 && cleaned.length === 0) { showToast('開始と終了の時刻を入力してください'); return; } const ns = { ...getDaySetting(dateStr, dayIndex) }; if (cleaned.length > 0) ns.leaves = cleaned; else delete ns.leaves; handleSettingChange(dateStr, dayIndex, ns); setEditingLeaveDay(null); showToast(cleaned.length > 0 ? '休暇を設定しました' : '休暇を解除しました'); };
       
-      const handleSaveCell = (d) => { let syllabusUp=[...syllabusData]; let ch=false; if(!editingCell.isTemplate && d.subject){ for(let i=0;i<syllabusUp.length;i++){ let s=syllabusUp[i]; if(s.type==='auto') { const tryMatch = (prefix, cls) => { const prog = getClassProgress(s, cls); const unit = s.units?.[prog.currentUnitIdx]; if(!unit) return false; const exp=`${prefix}${s.name}（${unit.name} ${prog.currentHour}/${unit.hours}）`; if(d.subject===exp){ let nh=prog.currentHour+1; let nu=prog.currentUnitIdx; if(nh>unit.hours){nh=1;nu++;} syllabusUp[i]=setClassProgress(syllabusUp[i],cls,nu,nh); return true; } return false; }; if(s.classes&&s.classes.length>0){ for(const cls of s.classes){ if(tryMatch(cls,cls)){ch=true;break;} } }else{ if(tryMatch('',null)){ch=true;} } if(ch) break; }else if(s.type==='history'){ const pat=s.classes&&s.classes.length>0 ? `^(?:${s.classes.join('|')})?${s.name}（(.+)）$` : `^${s.name}（(.+)）$`; const m=d.subject.match(new RegExp(pat)); if(m){ let h=s.history||[]; if(!h.includes(m[1])){ syllabusUp[i]={...s,history:[m[1],...h].slice(0,15)}; ch=true; } } } } } if(editingCell.isTemplate){ const n={...baseTemplate,[`${editingCell.dayIndex}-${editingCell.periodId}`]:d}; saveAll(n,templateSettings,weeklyData,weeklySettings); } else { if(editingCell.periodId==='event') syncEventToYearly(editingCell.dateStr, d.subject || ''); let n={...weeklyData,[`${editingCell.dateStr}-${editingCell.periodId}`]:{...d,useTemplate:false}}; if(editingCell.periodId.startsWith('p')){ const li=getCellLessonInfo(d.subject); if(li){ let nu=li.unitIdx, nh=li.hour+1; if(nh>li.unit.hours){ nh=1; nu++; } const res=fillUnitSequence({weekly:n, subj:li.subj, cls:li.cls, startUnitIdx:nu, startHour:nh, fromDateStr:editingCell.dateStr, fromPid:editingCell.periodId, startSlot:null, color:''}); if(res.filled){ n=res.weekly; syllabusUp=syllabusUp.map((x,ix)=>ix===li.idx?setClassProgress(x,li.cls,res.endUnitIdx,res.endHour):x); ch=true; } } } saveAll(baseTemplate,templateSettings,n,weeklySettings); } if(ch) saveSyllabus(syllabusUp); setEditingCell(null); };
+      const handleSaveCell = (d) => { let syllabusUp=[...syllabusData]; let ch=false; if(!editingCell.isTemplate && d.subject){ for(let i=0;i<syllabusUp.length;i++){ let s=syllabusUp[i]; if(s.type==='auto') { const tryMatch = (prefix, cls) => { const prog = getClassProgress(s, cls); const unit = s.units?.[prog.currentUnitIdx]; if(!unit) return false; const exp=`${prefix}${s.name}（${unit.name} ${prog.currentHour}/${unit.hours}）`; if(d.subject===exp){ let nh=prog.currentHour+1; let nu=prog.currentUnitIdx; if(nh>unit.hours){nh=1;nu++;} syllabusUp[i]=setClassProgress(syllabusUp[i],cls,nu,nh); return true; } return false; }; if(s.classes&&s.classes.length>0){ for(const cls of s.classes){ if(tryMatch(cls,cls)){ch=true;break;} } }else{ if(tryMatch('',null)){ch=true;} } if(ch) break; }else if(s.type==='history'){ const pat=s.classes&&s.classes.length>0 ? `^(?:${s.classes.join('|')})?${s.name}（(.+)）$` : `^${s.name}（(.+)）$`; const m=d.subject.match(new RegExp(pat)); if(m){ let h=s.history||[]; if(!h.includes(m[1])){ syllabusUp[i]={...s,history:[m[1],...h].slice(0,15)}; ch=true; } } } } } if(editingCell.isTemplate){ const n=setYearMap(baseTemplate, templateSchoolYear, {...activeTemplate,[`${editingCell.dayIndex}-${editingCell.periodId}`]:d}); saveAll(n,templateSettings,weeklyData,weeklySettings); } else { if(editingCell.periodId==='event') syncEventToYearly(editingCell.dateStr, d.subject || ''); let n={...weeklyData,[`${editingCell.dateStr}-${editingCell.periodId}`]:{...d,useTemplate:false}}; if(editingCell.periodId.startsWith('p')){ const li=getCellLessonInfo(d.subject); if(li){ let nu=li.unitIdx, nh=li.hour+1; if(nh>li.unit.hours){ nh=1; nu++; } const res=fillUnitSequence({weekly:n, subj:li.subj, cls:li.cls, startUnitIdx:nu, startHour:nh, fromDateStr:editingCell.dateStr, fromPid:editingCell.periodId, startSlot:null, color:''}); if(res.filled){ n=res.weekly; syllabusUp=syllabusUp.map((x,ix)=>ix===li.idx?setClassProgress(x,li.cls,res.endUnitIdx,res.endHour):x); ch=true; } } } saveAll(baseTemplate,templateSettings,n,weeklySettings); } if(ch) saveSyllabus(syllabusUp); setEditingCell(null); };
 
       // 週全体スマート自動入力：現在コマを含め今週のテンプレート一致する空きコマに連続入力
       const handleSmartAutoFill = (subjIdx, cls = null) => {
@@ -2370,7 +2628,7 @@
 
             // テンプレート一致チェック
             const tk = `${i}-${p}`;
-            const tmpl = baseTemplate[tk];
+            const tmpl = getTemplateFor(dstr)[tk];
             if (!tmpl || !tmpl.subject || tmpl.subject.trim() !== expectedTmpl) continue;
 
             // 空きコマのみ対象（既に別内容があるセルはスキップ）
@@ -2456,7 +2714,7 @@
             // 起点のコマと、同じ日のそれより前の時限は対象外
             if (dstr === fromDateStr && periodIds.indexOf(p) <= fromPIdx) continue;
             const existing = weekly[`${dstr}-${p}`];
-            const tmpl = baseTemplate[`${dayIdx}-${p}`];
+            const tmpl = getTemplateFor(dstr)[`${dayIdx}-${p}`];
             const tmplMatches = tmpl?.subject?.trim() === expectedTmpl;
             const isEmptyCell = !existing || existing.useTemplate || !existing.subject || existing.subject.trim() === '';
             const existingIsAutoFill = !!existing?.subject?.match(autoFillPat);
@@ -2630,7 +2888,7 @@
             if (ov && !ov.useTemplate) continue;
 
             const tk = `${i}-${pid}`;
-            const tmpl = baseTemplate[tk];
+            const tmpl = getTemplateFor(ds)[tk];
             if (!tmpl || !tmpl.subject || !tmpl.subject.trim()) continue;
             const tSubj = tmpl.subject.trim();
 
@@ -2690,7 +2948,7 @@
               if (ov && !ov.useTemplate) continue;
 
               const tk = `${i}-${pid}`;
-              const tmpl = baseTemplate[tk];
+              const tmpl = getTemplateFor(ds)[tk];
               if (!tmpl || !tmpl.subject || !tmpl.subject.trim()) continue;
               const tSubj = tmpl.subject.trim();
 
@@ -2724,7 +2982,7 @@
         showToast(`📚 ${filled}コマ自動入力しました`);
       };
 
-      const handleCopyDay = (target,source) => { if(source==='') return; const sIdx=parseInt(source); const ns={...weeklySettings,[target]:{...(templateSettings[sIdx]||DEFAULT_TEMPLATE_SETTINGS[sIdx]),routine:sIdx}}; const nd={...weeklyData}; ROWS.forEach(r=>{ nd[`${target}-${r.id}`]={...(baseTemplate[`${sIdx}-${r.id}`]||{}),useTemplate:false}; }); setWeeklySettings(ns); setWeeklyData(nd); saveAll(baseTemplate,templateSettings,nd,ns); };
+      const handleCopyDay = (target,source) => { if(source==='') return; const sIdx=parseInt(source); const tgtSettings=getTemplateSettingsFor(target); const tgtTemplate=getTemplateFor(target); const ns={...weeklySettings,[target]:{...(tgtSettings[sIdx]||DEFAULT_TEMPLATE_SETTINGS[sIdx]),routine:sIdx}}; const nd={...weeklyData}; ROWS.forEach(r=>{ nd[`${target}-${r.id}`]={...(tgtTemplate[`${sIdx}-${r.id}`]||{}),useTemplate:false}; }); setWeeklySettings(ns); setWeeklyData(nd); saveAll(baseTemplate,templateSettings,nd,ns); };
       const handleRevertDay = (target) => {
         const nd = {...weeklyData}; const ns = {...weeklySettings};
         delete ns[target];
@@ -2744,7 +3002,7 @@
       // これにより「金曜1限を開いて水曜1限のテンプレートを参照し、確定するで金曜1限に保存」という操作が可能になる。
       const navigateEditCell = (di, pid) => {
         if (!editingCell) return;
-        const targetData = baseTemplate[`${di}-${pid}`] || { subject:'', memo:'' };
+        const targetData = (editingCell.isTemplate ? activeTemplate : getTemplateFor(editingCell.dateStr))[`${di}-${pid}`] || { subject:'', memo:'' };
         setNavTabDay(di);
         setNavTabPeriod(pid);
         setTempSubject(targetData.subject || '');
@@ -3798,7 +4056,7 @@
                       </div>
                     ) : (
                       <div className="w-full flex justify-center">
-                        <div className="text-xs sm:text-sm font-black text-purple-700 dark:text-purple-300 flex items-center gap-2 py-1.5 px-5 bg-purple-50 dark:bg-purple-900/20 rounded-xl border border-purple-200 dark:border-purple-700">⚙️ 基本設定モード (来週以降のベース時間割)</div>
+                        <div className="text-xs sm:text-sm font-black text-purple-700 dark:text-purple-300 flex items-center gap-2 py-1.5 px-5 bg-purple-50 dark:bg-purple-900/20 rounded-xl border border-purple-200 dark:border-purple-700">⚙️ 基本設定モード ({templateSchoolYear}年度のベース時間割)</div>
                       </div>
                     )}
                   </div>
@@ -4752,6 +5010,21 @@
                             </div>
                             <span className="text-sm font-black text-blue-700">{autoBackupCount}件</span>
                           </div>
+                          {dataSizeInfo && (
+                            <div className="rounded-xl bg-white border border-blue-200 px-3 py-2">
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <div className="text-xs font-black text-slate-700">クラウドの週案データ</div>
+                                  <div className="text-[10px] font-bold text-slate-500">手書きを含めて1MBが上限です</div>
+                                </div>
+                                <span className={`text-sm font-black ${dataSizeInfo.warn ? 'text-rose-600' : 'text-blue-700'}`}>{dataSizeInfo.label}</span>
+                              </div>
+                              <div className="mt-1.5 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                <div className={`h-full rounded-full ${dataSizeInfo.warn ? 'bg-rose-500' : 'bg-blue-500'}`} style={{ width: `${dataSizeInfo.percent}%` }}></div>
+                              </div>
+                              {dataSizeInfo.warn && <div className="text-[10px] font-black text-rose-600 mt-1.5 leading-relaxed">⚠️ 上限に近づいています。手書きの多い古い週を整理してください。</div>}
+                            </div>
+                          )}
                           <button onClick={restoreLatestAutoBackup} disabled={autoBackupCount===0} className="w-full bg-indigo-50 text-indigo-700 border border-indigo-300 py-2.5 rounded-xl font-black shadow-sm hover:bg-indigo-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
                             🕘 最新の自動バックアップに戻す
                           </button>
@@ -4765,6 +5038,17 @@
                               <span>📤 データを復元 (インポート)</span>
                             </button>
                           </div>
+                        </div>
+                      </div>
+
+                      {/* 新年度セットアップ */}
+                      <div className="border border-pink-200 bg-pink-50/50 rounded-2xl p-5 shadow-sm flex flex-col">
+                        <h3 className="text-lg font-black text-pink-900 mb-2 flex items-center gap-2">🌸 新年度セットアップ</h3>
+                        <p className="text-xs text-slate-600 mb-4 font-bold">年度が変わるときの準備をまとめて行います。基本時間割の引き継ぎ、単元計画の進度リセット、長期休業の登録など。過去の年度の週案はそのまま残ります。</p>
+                        <div className="mt-auto">
+                          <button onClick={() => { setYearSetupResult(null); setYearSetupTarget(getSchoolYearOf(todayStr) + 1); setShowYearSetup(true); }} className="w-full bg-pink-600 text-white py-2.5 rounded-xl font-black shadow-md hover:bg-pink-700 transition-colors">
+                            🌸 新年度の準備をする
+                          </button>
                         </div>
                       </div>
 
@@ -5368,7 +5652,7 @@
                         }
                       });
                       for (let i = 0; i < 7; i++) for (const p of ['p1','p2','p3','p4','p5','p6','morning']) {
-                        const s = baseTemplate[`${i}-${p}`]?.subject?.trim();
+                        const s = (editingCell.isTemplate ? activeTemplate : getTemplateFor(editingCell.dateStr))[`${i}-${p}`]?.subject?.trim();
                         if (!s) continue;
                         const base = s.split('（')[0].trim();
                         if (!base || seen.has(base)) continue;
@@ -5560,7 +5844,7 @@
                       const templateSubjects = [];
                       for (let i = 0; i < 7; i++) {
                         for (const p of ['p1','p2','p3','p4','p5','p6','morning']) {
-                          const val = baseTemplate[`${i}-${p}`];
+                          const val = activeTemplate[`${i}-${p}`];
                           const s = val?.subject?.trim();
                           if (s && !seen.has(s)) { seen.add(s); templateSubjects.push(s); }
                         }
@@ -5922,6 +6206,79 @@
                   {pencilOnly && <div className="absolute top-4 left-4 bg-black/50 text-white px-3 py-1 rounded-full text-xs font-bold pointer-events-none backdrop-blur-sm z-10">Apple Pencil のみ有効</div>}
                   <canvas ref={quickCanvasRef} width={1200} height={900} className="bg-white rounded-xl shadow-lg border dark:border-slate-600 max-w-full max-h-full object-contain touch-none cursor-crosshair" onPointerDown={startDrawing} onPointerMove={draw} onPointerUp={endDrawing} onPointerCancel={endDrawing} onPointerOut={endDrawing} style={{touchAction:'none'}}/>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* 🌸 新年度セットアップ */}
+          {showYearSetup && (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur z-[140] flex items-center justify-center p-4" onClick={() => setShowYearSetup(false)}>
+              <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-lg max-h-[90dvh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                <div className="p-5 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center sticky top-0 bg-white dark:bg-slate-800 z-10">
+                  <h2 className="font-black text-lg text-slate-800 dark:text-slate-100">🌸 新年度セットアップ</h2>
+                  <button onClick={() => setShowYearSetup(false)} className="text-slate-400 hover:text-slate-600 font-black text-xl px-2">×</button>
+                </div>
+
+                {yearSetupResult ? (
+                  <div className="p-5 space-y-4">
+                    <div className="text-sm font-black text-slate-800 dark:text-slate-100">{yearSetupResult.year}年度の準備が完了しました</div>
+                    <ul className="space-y-2">
+                      {yearSetupResult.done.map((line, i) => (
+                        <li key={i} className="text-xs font-bold text-slate-700 dark:text-slate-200 bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700 rounded-xl p-3 leading-relaxed">✅ {line}</li>
+                      ))}
+                    </ul>
+                    <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 leading-relaxed">
+                      このあと、基本タブで{yearSetupResult.year}年度の時間割を組み替え、年間タブで行事予定を入れてください。前年度までの週案はそのまま残っています。
+                    </p>
+                    <button onClick={() => setShowYearSetup(false)} className="w-full py-3 bg-blue-600 text-white rounded-xl font-black text-sm shadow-md hover:bg-blue-700">閉じる</button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="p-5 space-y-4">
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm font-black text-slate-700 dark:text-slate-200">対象年度</span>
+                        <div className="flex items-center bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-xl">
+                          <button onClick={() => setYearSetupTarget(y => Number(y) - 1)} className="px-3 py-1.5 font-black text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-l-xl">◀</button>
+                          <span className="px-3 text-sm font-black text-slate-800 dark:text-slate-100">{yearSetupTarget}年度</span>
+                          <button onClick={() => setYearSetupTarget(y => Number(y) + 1)} className="px-3 py-1.5 font-black text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-r-xl">▶</button>
+                        </div>
+                      </div>
+                      <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 leading-relaxed">
+                        {yearSetupTarget}年4月〜{Number(yearSetupTarget) + 1}年3月の準備をします。前年度までの週案・記録は書き換わりません。
+                      </p>
+
+                      {[
+                        ['backup', '今のデータをJSONでダウンロードして保存する'],
+                        ['template', `基本時間割と曜日ごとの日課を${yearSetupTarget}年度用に切り出す（中身は前年度のまま。あとから組み替えても前年度に影響しません）`],
+                        ['events', `${Number(yearSetupTarget) - 1}年度の年間行事を月日そのままコピーする（曜日のずれは後で直す）`],
+                        ['syllabus', '単元計画の進度をリセットする（教科・単元・クラスはそのまま残ります）'],
+                        ['todos', '完了済みのTODOを削除する'],
+                      ].map(([key, label]) => (
+                        <label key={key} className="flex items-start gap-3 bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700 rounded-xl p-3 cursor-pointer">
+                          <input type="checkbox" checked={yearSetupOpts[key]} onChange={e => setYearSetupOpts(o => ({ ...o, [key]: e.target.checked }))} className="mt-0.5 w-4 h-4 accent-blue-600 shrink-0" />
+                          <span className="text-xs font-bold text-slate-700 dark:text-slate-200 leading-relaxed">{label}</span>
+                        </label>
+                      ))}
+
+                      <div className="border border-slate-200 dark:border-slate-700 rounded-xl p-3 space-y-2">
+                        <div className="text-xs font-black text-slate-700 dark:text-slate-200">長期休業（日付を入れた分だけ追加します）</div>
+                        {yearSetupVacs.map((v, i) => (
+                          <div key={v.name} className="flex items-center gap-1.5">
+                            <span className="text-[11px] font-black text-slate-600 dark:text-slate-300 w-16 shrink-0">{v.name}</span>
+                            <input type="date" value={v.start} onChange={e => setYearSetupVacs(list => list.map((x, ix) => ix === i ? { ...x, start: e.target.value } : x))} className="flex-1 min-w-0 text-[11px] font-bold border border-slate-300 dark:border-slate-600 rounded-lg p-1.5 bg-white dark:bg-slate-900 dark:text-slate-100 outline-none focus:border-blue-400" />
+                            <span className="text-[11px] font-bold text-slate-400">〜</span>
+                            <input type="date" value={v.end} onChange={e => setYearSetupVacs(list => list.map((x, ix) => ix === i ? { ...x, end: e.target.value } : x))} className="flex-1 min-w-0 text-[11px] font-bold border border-slate-300 dark:border-slate-600 rounded-lg p-1.5 bg-white dark:bg-slate-900 dark:text-slate-100 outline-none focus:border-blue-400" />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="p-5 border-t border-slate-200 dark:border-slate-700 flex gap-2 sticky bottom-0 bg-white dark:bg-slate-800">
+                      <button onClick={() => setShowYearSetup(false)} className="flex-1 py-3 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl font-black text-sm">やめる</button>
+                      <button onClick={runYearSetup} className="flex-[2] py-3 bg-blue-600 text-white rounded-xl font-black text-sm shadow-md hover:bg-blue-700">この内容で実行する</button>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           )}
