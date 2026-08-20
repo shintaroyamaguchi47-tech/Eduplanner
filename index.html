@@ -1031,6 +1031,11 @@
       const [saveStatus, setSaveStatus] = useState(navigator.onLine ? 'saved' : 'offline');
       const [lastSavedAt, setLastSavedAt] = useState(null);
       const [autoBackupCount, setAutoBackupCount] = useState(() => { try { return JSON.parse(localStorage.getItem('ep_auto_backups') || '[]').length; } catch(e) { return 0; } });
+      const [showYearSetup, setShowYearSetup] = useState(false);
+      const [yearSetupTarget, setYearSetupTarget] = useState(() => { const t = getJSTDate(); return (t.getMonth() + 1 < 4 ? t.getFullYear() - 1 : t.getFullYear()) + 1; });
+      const [yearSetupOpts, setYearSetupOpts] = useState({ backup: true, template: true, events: false, syllabus: true, todos: true });
+      const [yearSetupVacs, setYearSetupVacs] = useState([{ name: '夏季休業', start: '', end: '' }, { name: '冬季休業', start: '', end: '' }, { name: '学年末休業', start: '', end: '' }]);
+      const [yearSetupResult, setYearSetupResult] = useState(null);
       const pendingCloudSavesRef = useRef({});
       const saveStatusTimerRef = useRef(null);
       const quickCanvasRef = useRef(null);
@@ -1563,6 +1568,19 @@
       const activeTemplateSettings = resolveYearMap(templateSettings, templateSchoolYear, DEFAULT_TEMPLATE_SETTINGS);
       const getTemplateFor = (ds) => resolveYearMap(baseTemplate, getSchoolYearOf(ds), {});
       const getTemplateSettingsFor = (ds) => resolveYearMap(templateSettings, getSchoolYearOf(ds), DEFAULT_TEMPLATE_SETTINGS);
+
+      // クラウド上の週案ドキュメントの大きさ。Firestoreは1ドキュメント1MiBが上限で、手書きは画像として同じ中に入る
+      const dataSizeInfo = useMemo(() => {
+        if (activeTab !== 'settings') return null;
+        let bytes = 0;
+        try { bytes = new TextEncoder().encode(JSON.stringify({ weeklyData, weeklySettings })).length; } catch (e) { return null; }
+        const limit = 1048576;
+        return {
+          label: bytes >= limit ? `${(bytes / limit).toFixed(2)}MB` : `${Math.round(bytes / 1024)}KB`,
+          percent: Math.min(100, Math.round((bytes / limit) * 100)),
+          warn: bytes > limit * 0.7,
+        };
+      }, [activeTab, weeklyData, weeklySettings]);
 
       const getDynamicFontSize = (text, isMobile, isWeekly = false) => {
         if (!text) return isMobile ? 'text-[10px]' : isWeekly ? 'text-[10px]' : 'text-sm';
@@ -2164,6 +2182,54 @@
           }
         };
         reader.readAsText(file);
+      };
+
+      // 年度が変わるときの準備をまとめて行う。過去の年度の週案・記録には手を触れない
+      const runYearSetup = () => {
+        const y = Number(yearSetupTarget);
+        if (!Number.isFinite(y)) return;
+        if (!window.confirm(`${y}年度の準備を実行します。よろしいですか？`)) return;
+        const done = [];
+
+        if (yearSetupOpts.backup) { exportData(); done.push('データをダウンロードしました'); }
+
+        if (yearSetupOpts.template) {
+          const nt = setYearMap(baseTemplate, y, { ...resolveYearMap(baseTemplate, y, {}) });
+          const ns = setYearMap(templateSettings, y, { ...resolveYearMap(templateSettings, y, DEFAULT_TEMPLATE_SETTINGS) });
+          saveAll(nt, ns, weeklyData, weeklySettings);
+          done.push(`${y}年度の基本時間割・日課を切り出しました（内容は前年度のまま）`);
+        }
+
+        if (yearSetupOpts.todos) {
+          const rest = todos.filter(t => !t.completed);
+          if (rest.length !== todos.length) { saveTodos(rest); done.push(`完了済みのTODOを${todos.length - rest.length}件削除しました`); }
+          else done.push('削除する完了済みTODOはありませんでした');
+        }
+
+        let nextYearly = yearlyData;
+        if (yearSetupOpts.events) {
+          const prev = yearlyData[y - 1] || yearlyData[String(y - 1)];
+          if (prev) { nextYearly = { ...yearlyData, [y]: { ...prev, ...(yearlyData[y] || {}) } }; done.push(`${y - 1}年度の年間行事を${y}年度にコピーしました（曜日のずれは年間タブで直してください）`); }
+          else done.push(`${y - 1}年度の年間行事が見つかりませんでした`);
+        }
+
+        const addVacs = yearSetupVacs
+          .filter(v => v.start && v.end)
+          .map((v, i) => ({ id: `vac-${y}-${i}-${Date.now()}`, name: v.name, start: v.start, end: v.end }));
+        const nextVacations = addVacs.length ? [...vacations, ...addVacs] : vacations;
+        if (addVacs.length) done.push(`長期休業を${addVacs.length}件追加しました`);
+
+        if (nextYearly !== yearlyData || nextVacations !== vacations) saveExtraData(nextYearly, documents, nextVacations);
+
+        if (yearSetupOpts.syllabus) {
+          const reset = syllabusData.map(sub => ({ ...sub, currentUnitIdx: 0, currentHour: 1, classProgress: {} }));
+          saveSyllabus(reset);
+          done.push(`単元計画${reset.length}件の進度をリセットしました`);
+        }
+
+        setYearSetupResult({ year: y, done });
+        setYearSetupVacs(yearSetupVacs.map(v => ({ ...v, start: '', end: '' })));
+        showToast(`🌸 ${y}年度の準備が完了しました`);
       };
 
       const isYearlyHoliday = (ds, yData) => isHolidayEventText(getYearlyEventText(yData, ds));
@@ -4831,6 +4897,21 @@
                             </div>
                             <span className="text-sm font-black text-blue-700">{autoBackupCount}件</span>
                           </div>
+                          {dataSizeInfo && (
+                            <div className="rounded-xl bg-white border border-blue-200 px-3 py-2">
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <div className="text-xs font-black text-slate-700">クラウドの週案データ</div>
+                                  <div className="text-[10px] font-bold text-slate-500">手書きを含めて1MBが上限です</div>
+                                </div>
+                                <span className={`text-sm font-black ${dataSizeInfo.warn ? 'text-rose-600' : 'text-blue-700'}`}>{dataSizeInfo.label}</span>
+                              </div>
+                              <div className="mt-1.5 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                <div className={`h-full rounded-full ${dataSizeInfo.warn ? 'bg-rose-500' : 'bg-blue-500'}`} style={{ width: `${dataSizeInfo.percent}%` }}></div>
+                              </div>
+                              {dataSizeInfo.warn && <div className="text-[10px] font-black text-rose-600 mt-1.5 leading-relaxed">⚠️ 上限に近づいています。手書きの多い古い週を整理してください。</div>}
+                            </div>
+                          )}
                           <button onClick={restoreLatestAutoBackup} disabled={autoBackupCount===0} className="w-full bg-indigo-50 text-indigo-700 border border-indigo-300 py-2.5 rounded-xl font-black shadow-sm hover:bg-indigo-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
                             🕘 最新の自動バックアップに戻す
                           </button>
@@ -4844,6 +4925,17 @@
                               <span>📤 データを復元 (インポート)</span>
                             </button>
                           </div>
+                        </div>
+                      </div>
+
+                      {/* 新年度セットアップ */}
+                      <div className="border border-pink-200 bg-pink-50/50 rounded-2xl p-5 shadow-sm flex flex-col">
+                        <h3 className="text-lg font-black text-pink-900 mb-2 flex items-center gap-2">🌸 新年度セットアップ</h3>
+                        <p className="text-xs text-slate-600 mb-4 font-bold">年度が変わるときの準備をまとめて行います。基本時間割の引き継ぎ、単元計画の進度リセット、長期休業の登録など。過去の年度の週案はそのまま残ります。</p>
+                        <div className="mt-auto">
+                          <button onClick={() => { setYearSetupResult(null); setYearSetupTarget(getSchoolYearOf(todayStr) + 1); setShowYearSetup(true); }} className="w-full bg-pink-600 text-white py-2.5 rounded-xl font-black shadow-md hover:bg-pink-700 transition-colors">
+                            🌸 新年度の準備をする
+                          </button>
                         </div>
                       </div>
 
@@ -6001,6 +6093,79 @@
                   {pencilOnly && <div className="absolute top-4 left-4 bg-black/50 text-white px-3 py-1 rounded-full text-xs font-bold pointer-events-none backdrop-blur-sm z-10">Apple Pencil のみ有効</div>}
                   <canvas ref={quickCanvasRef} width={1200} height={900} className="bg-white rounded-xl shadow-lg border dark:border-slate-600 max-w-full max-h-full object-contain touch-none cursor-crosshair" onPointerDown={startDrawing} onPointerMove={draw} onPointerUp={endDrawing} onPointerCancel={endDrawing} onPointerOut={endDrawing} style={{touchAction:'none'}}/>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* 🌸 新年度セットアップ */}
+          {showYearSetup && (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur z-[140] flex items-center justify-center p-4" onClick={() => setShowYearSetup(false)}>
+              <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-lg max-h-[90dvh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                <div className="p-5 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center sticky top-0 bg-white dark:bg-slate-800 z-10">
+                  <h2 className="font-black text-lg text-slate-800 dark:text-slate-100">🌸 新年度セットアップ</h2>
+                  <button onClick={() => setShowYearSetup(false)} className="text-slate-400 hover:text-slate-600 font-black text-xl px-2">×</button>
+                </div>
+
+                {yearSetupResult ? (
+                  <div className="p-5 space-y-4">
+                    <div className="text-sm font-black text-slate-800 dark:text-slate-100">{yearSetupResult.year}年度の準備が完了しました</div>
+                    <ul className="space-y-2">
+                      {yearSetupResult.done.map((line, i) => (
+                        <li key={i} className="text-xs font-bold text-slate-700 dark:text-slate-200 bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700 rounded-xl p-3 leading-relaxed">✅ {line}</li>
+                      ))}
+                    </ul>
+                    <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 leading-relaxed">
+                      このあと、基本タブで{yearSetupResult.year}年度の時間割を組み替え、年間タブで行事予定を入れてください。前年度までの週案はそのまま残っています。
+                    </p>
+                    <button onClick={() => setShowYearSetup(false)} className="w-full py-3 bg-blue-600 text-white rounded-xl font-black text-sm shadow-md hover:bg-blue-700">閉じる</button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="p-5 space-y-4">
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm font-black text-slate-700 dark:text-slate-200">対象年度</span>
+                        <div className="flex items-center bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-xl">
+                          <button onClick={() => setYearSetupTarget(y => Number(y) - 1)} className="px-3 py-1.5 font-black text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-l-xl">◀</button>
+                          <span className="px-3 text-sm font-black text-slate-800 dark:text-slate-100">{yearSetupTarget}年度</span>
+                          <button onClick={() => setYearSetupTarget(y => Number(y) + 1)} className="px-3 py-1.5 font-black text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-r-xl">▶</button>
+                        </div>
+                      </div>
+                      <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 leading-relaxed">
+                        {yearSetupTarget}年4月〜{Number(yearSetupTarget) + 1}年3月の準備をします。前年度までの週案・記録は書き換わりません。
+                      </p>
+
+                      {[
+                        ['backup', '今のデータをJSONでダウンロードして保存する'],
+                        ['template', `基本時間割と曜日ごとの日課を${yearSetupTarget}年度用に切り出す（中身は前年度のまま。あとから組み替えても前年度に影響しません）`],
+                        ['events', `${Number(yearSetupTarget) - 1}年度の年間行事を月日そのままコピーする（曜日のずれは後で直す）`],
+                        ['syllabus', '単元計画の進度をリセットする（教科・単元・クラスはそのまま残ります）'],
+                        ['todos', '完了済みのTODOを削除する'],
+                      ].map(([key, label]) => (
+                        <label key={key} className="flex items-start gap-3 bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700 rounded-xl p-3 cursor-pointer">
+                          <input type="checkbox" checked={yearSetupOpts[key]} onChange={e => setYearSetupOpts(o => ({ ...o, [key]: e.target.checked }))} className="mt-0.5 w-4 h-4 accent-blue-600 shrink-0" />
+                          <span className="text-xs font-bold text-slate-700 dark:text-slate-200 leading-relaxed">{label}</span>
+                        </label>
+                      ))}
+
+                      <div className="border border-slate-200 dark:border-slate-700 rounded-xl p-3 space-y-2">
+                        <div className="text-xs font-black text-slate-700 dark:text-slate-200">長期休業（日付を入れた分だけ追加します）</div>
+                        {yearSetupVacs.map((v, i) => (
+                          <div key={v.name} className="flex items-center gap-1.5">
+                            <span className="text-[11px] font-black text-slate-600 dark:text-slate-300 w-16 shrink-0">{v.name}</span>
+                            <input type="date" value={v.start} onChange={e => setYearSetupVacs(list => list.map((x, ix) => ix === i ? { ...x, start: e.target.value } : x))} className="flex-1 min-w-0 text-[11px] font-bold border border-slate-300 dark:border-slate-600 rounded-lg p-1.5 bg-white dark:bg-slate-900 dark:text-slate-100 outline-none focus:border-blue-400" />
+                            <span className="text-[11px] font-bold text-slate-400">〜</span>
+                            <input type="date" value={v.end} onChange={e => setYearSetupVacs(list => list.map((x, ix) => ix === i ? { ...x, end: e.target.value } : x))} className="flex-1 min-w-0 text-[11px] font-bold border border-slate-300 dark:border-slate-600 rounded-lg p-1.5 bg-white dark:bg-slate-900 dark:text-slate-100 outline-none focus:border-blue-400" />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="p-5 border-t border-slate-200 dark:border-slate-700 flex gap-2 sticky bottom-0 bg-white dark:bg-slate-800">
+                      <button onClick={() => setShowYearSetup(false)} className="flex-1 py-3 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl font-black text-sm">やめる</button>
+                      <button onClick={runYearSetup} className="flex-[2] py-3 bg-blue-600 text-white rounded-xl font-black text-sm shadow-md hover:bg-blue-700">この内容で実行する</button>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           )}
