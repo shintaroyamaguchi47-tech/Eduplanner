@@ -1028,11 +1028,14 @@
       const [googleCalSyncing, setGoogleCalSyncing] = useState(false);
       // TODOをGoogleカレンダーの「タスク」として登録する（オフのときは従来どおり終日予定として登録）
       const [googleTasksSync, setGoogleTasksSync] = useState(() => { try { return localStorage.getItem('eduplanner_googleTasksSync') === '1'; } catch (e) { return false; } });
+      // 年間タブに入れた行事も、今日から1年先までGoogleカレンダーの終日予定として登録する
+      const [googleYearlySync, setGoogleYearlySync] = useState(() => { try { return localStorage.getItem('eduplanner_googleYearlySync') !== '0'; } catch (e) { return true; } });
       const gisTokenClientRef = useRef(null);
       const gisTokenClientIdRef = useRef('');
       const gisTokenResolveRef = useRef(null);
       const googleCalAutoSyncFiredRef = useRef(false);
       const googleCalSyncInFlightRef = useRef(false);
+      const todoSyncSignatureRef = useRef(null);
 
       const [isOnline, setIsOnline] = useState(navigator.onLine);
       const [saveStatus, setSaveStatus] = useState(navigator.onLine ? 'saved' : 'offline');
@@ -1201,6 +1204,8 @@
         });
       };
 
+      const getYearlyEventLines = (ds) => getYearlyEventText(yearlyData, ds).split('\n').map(s => s.trim()).filter(Boolean);
+
       const buildScheduleEventsForSync = (startDate, days) => {
         const events = [];
         const periodIds = ['p1','p2','p3','p4','p5','p6','morning','afterschool'];
@@ -1210,29 +1215,51 @@
           const ds = formatDate(cd);
           const di = (cd.getDay() + 6) % 7;
           const setting = getDaySetting(ds, di);
-          if (setting.type === 'holiday') continue;
 
-          for (const pid of periodIds) {
-            const data = getCellData(ds, pid, di);
-            if (!data.subject?.trim()) {
-              if (pid === 'afterschool' && data.events?.length > 0) {
-                data.events.forEach((ev, idx) => {
-                  if (ev.subject?.trim()) {
-                    events.push({ key: `sched-${ds}-${pid}-${idx}`, date: ds, subject: ev.subject.trim(), memo: '', startTime: ev.startTime, endTime: ev.endTime });
-                  }
-                });
+          if (setting.type !== 'holiday') {
+            for (const pid of periodIds) {
+              const data = getCellData(ds, pid, di);
+              if (!data.subject?.trim()) {
+                if (pid === 'afterschool' && data.events?.length > 0) {
+                  data.events.forEach((ev, idx) => {
+                    if (ev.subject?.trim()) {
+                      events.push({ key: `sched-${ds}-${pid}-${idx}`, date: ds, subject: ev.subject.trim(), memo: '', startTime: ev.startTime, endTime: ev.endTime });
+                    }
+                  });
+                }
+                continue;
               }
-              continue;
+              events.push({ key: `sched-${ds}-${pid}`, date: ds, subject: data.subject.trim(), memo: data.memo || '', startTime: data.startTime, endTime: data.endTime });
             }
-            events.push({ key: `sched-${ds}-${pid}`, date: ds, subject: data.subject.trim(), memo: data.memo || '', startTime: data.startTime, endTime: data.endTime });
           }
 
-          const eventData = getCellData(ds, 'event', di);
-          if (eventData.subject?.trim()) {
-            eventData.subject.trim().split('\n').filter(s => s.trim()).forEach((line, idx) => {
-              events.push({ key: `sched-${ds}-event-${idx}`, date: ds, subject: `🚩 ${line.trim()}`, memo: '', startTime: null, endTime: null });
+          // 行事欄。休業日でもその日に入力した行事は登録する（基本時間割の行事は除く）。
+          // 年間予定に入っている行事は buildYearlyEventsForSync 側で登録するので、
+          // ここでは週案だけに書いた行を扱う
+          const yearlyLines = getYearlyEventLines(ds);
+          const eventOverride = weeklyData[`${ds}-event`];
+          const eventSubject = setting.type === 'holiday'
+            ? ((eventOverride && !eventOverride.useTemplate && eventOverride.subject) || '')
+            : (getCellData(ds, 'event', di).subject || '');
+          eventSubject.split('\n').map(l => l.trim()).filter(Boolean)
+            .filter(line => !yearlyLines.includes(line))
+            .forEach((line, idx) => {
+              events.push({ key: `sched-${ds}-event-${idx}`, date: ds, subject: `🚩 ${line}`, memo: '', startTime: null, endTime: null });
             });
-          }
+        }
+        return events;
+      };
+
+      // 年間タブに入れた行事をGoogleカレンダーの終日予定として登録する
+      const buildYearlyEventsForSync = (startDate, days) => {
+        const events = [];
+        for (let i = 0; i < days; i++) {
+          const cd = new Date(startDate);
+          cd.setDate(cd.getDate() + i);
+          const ds = formatDate(cd);
+          getYearlyEventLines(ds).forEach((line, idx) => {
+            events.push({ key: `yearly-${ds}-${idx}`, date: ds, subject: `🚩 ${line}`, memo: '', startTime: null, endTime: null });
+          });
         }
         return events;
       };
@@ -1257,7 +1284,7 @@
         if (!res.ok && res.status !== 404 && res.status !== 410) throw new Error(`gcal_delete_${res.status}`);
       };
 
-      // EduPlannerが同期した（タグ付きの）イベントを全件取得し、key→イベントIDのマップを返す
+      // EduPlannerが同期した（タグ付きの）イベントを全件取得し、key→イベント（id・内容）のマップを返す
       const fetchSyncedGcalEvents = async (token) => {
         const map = {};
         const duplicateIds = [];
@@ -1277,7 +1304,7 @@
             const key = ev.extendedProperties?.private?.eduplannerKey;
             if (!key) return;
             if (map[key]) duplicateIds.push(ev.id);
-            else map[key] = ev.id;
+            else map[key] = { id: ev.id, summary: ev.summary || '', description: ev.description || '', start: ev.start || {}, end: ev.end || {} };
           });
           pageToken = data.nextPageToken || '';
         } while (pageToken);
@@ -1310,13 +1337,28 @@
         } while (pageToken);
       };
 
+      // 既存イベントが同じ内容かどうか。同じなら無駄な更新リクエストを送らない
+      const isSameGcalEvent = (existing, item, allDayEnd) => {
+        if (!existing) return false;
+        if ((existing.summary || '') !== item.subject) return false;
+        if ((existing.description || '') !== (item.memo || '')) return false;
+        if (item.startTime && item.endTime) {
+          const startAt = (existing.start?.dateTime || '').slice(0, 19);
+          const endAt = (existing.end?.dateTime || '').slice(0, 19);
+          return startAt === `${item.date}T${item.startTime}:00` && endAt === `${item.date}T${item.endTime}:00`;
+        }
+        return existing.start?.date === item.date && existing.end?.date === allDayEnd;
+      };
+
       const upsertGcalEvent = async (token, existingMap, item) => {
         const body = {
           summary: item.subject,
           extendedProperties: { private: { [GCAL_SYNC_TAG]: '1', eduplannerKey: item.key } },
         };
         if (item.memo) body.description = item.memo;
-        const existingId = existingMap[item.key];
+        const existing = existingMap[item.key];
+        const existingId = existing?.id;
+        let allDayEnd = '';
         if (item.startTime && item.endTime) {
           body.start = { dateTime: `${item.date}T${item.startTime}:00`, timeZone: 'Asia/Tokyo' };
           body.end = { dateTime: `${item.date}T${item.endTime}:00`, timeZone: 'Asia/Tokyo' };
@@ -1328,13 +1370,15 @@
         } else {
           // 終日イベントの終了日は排他的（翌日を指定）
           const [y, m, d] = item.date.split('-').map(Number);
+          allDayEnd = formatDate(new Date(y, m - 1, d + 1));
           body.start = { date: item.date };
-          body.end = { date: formatDate(new Date(y, m - 1, d + 1)) };
+          body.end = { date: allDayEnd };
           if (existingId) {
             body.start.dateTime = null;
             body.end.dateTime = null;
           }
         }
+        if (isSameGcalEvent(existing, item, allDayEnd)) return false;
         const url = existingId
           ? `https://www.googleapis.com/calendar/v3/calendars/primary/events/${existingId}`
           : `https://www.googleapis.com/calendar/v3/calendars/primary/events`;
@@ -1344,6 +1388,7 @@
           body: JSON.stringify(body),
         });
         if (!res.ok) throw new Error(`gcal_upsert_${res.status}`);
+        return true;
       };
 
       // ---- Googleタスク（Googleカレンダー右側の「ToDoリスト」）への同期 ----
@@ -1448,7 +1493,8 @@
         return items.filter(it => !it.completed).length;
       };
 
-      const runGoogleCalendarSync = async ({ silent = false, tasksEnabled } = {}) => {
+      // todosOnly: TODOの変更だけを反映する軽い同期（週案・年間予定には触れない）
+      const runGoogleCalendarSync = async ({ silent = false, tasksEnabled, yearlyEnabled, todosOnly = false } = {}) => {
         if (!googleClientId.trim()) {
           if (!silent) showToast('先にGoogle OAuthクライアントIDを入力してください');
           return false;
@@ -1474,32 +1520,44 @@
           const startDate = getJSTDate();
           const rangeEnd = new Date(startDate); rangeEnd.setDate(rangeEnd.getDate() + 7);
 
-          const scheduleEvents = buildScheduleEventsForSync(startDate, 7);
+          const scheduleEvents = todosOnly ? [] : buildScheduleEventsForSync(startDate, 7);
+          // 年間予定は設定がオンなら今日から1年先まで、オフでも週案と同じ1週間分だけ登録する
+          const useYearly = yearlyEnabled === undefined ? googleYearlySync : yearlyEnabled;
+          const yearlyDays = useYearly ? 366 : 7;
+          const yearlyEvents = todosOnly ? [] : buildYearlyEventsForSync(startDate, yearlyDays);
           const todoEvents = tasksGranted ? [] : buildTodoEventsForSync();
-          const allItems = [...scheduleEvents, ...todoEvents];
+          const allItems = [...scheduleEvents, ...yearlyEvents, ...todoEvents];
 
           const existingMap = await fetchSyncedGcalEvents(token);
 
           // EduPlanner側で消えた項目をカレンダーからも削除する。
           // ・ToDo: 完了・削除されたものは期日に関係なく削除
           // ・週案(今日〜7日間): 予定から消えたコマを削除。過去の週案イベントは記録として残す
+          // ・年間予定(今日以降): 年間タブから消した行事や、登録範囲外になった行事を削除。過去の分は記録として残す
           const currentKeys = new Set(allItems.map(it => it.key));
           const windowStart = formatDate(startDate);
           const windowEnd = formatDate(rangeEnd);
           for (const key of Object.keys(existingMap)) {
             if (currentKeys.has(key)) continue;
+            const isTodo = key.startsWith('todo-');
+            if (todosOnly && !isTodo) continue;
             const schedDate = key.startsWith('sched-') ? key.slice(6, 16) : '';
-            if (key.startsWith('todo-') || (schedDate && schedDate >= windowStart && schedDate < windowEnd)) {
-              await deleteGcalEvent(token, existingMap[key]);
+            const yearlyDate = key.startsWith('yearly-') ? key.slice(7, 17) : '';
+            const inSchedWindow = schedDate && schedDate >= windowStart && schedDate < windowEnd;
+            const isFutureYearly = yearlyDate && yearlyDate >= windowStart;
+            if (isTodo || inSchedWindow || isFutureYearly) {
+              await deleteGcalEvent(token, existingMap[key].id);
               delete existingMap[key];
             }
           }
 
-          await cleanupImportedIcsEvents(
-            token,
-            new Date(`${windowStart}T00:00:00+09:00`).toISOString(),
-            new Date(`${windowEnd}T00:00:00+09:00`).toISOString()
-          );
+          if (!todosOnly) {
+            await cleanupImportedIcsEvents(
+              token,
+              new Date(`${windowStart}T00:00:00+09:00`).toISOString(),
+              new Date(`${windowEnd}T00:00:00+09:00`).toISOString()
+            );
+          }
 
           for (const item of allItems) {
             await upsertGcalEvent(token, existingMap, item);
@@ -1508,11 +1566,13 @@
           let taskCount = 0;
           if (tasksGranted) taskCount = await syncTodosToGoogleTasks(token);
 
-          const nowIso = new Date().toISOString();
-          setGoogleCalLastSync(nowIso);
-          try { localStorage.setItem('eduplanner_googleCalLastSync', nowIso); } catch (e) {}
+          if (!todosOnly) {
+            const nowIso = new Date().toISOString();
+            setGoogleCalLastSync(nowIso);
+            try { localStorage.setItem('eduplanner_googleCalLastSync', nowIso); } catch (e) {}
+          }
           if (!silent) {
-            const msg = `Googleカレンダーに${scheduleEvents.length + todoEvents.length}件を同期しました`;
+            const msg = `Googleカレンダーに${allItems.length}件を同期しました（うち年間予定 ${yearlyEvents.length}件）`;
             showToast(tasksGranted ? `${msg}（TODO ${taskCount}件はGoogleタスクに登録）` : msg);
           }
           return true;
@@ -1565,6 +1625,16 @@
         gisTokenClientRef.current = null;
         if (next) await runGoogleCalendarSync({ silent: false, tasksEnabled: true });
         else showToast('TODOは今後カレンダーの予定として登録されます（Googleタスクに登録済みのものは残ります）');
+      };
+
+      const toggleGoogleYearlySync = async () => {
+        const next = !googleYearlySync;
+        setGoogleYearlySync(next);
+        try { localStorage.setItem('eduplanner_googleYearlySync', next ? '1' : '0'); } catch (e) {}
+        saveToFirestore('extra', { googleCalSettings: { yearlySync: next } });
+        // オンなら1年先まで登録、オフなら登録済みの先の行事をカレンダーから消す
+        if (googleCalConnected) await runGoogleCalendarSync({ silent: false, yearlyEnabled: next });
+        else showToast(next ? '年間予定も同期します（連携後に反映されます）' : '年間予定の同期をオフにしました');
       };
 
       const todayStr = formatDate(getJSTDate());
@@ -1934,6 +2004,7 @@
                 if (typeof g.connected === 'boolean') { setGoogleCalConnected(g.connected); try { localStorage.setItem('eduplanner_googleCalConnected', g.connected ? '1' : '0'); } catch(e) {} }
                 if (typeof g.autoSync === 'boolean') { setGoogleCalAutoSync(g.autoSync); try { localStorage.setItem('eduplanner_googleCalAutoSync', g.autoSync ? '1' : '0'); } catch(e) {} }
                 if (typeof g.tasksSync === 'boolean') { setGoogleTasksSync(g.tasksSync); try { localStorage.setItem('eduplanner_googleTasksSync', g.tasksSync ? '1' : '0'); } catch(e) {} }
+                if (typeof g.yearlySync === 'boolean') { setGoogleYearlySync(g.yearlySync); try { localStorage.setItem('eduplanner_googleYearlySync', g.yearlySync ? '1' : '0'); } catch(e) {} }
               }
             }
             markLoaded('extra', s.exists());
@@ -1976,6 +2047,21 @@
         googleCalAutoSyncFiredRef.current = true;
         runGoogleCalendarSync({ silent: true });
       }, [dataLoadStatus, googleCalConnected, googleCalAutoSync]);
+
+      // TODOを完了・追加・削除したら、少し待ってからGoogle側にも反映する。
+      // 次に同期するまで完了済みのTODOがGoogleカレンダーに残らないようにするため
+      useEffect(() => {
+        if (dataLoadStatus !== 'loaded' && dataLoadStatus !== 'local') return;
+        if (!googleCalConnected || !googleCalAutoSync) return;
+        const signature = JSON.stringify(todos.map(t => [t.id, t.text, !!t.completed, t.dueDate || '', !!t.important, t.tag || '', t.minutes || 0]));
+        if (todoSyncSignatureRef.current === null) { todoSyncSignatureRef.current = signature; return; }
+        if (todoSyncSignatureRef.current === signature) return;
+        const timer = setTimeout(() => {
+          todoSyncSignatureRef.current = signature;
+          runGoogleCalendarSync({ silent: true, todosOnly: true });
+        }, 5000);
+        return () => clearTimeout(timer);
+      }, [todos, dataLoadStatus, googleCalConnected, googleCalAutoSync]);
 
       const cleanData = (obj) => { if(obj===undefined) return null; if(obj===null||typeof obj!=='object') return obj; const n=Array.isArray(obj)?[]:{}; for(const k in obj) n[k]=cleanData(obj[k]); return n; };
 
@@ -5127,7 +5213,7 @@
                       <div className="border border-emerald-200 bg-emerald-50/50 rounded-2xl p-5 shadow-sm md:col-span-2 dark:bg-emerald-900/20 dark:border-emerald-800">
                         <h3 className="text-lg font-black text-emerald-900 dark:text-emerald-300 mb-2 flex items-center gap-2">📅 Googleカレンダー自動同期</h3>
                         <p className="text-xs text-slate-600 dark:text-slate-400 mb-4 font-bold">
-                          アプリを開いたときに、今日から1週間分の予定と未完了のTODOを自動でGoogleカレンダーに反映します（アプリを開いていない間は同期されません）。TODOはカレンダーの終日予定、または下の設定で「Googleタスク」として登録できます。EduPlanner側で作成・更新した予定のみを対象とし、あなたがGoogleカレンダー側で直接追加した予定は削除されません。
+                          アプリを開いたときに、今日から1週間分の週案・年間タブの行事（今日から1年先まで）・未完了のTODOを自動でGoogleカレンダーに反映します（アプリを開いていない間は同期されません）。TODOはカレンダーの終日予定、または下の設定で「Googleタスク」として登録でき、アプリで完了・削除すると数秒後にGoogle側からも消えます。EduPlanner側で作成・更新した予定のみを対象とし、あなたがGoogleカレンダー側で直接追加した予定は削除されません。
                         </p>
 
                         <div className="space-y-3">
@@ -5165,6 +5251,16 @@
                                 </div>
                                 <button onClick={toggleGoogleCalAutoSync} className={`w-14 h-8 rounded-full transition-colors relative shadow-inner shrink-0 ${googleCalAutoSync ? 'bg-emerald-600' : 'bg-slate-300'}`}>
                                   <div className={`absolute top-1 left-1 w-6 h-6 rounded-full bg-white shadow-sm transition-transform ${googleCalAutoSync ? 'translate-x-6' : 'translate-x-0'}`}></div>
+                                </button>
+                              </div>
+
+                              <div className="flex items-center justify-between pt-2 border-t border-emerald-100 dark:border-emerald-800">
+                                <div className="pr-3">
+                                  <div className="font-bold text-slate-800 dark:text-slate-200 text-sm">年間予定もカレンダーに登録する</div>
+                                  <div className="text-xs text-slate-500 dark:text-slate-400 font-bold">オンにすると、年間タブに入れた行事を今日から1年先まで終日予定として登録します。オフにすると1週間先までの分だけになり、それより先に登録済みの行事はカレンダーから削除されます。</div>
+                                </div>
+                                <button onClick={toggleGoogleYearlySync} disabled={googleCalSyncing} className={`w-14 h-8 rounded-full transition-colors relative shadow-inner shrink-0 disabled:opacity-40 ${googleYearlySync ? 'bg-emerald-600' : 'bg-slate-300'}`}>
+                                  <div className={`absolute top-1 left-1 w-6 h-6 rounded-full bg-white shadow-sm transition-transform ${googleYearlySync ? 'translate-x-6' : 'translate-x-0'}`}></div>
                                 </button>
                               </div>
 
