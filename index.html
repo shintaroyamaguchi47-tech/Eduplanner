@@ -1179,14 +1179,17 @@
         const cacheKey = `${googleClientId}|${scope}`;
         if (gisTokenClientRef.current && gisTokenClientIdRef.current === cacheKey) return gisTokenClientRef.current;
         if (!window.google?.accounts?.oauth2 || !googleClientId) return null;
+        const settleToken = (resp) => {
+          const resolve = gisTokenResolveRef.current;
+          gisTokenResolveRef.current = null;
+          if (resolve) resolve(resp);
+        };
         const client = window.google.accounts.oauth2.initTokenClient({
           client_id: googleClientId,
           scope,
-          callback: (resp) => {
-            const resolve = gisTokenResolveRef.current;
-            gisTokenResolveRef.current = null;
-            if (resolve) resolve(resp);
-          },
+          callback: settleToken,
+          // 同意画面を閉じた・ポップアップがブロックされた等。これが無いと同期が終わらなくなる
+          error_callback: (err) => settleToken({ error: err?.type || 'popup_failed' }),
         });
         gisTokenClientRef.current = client;
         gisTokenClientIdRef.current = cacheKey;
@@ -1199,9 +1202,41 @@
         const client = getGisTokenClient(scope);
         if (!client) return { error: 'no_client_id' };
         return new Promise((resolve) => {
-          gisTokenResolveRef.current = resolve;
-          client.requestAccessToken({ prompt });
+          let settled = false;
+          const finish = (resp) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            if (gisTokenResolveRef.current === finish) gisTokenResolveRef.current = null;
+            resolve(resp || { error: 'no_response' });
+          };
+          // Google側から何も返ってこない場合の保険（同意画面を放置したときなど）
+          const timer = setTimeout(() => finish({ error: 'token_timeout' }), prompt ? 180000 : 30000);
+          gisTokenResolveRef.current = finish;
+          try {
+            client.requestAccessToken({ prompt });
+          } catch (e) {
+            finish({ error: 'request_failed' });
+          }
         });
+      };
+
+      // Google APIをまとめて呼ぶときは少しずつ並行実行する（1件ずつだと年間予定の初回登録に時間がかかる）
+      const runInBatches = async (items, size, fn) => {
+        for (let i = 0; i < items.length; i += size) {
+          await Promise.all(items.slice(i, i + size).map(fn));
+        }
+      };
+
+      // Google APIへのリクエストが応答しないまま止まらないよう、時間制限をつける
+      const fetchWithTimeout = async (url, options = {}, timeoutMs = 30000) => {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+          return await fetch(url, { ...options, signal: controller.signal });
+        } finally {
+          clearTimeout(timer);
+        }
       };
 
       const getYearlyEventLines = (ds) => getYearlyEventText(yearlyData, ds).split('\n').map(s => s.trim()).filter(Boolean);
@@ -1276,7 +1311,7 @@
       };
 
       const deleteGcalEvent = async (token, eventId) => {
-        const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`, {
+        const res = await fetchWithTimeout(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`, {
           method: 'DELETE',
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -1295,7 +1330,7 @@
             privateExtendedProperty: `${GCAL_SYNC_TAG}=1`,
           });
           if (pageToken) params.set('pageToken', pageToken);
-          const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events?${params.toString()}`, {
+          const res = await fetchWithTimeout(`https://www.googleapis.com/calendar/v3/calendars/primary/events?${params.toString()}`, {
             headers: { Authorization: `Bearer ${token}` },
           });
           if (!res.ok) throw new Error(`gcal_list_${res.status}`);
@@ -1322,7 +1357,7 @@
         do {
           const params = new URLSearchParams({ timeMin: timeMinISO, timeMax: timeMaxISO, singleEvents: 'true', maxResults: '2500' });
           if (pageToken) params.set('pageToken', pageToken);
-          const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events?${params.toString()}`, {
+          const res = await fetchWithTimeout(`https://www.googleapis.com/calendar/v3/calendars/primary/events?${params.toString()}`, {
             headers: { Authorization: `Bearer ${token}` },
           });
           if (!res.ok) throw new Error(`gcal_list_${res.status}`);
@@ -1382,7 +1417,7 @@
         const url = existingId
           ? `https://www.googleapis.com/calendar/v3/calendars/primary/events/${existingId}`
           : `https://www.googleapis.com/calendar/v3/calendars/primary/events`;
-        const res = await fetch(url, {
+        const res = await fetchWithTimeout(url, {
           method: existingId ? 'PATCH' : 'POST',
           headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
@@ -1407,7 +1442,7 @@
       });
 
       const gtasksFetch = async (token, path, options = {}) => {
-        const res = await fetch(`${GTASKS_API}${path}`, {
+        const res = await fetchWithTimeout(`${GTASKS_API}${path}`, {
           ...options,
           headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', ...(options.headers || {}) },
         });
@@ -1502,12 +1537,24 @@
         if (googleCalSyncInFlightRef.current) return false;
         googleCalSyncInFlightRef.current = true;
         setGoogleCalSyncing(true);
+        // 万一どこかで止まっても「同期中...」の表示が残り続けないようにする保険
+        const watchdog = setTimeout(() => {
+          if (!googleCalSyncInFlightRef.current) return;
+          googleCalSyncInFlightRef.current = false;
+          setGoogleCalSyncing(false);
+          if (!silent) showToast('同期に時間がかかっています。通信状況を確認して、もう一度お試しください');
+        }, 300000);
         try {
           const useTasks = tasksEnabled === undefined ? googleTasksSync : tasksEnabled;
           const scope = useTasks ? `${GCAL_SCOPE} ${GTASKS_SCOPE}` : GCAL_SCOPE;
           let tokenResp = await requestGoogleToken(silent ? '' : 'consent', scope);
           if (!tokenResp || tokenResp.error || !tokenResp.access_token) {
-            if (!silent) showToast('Googleカレンダーとの連携に失敗しました。もう一度お試しください');
+            if (!silent) {
+              const reason = tokenResp?.error;
+              showToast(reason === 'popup_closed' || reason === 'popup_failed_to_open'
+                ? 'Googleの許可画面が閉じられたため中止しました。ポップアップの許可を確認して、もう一度お試しください'
+                : 'Googleカレンダーとの連携に失敗しました。もう一度お試しください');
+            }
             return false;
           }
           const token = tokenResp.access_token;
@@ -1537,19 +1584,20 @@
           const currentKeys = new Set(allItems.map(it => it.key));
           const windowStart = formatDate(startDate);
           const windowEnd = formatDate(rangeEnd);
-          for (const key of Object.keys(existingMap)) {
-            if (currentKeys.has(key)) continue;
+          const keysToDelete = Object.keys(existingMap).filter(key => {
+            if (currentKeys.has(key)) return false;
             const isTodo = key.startsWith('todo-');
-            if (todosOnly && !isTodo) continue;
+            if (todosOnly && !isTodo) return false;
             const schedDate = key.startsWith('sched-') ? key.slice(6, 16) : '';
             const yearlyDate = key.startsWith('yearly-') ? key.slice(7, 17) : '';
             const inSchedWindow = schedDate && schedDate >= windowStart && schedDate < windowEnd;
             const isFutureYearly = yearlyDate && yearlyDate >= windowStart;
-            if (isTodo || inSchedWindow || isFutureYearly) {
-              await deleteGcalEvent(token, existingMap[key].id);
-              delete existingMap[key];
-            }
-          }
+            return isTodo || inSchedWindow || isFutureYearly;
+          });
+          await runInBatches(keysToDelete, 5, async (key) => {
+            await deleteGcalEvent(token, existingMap[key].id);
+            delete existingMap[key];
+          });
 
           if (!todosOnly) {
             await cleanupImportedIcsEvents(
@@ -1559,9 +1607,7 @@
             );
           }
 
-          for (const item of allItems) {
-            await upsertGcalEvent(token, existingMap, item);
-          }
+          await runInBatches(allItems, 5, (item) => upsertGcalEvent(token, existingMap, item));
 
           let taskCount = 0;
           if (tasksGranted) taskCount = await syncTodosToGoogleTasks(token);
@@ -1581,6 +1627,7 @@
           if (!silent) showToast('カレンダー同期中にエラーが発生しました');
           return false;
         } finally {
+          clearTimeout(watchdog);
           googleCalSyncInFlightRef.current = false;
           setGoogleCalSyncing(false);
         }
