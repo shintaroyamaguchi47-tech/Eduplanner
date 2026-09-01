@@ -1004,6 +1004,17 @@
       const [unitPlanSubjIdx, setUnitPlanSubjIdx] = useState(0);
       const [unitPlanShowSettings, setUnitPlanShowSettings] = useState(false);
       const [collapsedUnits, setCollapsedUnits] = useState({});
+      // 単元カードの表示順。true = 新しい単元が上・古い単元が下（逆順）
+      const [unitPlanDesc, setUnitPlanDesc] = useState(() => {
+        try { return localStorage.getItem('eduplanner_unitPlanDesc') !== '0'; } catch (e) { return true; }
+      });
+      const toggleUnitPlanDesc = () => {
+        setUnitPlanDesc(prev => {
+          const next = !prev;
+          try { localStorage.setItem('eduplanner_unitPlanDesc', next ? '1' : '0'); } catch (e) {}
+          return next;
+        });
+      };
 
       const [editingWeekMemo, setEditingWeekMemo] = useState(null);
       const [showWeekMemoPad, setShowWeekMemoPad] = useState(false);
@@ -5058,8 +5069,34 @@
                           </div>
                         )}
 
+                        {/* 単元の表示順（計画順 / 新しい単元が上） */}
+                        {units.length > 1 && (
+                          <div className="flex items-center justify-end gap-2 mb-2">
+                            <span className="text-[10px] font-bold text-slate-400">単元の表示順</span>
+                            <button onClick={toggleUnitPlanDesc}
+                              title={unitPlanDesc ? '新しい単元が上・古い単元が下です（クリックで計画順に戻す）' : '計画順（第1単元が上）です（クリックで新しい単元を上に）'}
+                              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-black border bg-white text-slate-600 border-slate-300 hover:bg-slate-50 shadow-sm active:scale-95 transition-all">
+                              {unitPlanDesc ? '🔽 新しい単元が上' : '🔼 計画順（第1単元が上）'}
+                            </button>
+                          </div>
+                        )}
+
+                        {unitPlanDesc && units.length > 0 && (
+                        <div className="mb-4 flex gap-2 items-center bg-white p-3 rounded-2xl border border-dashed border-slate-300">
+                          <span className="text-base shrink-0">➕</span>
+                          <input id={`up-unit-name-${subj.id}`} placeholder="単元名" onKeyDown={e => { if (e.key === 'Enter') addUnit(); }}
+                            className="flex-1 min-w-0 text-sm font-bold p-2 border border-slate-300 rounded-lg outline-none focus:border-blue-500 bg-white" />
+                          <div className="flex items-center gap-1 shrink-0">
+                            <input id={`up-unit-hours-${subj.id}`} type="number" min="1" defaultValue="1" onKeyDown={e => { if (e.key === 'Enter') addUnit(); }}
+                              className="w-14 text-sm font-bold p-2 border border-slate-300 rounded-lg outline-none focus:border-blue-500 bg-white text-center" />
+                            <span className="text-[10px] font-bold text-slate-500">時間</span>
+                          </div>
+                          <button onClick={addUnit} className="bg-blue-600 text-white px-4 py-2 rounded-lg font-black text-sm shadow-sm hover:bg-blue-700 active:scale-95 shrink-0">追加</button>
+                        </div>
+                        )}
+
                         <div className="space-y-4">
-                          {units.map((unit, uIdx) => {
+                          {(unitPlanDesc ? units.map((u, i) => [u, i]).reverse() : units.map((u, i) => [u, i])).map(([unit, uIdx]) => {
                             const progList = clsList.map(cls => getClassProgress(subj, cls));
                             const allDone = clsList.length > 0 && progList.every(p => p.currentUnitIdx > uIdx);
                             const anyActive = progList.some(p => p.currentUnitIdx === uIdx);
@@ -5077,6 +5114,7 @@
                                     {collapsed ? '▶' : '▼'}
                                   </button>
                                   <span className="text-base shrink-0">{allDone ? '✅' : anyActive ? '▶️' : '📖'}</span>
+                                  <span className="shrink-0 text-[10px] font-black text-slate-400 tabular-nums" title="計画上の順番">{uIdx + 1}</span>
                                   {/* 単元名はここで直接編集できる。変更すると週案に入力済みのコマの表記も追従する */}
                                   <input key={`un-${subj.id}-${uIdx}-${unit.name}`} defaultValue={unit.name}
                                     onBlur={e => commitUnitName(subjRealIdx, uIdx, e.target.value)}
@@ -5093,9 +5131,10 @@
                                   <span className={`shrink-0 text-[10px] font-black px-1.5 py-0.5 rounded-lg ${filledCount === unit.hours ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-500'}`}
                                     title="学習活動・内容を入力済みの時間数">📝 {filledCount}/{unit.hours}</span>
                                   <div className="shrink-0 flex items-center">
-                                    <button onClick={() => moveUnit(subjRealIdx, uIdx, uIdx - 1)} disabled={uIdx === 0} title="上へ"
+                                    {/* 表示が逆順のときは、画面で見えているとおりに動くよう入れ替える */}
+                                    <button onClick={() => moveUnit(subjRealIdx, uIdx, unitPlanDesc ? uIdx + 1 : uIdx - 1)} disabled={unitPlanDesc ? uIdx === units.length - 1 : uIdx === 0} title="上へ"
                                       className="w-6 h-7 text-slate-400 hover:text-slate-700 font-black text-xs disabled:opacity-25 disabled:cursor-not-allowed">↑</button>
-                                    <button onClick={() => moveUnit(subjRealIdx, uIdx, uIdx + 1)} disabled={uIdx === units.length - 1} title="下へ"
+                                    <button onClick={() => moveUnit(subjRealIdx, uIdx, unitPlanDesc ? uIdx - 1 : uIdx + 1)} disabled={unitPlanDesc ? uIdx === 0 : uIdx === units.length - 1} title="下へ"
                                       className="w-6 h-7 text-slate-400 hover:text-slate-700 font-black text-xs disabled:opacity-25 disabled:cursor-not-allowed">↓</button>
                                     <button onClick={() => { if (window.confirm(`単元「${unit.name}」を削除しますか？`)) removeUnit(subjRealIdx, uIdx); }} title="この単元を削除"
                                       className="w-6 h-7 text-slate-300 hover:text-rose-500 font-black text-xs">✕</button>
@@ -5171,7 +5210,8 @@
                           })}
                         </div>
 
-                        {/* 単元を追加（一覧の続きとして入力できる） */}
+                        {/* 単元を追加（一覧の続きとして入力できる）。逆順表示のときは一覧の上に置く */}
+                        {(!unitPlanDesc || units.length === 0) && (
                         <div className="mt-4 flex gap-2 items-center bg-white p-3 rounded-2xl border border-dashed border-slate-300">
                           <span className="text-base shrink-0">➕</span>
                           <input id={`up-unit-name-${subj.id}`} placeholder="単元名" onKeyDown={e => { if (e.key === 'Enter') addUnit(); }}
@@ -5183,6 +5223,7 @@
                           </div>
                           <button onClick={addUnit} className="bg-blue-600 text-white px-4 py-2 rounded-lg font-black text-sm shadow-sm hover:bg-blue-700 active:scale-95 shrink-0">追加</button>
                         </div>
+                        )}
                         {units.length === 0 && (
                           <p className="text-center text-xs text-slate-400 font-bold mt-3">
                             まだ単元がありません。上の欄から追加するか、⚙️ 教科設定の「単元をまとめて登録」で一括登録できます。
