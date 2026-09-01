@@ -1026,6 +1026,8 @@
       const [googleCalAutoSync, setGoogleCalAutoSync] = useState(() => { try { return localStorage.getItem('eduplanner_googleCalAutoSync') !== '0'; } catch (e) { return true; } });
       const [googleCalLastSync, setGoogleCalLastSync] = useState(() => { try { return localStorage.getItem('eduplanner_googleCalLastSync') || ''; } catch (e) { return ''; } });
       const [googleCalSyncing, setGoogleCalSyncing] = useState(false);
+      // 直前の同期が失敗した理由。自動同期は画面に何も出ないため、設定画面で状況が分かるようにする
+      const [googleCalLastError, setGoogleCalLastError] = useState(() => { try { return localStorage.getItem('eduplanner_googleCalLastError') || ''; } catch (e) { return ''; } });
       // TODOをGoogleカレンダーの「タスク」として登録する（オフのときは従来どおり終日予定として登録）
       const [googleTasksSync, setGoogleTasksSync] = useState(() => { try { return localStorage.getItem('eduplanner_googleTasksSync') === '1'; } catch (e) { return false; } });
       // 年間タブに入れた行事も、今日から1年先までGoogleカレンダーの終日予定として登録する
@@ -1528,6 +1530,14 @@
         return items.filter(it => !it.completed).length;
       };
 
+      const recordSyncError = (message) => {
+        setGoogleCalLastError(message);
+        try {
+          if (message) localStorage.setItem('eduplanner_googleCalLastError', message);
+          else localStorage.removeItem('eduplanner_googleCalLastError');
+        } catch (e) {}
+      };
+
       // todosOnly: TODOの変更だけを反映する軽い同期（週案・年間予定には触れない）
       const runGoogleCalendarSync = async ({ silent = false, tasksEnabled, yearlyEnabled, todosOnly = false } = {}) => {
         if (!googleClientId.trim()) {
@@ -1542,6 +1552,7 @@
           if (!googleCalSyncInFlightRef.current) return;
           googleCalSyncInFlightRef.current = false;
           setGoogleCalSyncing(false);
+          recordSyncError('同期が時間内に終わりませんでした。通信状況を確認して、もう一度「今すぐ同期」を押してください');
           if (!silent) showToast('同期に時間がかかっています。通信状況を確認して、もう一度お試しください');
         }, 300000);
         try {
@@ -1549,9 +1560,13 @@
           const scope = useTasks ? `${GCAL_SCOPE} ${GTASKS_SCOPE}` : GCAL_SCOPE;
           let tokenResp = await requestGoogleToken(silent ? '' : 'consent', scope);
           if (!tokenResp || tokenResp.error || !tokenResp.access_token) {
+            const reason = tokenResp?.error;
+            const closed = reason === 'popup_closed' || reason === 'popup_failed_to_open';
+            recordSyncError(closed
+              ? 'Googleの許可画面が閉じられたため同期できませんでした。ポップアップの許可を確認して、もう一度「今すぐ同期」を押してください'
+              : 'Googleの利用許可を取得できませんでした。「今すぐ同期」を押して、Googleアカウントの許可をやり直してください');
             if (!silent) {
-              const reason = tokenResp?.error;
-              showToast(reason === 'popup_closed' || reason === 'popup_failed_to_open'
+              showToast(closed
                 ? 'Googleの許可画面が閉じられたため中止しました。ポップアップの許可を確認して、もう一度お試しください'
                 : 'Googleカレンダーとの連携に失敗しました。もう一度お試しください');
             }
@@ -1617,6 +1632,7 @@
             setGoogleCalLastSync(nowIso);
             try { localStorage.setItem('eduplanner_googleCalLastSync', nowIso); } catch (e) {}
           }
+          recordSyncError('');
           if (!silent) {
             const msg = `Googleカレンダーに${allItems.length}件を同期しました（うち年間予定 ${yearlyEvents.length}件）`;
             showToast(tasksGranted ? `${msg}（TODO ${taskCount}件はGoogleタスクに登録）` : msg);
@@ -1624,6 +1640,7 @@
           return true;
         } catch (e) {
           console.error('Google Calendar sync error:', e);
+          recordSyncError(`同期の途中でエラーが発生しました（${e?.message || e}）。時間をおいて「今すぐ同期」を押してください`);
           if (!silent) showToast('カレンダー同期中にエラーが発生しました');
           return false;
         } finally {
@@ -5279,6 +5296,9 @@
                                 {googleCalConnected ? '✅ 連携済み' : '未連携'}
                                 {googleCalLastSync && ` ・最終同期: ${new Date(googleCalLastSync).toLocaleString('ja-JP')}`}
                               </div>
+                              {googleCalLastError && (
+                                <div className="text-xs text-rose-600 dark:text-rose-400 font-bold mt-1 max-w-md">⚠️ {googleCalLastError}</div>
+                              )}
                             </div>
                             {googleCalConnected ? (
                               <button onClick={handleDisconnectGoogleCalendar} className="text-xs font-bold bg-white dark:bg-slate-800 text-rose-600 border border-rose-300 dark:border-rose-700 px-3 py-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-900/30">解除</button>
