@@ -165,21 +165,110 @@
   </style>
 </head>
 <body class="selection:bg-blue-100 selection:text-blue-900 overflow-hidden">
-  <div id="root"></div>
+  <!-- 起動中に見えるつなぎの画面。React が最初の描画をした時点で置き換わる -->
+  <div id="root"><div id="boot" style="display:flex;height:100dvh;align-items:center;justify-content:center;padding:1.5rem;font-family:sans-serif;background:#f8fafc">
+    <div style="max-width:420px;width:100%;text-align:center">
+      <div id="boot-spin" style="width:34px;height:34px;margin:0 auto 14px;border:4px solid #dbeafe;border-top-color:#2563eb;border-radius:50%;animation:bootspin .8s linear infinite"></div>
+      <div id="boot-title" style="color:#1e293b;font-size:15px;font-weight:700">EduPlanner を起動しています...</div>
+      <div id="boot-sub" style="color:#94a3b8;font-size:12px;font-weight:700;margin-top:6px">初回は少し時間がかかります</div>
+      <div id="boot-detail" style="display:none;margin-top:14px;text-align:left;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:12px"></div>
+      <div id="boot-actions" style="display:none;margin-top:12px;gap:8px;justify-content:center">
+        <button onclick="location.reload()" style="padding:9px 18px;background:#2563eb;color:#fff;border:none;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer">再読み込み</button>
+        <button onclick="window.__bootCopy()" style="padding:9px 18px;background:#fff;color:#334155;border:1px solid #cbd5e1;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer">状況をコピー</button>
+      </div>
+    </div>
+  </div></div>
+  <style>@keyframes bootspin{to{transform:rotate(360deg)}}</style>
 
   <script>
-    window.addEventListener('error', function(e) {
-      var r = document.getElementById('root');
-      if (r && !r.innerHTML.trim()) {
-        r.style.cssText = 'display:flex;height:100dvh;align-items:center;justify-content:center;padding:2rem;';
-        r.innerHTML = '<div style="max-width:400px;text-align:center;font-family:sans-serif">'
-          + '<h2 style="color:#ef4444;margin-bottom:1rem">読み込みエラー</h2>'
-          + '<p style="color:#64748b;font-size:14px;margin-bottom:1rem">アプリの読み込みに失敗しました。ページを再読み込みしてください。</p>'
-          + '<p style="color:#94a3b8;font-size:11px;word-break:break-all">' + (e.message || '') + '</p>'
-          + '<button onclick="location.reload()" style="margin-top:1rem;padding:8px 24px;background:#3b82f6;color:#fff;border:none;border-radius:8px;font-weight:bold;cursor:pointer">再読み込み</button>'
-          + '</div>';
+    // 起動が終わらないとき、画面が真っ白なままだと原因が分からない。
+    // どこで止まったかを画面に出し、そのままコピーして送れるようにしておく。
+    (function () {
+      var started = Date.now();
+      window.__appMounted = false;
+      window.__bootErrors = [];
+
+      function el(id) { return document.getElementById(id); }
+      function elapsed() { return Math.round((Date.now() - started) / 1000); }
+
+      function stageReport() {
+        var lines = [
+          'EduPlanner 起動状況',
+          '日時: ' + new Date().toLocaleString('ja-JP'),
+          'ページ: ' + location.href,
+          '経過: ' + elapsed() + '秒',
+          '端末情報: ' + navigator.userAgent,
+          '',
+          'React: ' + (typeof React !== 'undefined' ? '読み込み済み' : '未読み込み'),
+          'ReactDOM: ' + (typeof ReactDOM !== 'undefined' ? '読み込み済み' : '未読み込み'),
+          'Babel: ' + (typeof Babel !== 'undefined' ? '読み込み済み' : '未読み込み'),
+          'Tailwind: ' + (typeof tailwind !== 'undefined' ? '読み込み済み' : '未読み込み'),
+          '画面の描画: ' + (window.__appMounted ? '完了' : '未完了')
+        ];
+        if (window.__bootErrors.length) {
+          lines.push('', 'エラー:');
+          window.__bootErrors.forEach(function (m) { lines.push('  ' + m); });
+        }
+        return lines.join('\n');
       }
-    });
+
+      window.__bootCopy = function () {
+        var text = stageReport();
+        if (navigator.clipboard) navigator.clipboard.writeText(text).catch(fallback);
+        else fallback();
+        function fallback() {
+          var ta = document.createElement('textarea');
+          ta.value = text; document.body.appendChild(ta); ta.select();
+          try { document.execCommand('copy'); } catch (e) {}
+          document.body.removeChild(ta);
+        }
+      };
+
+      function showDetail(title, sub) {
+        if (window.__appMounted) return;
+        var b = el('boot'); if (!b) return;
+        if (title) el('boot-title').textContent = title;
+        if (sub) el('boot-sub').textContent = sub;
+        var d = el('boot-detail');
+        d.style.display = 'block';
+        d.innerHTML = '<pre style="margin:0;white-space:pre-wrap;word-break:break-all;font-size:11px;line-height:1.6;color:#475569;font-family:ui-monospace,monospace">'
+          + stageReport().replace(/[<>&]/g, function (c) { return { '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]; }) + '</pre>';
+        el('boot-actions').style.display = 'flex';
+      }
+
+      // 起動を止めるもの（React・Babel・Tailwind）だけを失敗として扱う。
+      // フォントや Google 連携が落ちてもアプリ自体は動くので、記録だけして待つ
+      function isCritical(url) { return /react|babel|tailwindcss/i.test(url); }
+
+      function recordError(message, fatal) {
+        window.__bootErrors.push(String(message).slice(0, 300));
+        if (window.__appMounted || !fatal) return;
+        el('boot-spin').style.display = 'none';
+        showDetail('起動できませんでした', 'この内容をそのまま送ってください');
+      }
+
+      // 読み込みに失敗した <script> や <link> は window に上がってこないので、捕捉段階で拾う
+      window.addEventListener('error', function (e) {
+        var t = e.target;
+        if (t && t !== window && (t.src || t.href)) {
+          var url = t.src || t.href;
+          recordError('読み込み失敗: ' + url, isCritical(url));
+          return;
+        }
+        recordError((e.message || 'エラー') + (e.filename ? ' @ ' + e.filename : ''), true);
+      }, true);
+      window.addEventListener('unhandledrejection', function (e) {
+        recordError('未処理の失敗: ' + ((e.reason && e.reason.message) || e.reason || ''), false);
+      });
+
+      // エラーが出ないまま止まることもあるので、時間で切って状況を出す
+      setTimeout(function () { showDetail(null, '時間がかかっています。もう少しお待ちください'); }, 12000);
+      setTimeout(function () {
+        if (window.__appMounted) return;
+        el('boot-spin').style.display = 'none';
+        showDetail('起動が終わりません', 'この内容をそのまま送ってください');
+      }, 30000);
+    })();
   </script>
 
   <script type="text/babel">
@@ -6749,8 +6838,50 @@
       );
     }
 
+    // 描画中に例外が出ると React は画面を空にする。真っ白のまま残さず、内容を出す
+    class AppErrorBoundary extends React.Component {
+      constructor(props) { super(props); this.state = { error: null }; }
+      static getDerivedStateFromError(error) { return { error }; }
+      componentDidCatch(error, info) { this.info = info; }
+      copyDetail() {
+        const text = [
+          'EduPlanner 表示エラー',
+          `日時: ${new Date().toLocaleString('ja-JP')}`,
+          `ページ: ${location.href}`,
+          `端末情報: ${navigator.userAgent}`,
+          '',
+          String(this.state.error && this.state.error.stack || this.state.error),
+          String((this.info && this.info.componentStack) || '')
+        ].join('\n');
+        try { navigator.clipboard.writeText(text); } catch (e) {}
+      }
+      render() {
+        if (!this.state.error) return this.props.children;
+        return (
+          <div style={{display:'flex',height:'100dvh',alignItems:'center',justifyContent:'center',padding:'1.5rem',fontFamily:'sans-serif',background:'#f8fafc'}}>
+            <div style={{maxWidth:'460px',width:'100%'}}>
+              <div style={{fontSize:'15px',fontWeight:700,color:'#b91c1c',marginBottom:'6px'}}>画面の表示でエラーが起きました</div>
+              <div style={{fontSize:'12px',fontWeight:700,color:'#64748b',marginBottom:'12px'}}>データは保存されています。この内容をそのまま送ってください。</div>
+              <pre style={{margin:0,whiteSpace:'pre-wrap',wordBreak:'break-all',fontSize:'11px',lineHeight:1.6,color:'#475569',background:'#fff',border:'1px solid #e2e8f0',borderRadius:'12px',padding:'12px',maxHeight:'40vh',overflow:'auto'}}>
+                {String(this.state.error && this.state.error.stack || this.state.error)}
+              </pre>
+              <div style={{display:'flex',gap:'8px',marginTop:'12px'}}>
+                <button onClick={()=>location.reload()} style={{padding:'9px 18px',background:'#2563eb',color:'#fff',border:'none',borderRadius:'10px',fontWeight:700,fontSize:'13px',cursor:'pointer'}}>再読み込み</button>
+                <button onClick={()=>this.copyDetail()} style={{padding:'9px 18px',background:'#fff',color:'#334155',border:'1px solid #cbd5e1',borderRadius:'10px',fontWeight:700,fontSize:'13px',cursor:'pointer'}}>内容をコピー</button>
+              </div>
+            </div>
+          </div>
+        );
+      }
+    }
+
+    // 起動画面を消してよいのは、最初の描画が実際に終わったときだけ
+    const AppRoot = () => {
+      useEffect(() => { window.__appMounted = true; }, []);
+      return <AppErrorBoundary><TeacherPlanner /></AppErrorBoundary>;
+    };
     const root = ReactDOM.createRoot(document.getElementById('root'));
-    root.render(<TeacherPlanner />);
+    root.render(<AppRoot />);
   </script>
 </body>
 </html>
