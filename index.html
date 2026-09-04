@@ -412,6 +412,170 @@
     };
 
     // ============================
+    // 接続チェック（学校のフィルタで何が止められているかを調べる）
+    // ============================
+    const CONNECTION_TARGETS = [
+      { key:'app',        label:'アプリ本体',              need:'required', host:() => location.host,            url:() => `${location.origin}/?connCheck=${Date.now()}`,                                                              note:'ここが×だと、アプリそのものが開けません。' },
+      { key:'unpkg',      label:'React（画面の土台）',      need:'required', host:'unpkg.com',                    url:'https://unpkg.com/react@18.3.1/umd/react.production.min.js',                                                     note:'×だと画面が真っ白のままになります。' },
+      { key:'tailwind',   label:'Tailwind CSS（見た目）',   need:'required', host:'cdn.tailwindcss.com',          url:'https://cdn.tailwindcss.com/3.4.17',                                                                             note:'×だとレイアウトが大きく崩れます。' },
+      { key:'gstatic',    label:'Firebase SDK',             need:'required', host:'www.gstatic.com',              url:'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js',                                                      note:'×だとログイン画面から先に進めません。' },
+      { key:'auth',       label:'ログイン認証',             need:'required', host:'identitytoolkit.googleapis.com', url:'https://identitytoolkit.googleapis.com/v1/projects',                                                           note:'×だとログインできません。' },
+      { key:'firestore',  label:'データの保存・読み込み',   need:'required', host:'firestore.googleapis.com',     url:() => `https://firestore.googleapis.com/v1/projects/${FIREBASE_CONFIG.projectId}/databases/(default)/documents`, note:'×だと週案の保存・同期ができません。' },
+      { key:'authdomain', label:'認証ドメイン',             need:'optional', host:FIREBASE_CONFIG.authDomain,     url:() => `https://${FIREBASE_CONFIG.authDomain}/__/auth/handler`,                                                    note:'' },
+      { key:'fonts',      label:'Webフォント',              need:'optional', host:'fonts.googleapis.com',         url:'https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic&display=swap',                                          note:'×でも文字が標準フォントになるだけです。' },
+      { key:'gsi',        label:'Google連携の同意画面',     need:'optional', host:'accounts.google.com',          url:'https://accounts.google.com/gsi/client',                                                                         note:'×だとGoogleカレンダー連携が始められません。' },
+      { key:'gcal',       label:'Googleカレンダー同期',     need:'optional', host:'www.googleapis.com',           url:'https://www.googleapis.com/discovery/v1/apis?preferred=true',                                                    note:'×だと予定の自動同期ができません。' },
+      { key:'gtasks',     label:'Google ToDo同期',          need:'optional', host:'tasks.googleapis.com',         url:'https://tasks.googleapis.com/$discovery/rest?version=v1',                                                        note:'×だとToDoの同期ができません。' },
+      { key:'gcalweb',    label:'「カレンダーに追加」ボタン', need:'optional', host:'calendar.google.com',          url:'https://calendar.google.com/calendar/render',                                                                    note:'×だと、このボタンを押したときに新しいタブでブロック画面が出ます。' },
+    ];
+
+    const probeUrl = async (url, timeoutMs = 7000) => {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      const started = Date.now();
+      try {
+        await fetch(url, { mode:'no-cors', cache:'no-store', credentials:'omit', signal: controller.signal });
+        return { ok: true, ms: Date.now() - started };
+      } catch (e) {
+        return { ok: false, ms: Date.now() - started, timedOut: controller.signal.aborted };
+      } finally {
+        clearTimeout(timer);
+      }
+    };
+
+    const ConnectionCheck = ({ onClose }) => {
+      const [results, setResults] = useState({});
+      const [running, setRunning] = useState(false);
+      const [copyLabel, setCopyLabel] = useState('結果をコピー');
+
+      const run = async () => {
+        setRunning(true);
+        setResults({});
+        setCopyLabel('結果をコピー');
+        setResults(Object.fromEntries(CONNECTION_TARGETS.map(t => [t.key, { state:'checking' }])));
+        // まとめて確認する。1件ずつだと全部終わるまでに時間がかかりすぎる
+        await Promise.all(CONNECTION_TARGETS.map(async t => {
+          const url = typeof t.url === 'function' ? t.url() : t.url;
+          const r = await probeUrl(url);
+          setResults(prev => ({ ...prev, [t.key]: { state: r.ok ? 'ok' : 'ng', ms: r.ms, timedOut: r.timedOut } }));
+        }));
+        setRunning(false);
+      };
+
+      useEffect(() => { run(); }, []);
+
+      const hostOf = (t) => (typeof t.host === 'function' ? t.host() : t.host);
+      const done = !running && CONNECTION_TARGETS.every(t => results[t.key] && results[t.key].state !== 'checking');
+      const blocked = CONNECTION_TARGETS.filter(t => results[t.key]?.state === 'ng');
+      const blockedRequired = blocked.filter(t => t.need === 'required');
+
+      const reportText = () => {
+        const lines = [
+          'EduPlanner 接続チェック結果',
+          `日時: ${new Date().toLocaleString('ja-JP')}`,
+          `ページ: ${location.origin}`,
+          `オンライン判定: ${navigator.onLine ? 'オンライン' : 'オフライン'}`,
+          `端末情報: ${navigator.userAgent}`,
+          '',
+        ];
+        CONNECTION_TARGETS.forEach(t => {
+          const r = results[t.key];
+          const mark = !r ? '-' : r.state === 'ok' ? 'OK' : r.state === 'ng' ? 'NG' : '...';
+          lines.push(`[${mark}] ${t.label} / ${hostOf(t)}${r?.timedOut ? '（時間切れ）' : ''}`);
+        });
+        if (blocked.length > 0) {
+          lines.push('', '■ 通信できなかった接続先（許可が必要なドメイン）');
+          blocked.forEach(t => lines.push(`  https://${hostOf(t)}/`));
+        }
+        return lines.join('\n');
+      };
+
+      const copyReport = async () => {
+        const text = reportText();
+        try {
+          await navigator.clipboard.writeText(text);
+          setCopyLabel('コピーしました');
+        } catch (e) {
+          const ta = document.createElement('textarea');
+          ta.value = text; document.body.appendChild(ta); ta.select();
+          try { document.execCommand('copy'); setCopyLabel('コピーしました'); } catch (e2) { setCopyLabel('コピーできませんでした'); }
+          document.body.removeChild(ta);
+        }
+        setTimeout(() => setCopyLabel('結果をコピー'), 2500);
+      };
+
+      return (
+        <div className="fixed inset-0 z-[400] bg-slate-900/60 flex items-center justify-center p-3" onClick={onClose}>
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[90dvh] overflow-y-auto border border-slate-300" onClick={e => e.stopPropagation()}>
+            <div className="sticky top-0 bg-white border-b border-slate-200 px-5 py-4 flex items-center justify-between rounded-t-3xl">
+              <h2 className="text-lg font-black text-slate-800 flex items-center gap-2">🔌 接続チェック</h2>
+              <button onClick={onClose} className="text-slate-400 hover:text-slate-700 text-xl font-black px-2">✕</button>
+            </div>
+
+            <div className="px-5 py-4 space-y-4">
+              <p className="text-xs font-bold text-slate-600 leading-relaxed">
+                学校のChromebookでは、通信先ごとにフィルタがかかります。このアプリが使っている接続先をひとつずつ試して、どこが止められているかを調べます。
+              </p>
+
+              <div className="space-y-1.5">
+                {CONNECTION_TARGETS.map(t => {
+                  const r = results[t.key];
+                  const state = r?.state || 'wait';
+                  const icon = state === 'ok' ? '✅' : state === 'ng' ? '⛔' : state === 'checking' ? '⏳' : '・';
+                  const rowBg = state === 'ng' ? 'bg-rose-50 border-rose-200' : state === 'ok' ? 'bg-white border-slate-200' : 'bg-slate-50 border-slate-200';
+                  return (
+                    <div key={t.key} className={`border rounded-xl px-3 py-2 ${rowBg}`}>
+                      <div className="flex items-start gap-2">
+                        <span className="text-base leading-none mt-0.5">{icon}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs font-black text-slate-800">{t.label}</span>
+                            <span className={`text-[9px] font-black px-1.5 py-0.5 rounded ${t.need === 'required' ? 'bg-slate-700 text-white' : 'bg-slate-200 text-slate-600'}`}>{t.need === 'required' ? '必須' : '任意'}</span>
+                          </div>
+                          <div className="text-[10px] font-mono font-bold text-slate-500 truncate">{hostOf(t)}</div>
+                          {state === 'ng' && t.note && <div className="text-[10px] font-bold text-rose-700 mt-1 leading-relaxed">{t.note}</div>}
+                        </div>
+                        {state === 'ng' && <span className="text-[10px] font-black text-rose-600 shrink-0">{r.timedOut ? '時間切れ' : 'ブロック'}</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {done && (
+                <div className={`rounded-2xl border p-4 ${blocked.length === 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'}`}>
+                  {blocked.length === 0 ? (
+                    <div className="text-xs font-bold text-emerald-900 leading-relaxed">
+                      必要な接続先はすべて通っています。それでもブロック表示が出る場合は、その操作の直前に開いた画面（Googleの同意画面や、新しいタブで開くリンク）が止められている可能性があります。どの操作で出たかを控えておいてください。
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="text-xs font-black text-amber-900">
+                        {blockedRequired.length > 0 ? '必須の接続先が止められています。' : '一部の機能の接続先が止められています。'}
+                      </div>
+                      <div className="text-[11px] font-bold text-amber-900 leading-relaxed">
+                        下のドメインが許可されると使えるようになります。許可を頼めない場合は、⛔が付いた機能を使わずに、家庭や別の端末で開いてください。
+                      </div>
+                      <div className="bg-white border border-amber-200 rounded-xl p-2 space-y-0.5">
+                        {blocked.map(t => <div key={t.key} className="text-[10px] font-mono font-bold text-slate-700">https://{hostOf(t)}/</div>)}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                <button onClick={run} disabled={running} className="flex-1 bg-blue-600 text-white py-2.5 rounded-xl font-black text-sm hover:bg-blue-700 disabled:opacity-50">{running ? '確認中...' : 'もう一度確認'}</button>
+                <button onClick={copyReport} className="flex-1 bg-white border border-slate-300 text-slate-700 py-2.5 rounded-xl font-black text-sm hover:bg-slate-50">{copyLabel}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+
+    // ============================
     // Sub Components
     // ============================
     const DayTimelineView = ({ dateStr, dateObj, onClose, getCellData, getDaySetting, todos, onGoToWeekly }) => {
@@ -953,6 +1117,7 @@
       const [isRegistering, setIsRegistering] = useState(false);
       
       const [activeTab, setActiveTab] = useState('dashboard');
+      const [showConnCheck, setShowConnCheck] = useState(() => { try { return /(^|[?&])diag=1(&|$)/.test(location.search.slice(1)) || location.hash === '#diag'; } catch (e) { return false; } });
       
       const [currentWeekStart, setCurrentWeekStart] = useState(() => getMonday(getJSTDate()));
       const [currentMonth, setCurrentMonth] = useState(() => {
@@ -4115,13 +4280,18 @@
                 <div className="mt-4 text-center"><button onClick={()=>setIsRegistering(!isRegistering)} className="text-xs text-blue-600 font-bold hover:underline">{isRegistering?'ログインへ':'新規登録へ'}</button></div>
               </>
             )}
+            <div className="mt-6 pt-4 border-t border-slate-200 text-center">
+              <button onClick={()=>setShowConnCheck(true)} className="text-[11px] text-slate-500 font-bold hover:underline">学校の端末でブロックされる・開けないときは → 接続チェック</button>
+            </div>
           </div>
+          {showConnCheck && <ConnectionCheck onClose={()=>setShowConnCheck(false)} />}
         </div>
       );
 
       return (
         <div className={`flex flex-col h-[100dvh] w-full relative overflow-hidden transition-colors ${theme === 'dark' ? 'dark bg-slate-900 text-slate-200' : ''}`}>
           {toastMessage && <div className="fixed top-[calc(4rem+env(safe-area-inset-top))] left-1/2 -translate-x-1/2 bg-slate-800 text-white px-4 py-2 rounded-full z-[300] shadow-lg anim-scale-in font-bold text-sm">{toastMessage}</div>}
+          {showConnCheck && <ConnectionCheck onClose={()=>setShowConnCheck(false)} />}
           {(dataLoadStatus === 'loading' || dataLoadStatus === 'timeout' || dataLoadStatus === 'empty' || dataLoadStatus === 'local') && (
             <div className="fixed top-[calc(4rem+env(safe-area-inset-top))] left-1/2 -translate-x-1/2 z-[200] max-w-md w-[90%]">
               <div className={`px-4 py-3 rounded-xl shadow-lg border text-xs font-bold text-center ${dataLoadStatus === 'loading' ? 'bg-blue-50 border-blue-200 text-blue-700' : dataLoadStatus === 'local' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>
@@ -5270,6 +5440,12 @@
                   <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-300 shadow-md">
                     <h2 className="text-xl font-black mb-6 text-slate-800 flex items-center gap-2">⚙️ アプリの設定・バックアップ</h2>
                     
+                    <div className="mb-6 border border-slate-300 bg-slate-50 rounded-2xl p-5 shadow-sm">
+                      <h3 className="text-lg font-black text-slate-800 mb-2 flex items-center gap-2">🔌 接続チェック</h3>
+                      <p className="text-xs text-slate-600 mb-4 font-bold leading-relaxed">学校のChromebookなどで「アクセスがブロックされました」と出るときに使います。アプリが使っている接続先をひとつずつ試して、どこが止められているかを調べます。</p>
+                      <button onClick={()=>setShowConnCheck(true)} className="w-full bg-slate-800 text-white py-2.5 rounded-xl font-black text-sm hover:bg-slate-900 transition-colors">接続チェックを実行</button>
+                    </div>
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       {/* バックアップと復元 */}
                       <div className="border border-blue-200 bg-blue-50/50 rounded-2xl p-5 shadow-sm">
