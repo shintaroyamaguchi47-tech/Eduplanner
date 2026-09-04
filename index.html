@@ -1289,6 +1289,11 @@
       const [googleClientId, setGoogleClientId] = useState(() => { try { return localStorage.getItem('eduplanner_googleClientId') || ''; } catch (e) { return ''; } });
       const [googleCalConnected, setGoogleCalConnected] = useState(() => { try { return localStorage.getItem('eduplanner_googleCalConnected') === '1'; } catch (e) { return false; } });
       const [googleCalAutoSync, setGoogleCalAutoSync] = useState(() => { try { return localStorage.getItem('eduplanner_googleCalAutoSync') !== '0'; } catch (e) { return true; } });
+      // Google連携をこの端末だけ止めるための設定。学校の端末では、Googleの許可画面が
+      // 管理者にブロックされて新しいタブにブロック表示が出るため、端末ごとに切れるようにする。
+      // クラウドに保存する自動同期の設定と違い、この端末のブラウザにだけ残す
+      const [googleDeviceOff, setGoogleDeviceOff] = useState(() => { try { return localStorage.getItem('eduplanner_googleDeviceOff') === '1'; } catch (e) { return false; } });
+      const [googleDeviceOffReason, setGoogleDeviceOffReason] = useState(() => { try { return localStorage.getItem('eduplanner_googleDeviceOffReason') || ''; } catch (e) { return ''; } });
       const [googleCalLastSync, setGoogleCalLastSync] = useState(() => { try { return localStorage.getItem('eduplanner_googleCalLastSync') || ''; } catch (e) { return ''; } });
       const [googleCalSyncing, setGoogleCalSyncing] = useState(false);
       // 直前の同期が失敗した理由。自動同期は画面に何も出ないため、設定画面で状況が分かるようにする
@@ -1301,6 +1306,7 @@
       const gisTokenClientIdRef = useRef('');
       const gisTokenResolveRef = useRef(null);
       const googleCalAutoSyncFiredRef = useRef(false);
+      const googleDeviceOffRef = useRef(googleDeviceOff);
       const googleCalSyncInFlightRef = useRef(false);
       const todoSyncSignatureRef = useRef(null);
 
@@ -1461,6 +1467,16 @@
         gisTokenClientRef.current = client;
         gisTokenClientIdRef.current = cacheKey;
         return client;
+      };
+
+      const disableGoogleOnThisDevice = (reason) => {
+        googleDeviceOffRef.current = true;
+        setGoogleDeviceOff(true);
+        setGoogleDeviceOffReason(reason);
+        try {
+          localStorage.setItem('eduplanner_googleDeviceOff', '1');
+          localStorage.setItem('eduplanner_googleDeviceOffReason', reason);
+        } catch (e) {}
       };
 
       const requestGoogleToken = async (prompt, scope = GCAL_SCOPE) => {
@@ -1857,6 +1873,10 @@
 
       // todosOnly: TODOの変更だけを反映する軽い同期（週案・年間予定には触れない）
       const runGoogleCalendarSync = async ({ silent = false, tasksEnabled, yearlyEnabled, todosOnly = false } = {}) => {
+        if (googleDeviceOffRef.current) {
+          if (!silent) showToast('この端末ではGoogle連携を使わない設定になっています。設定画面から解除できます');
+          return false;
+        }
         if (!googleClientId.trim()) {
           if (!silent) showToast('先にGoogle OAuthクライアントIDを入力してください');
           return false;
@@ -1879,6 +1899,12 @@
           if (!tokenResp || tokenResp.error || !tokenResp.access_token) {
             const reason = tokenResp?.error;
             const closed = reason === 'popup_closed' || reason === 'popup_failed_to_open';
+            // 自動同期は本来ポップアップを開かずに済む。開いて失敗したということは、
+            // この端末では許可を取れない。繰り返すたびにブロック画面が開くので、ここで止める
+            if (silent && reason !== 'no_client_id' && reason !== 'gis_not_ready') {
+              disableGoogleOnThisDevice('この端末では、Googleの許可を自動で取得できませんでした。学校のアカウントでは、管理者が外部アプリとの連携を止めていることがあります。同期したいときは「今すぐ同期」を押してください');
+              return false;
+            }
             recordSyncError(closed
               ? 'Googleの許可画面が閉じられたため同期できませんでした。ポップアップの許可を確認して、もう一度「今すぐ同期」を押してください'
               : 'Googleの利用許可を取得できませんでした。「今すぐ同期」を押して、Googleアカウントの許可をやり直してください');
@@ -2004,6 +2030,18 @@
         } catch (e) {}
         saveToFirestore('extra', { googleCalSettings: { connected: false } });
         showToast('Googleカレンダー連携を解除しました（Google側の許可を完全に取り消すには、Googleアカウントの設定からもアプリ連携を削除してください）');
+      };
+
+      const toggleGoogleDeviceOff = () => {
+        const next = !googleDeviceOff;
+        setGoogleDeviceOff(next);
+        googleDeviceOffRef.current = next;
+        if (!next) setGoogleDeviceOffReason('');
+        try {
+          localStorage.setItem('eduplanner_googleDeviceOff', next ? '1' : '0');
+          if (!next) localStorage.removeItem('eduplanner_googleDeviceOffReason');
+        } catch (e) {}
+        showToast(next ? 'この端末ではGoogle連携を使いません' : 'この端末でもGoogle連携を使います');
       };
 
       const toggleGoogleCalAutoSync = () => {
@@ -2435,20 +2473,24 @@
         })();
       }, [dataLoadStatus]);
 
+      useEffect(() => { googleDeviceOffRef.current = googleDeviceOff; }, [googleDeviceOff]);
+
       // データ読み込み完了後、Googleカレンダー連携済みなら今日まだ同期していない場合に自動で1回だけ同期する
       useEffect(() => {
         if (dataLoadStatus !== 'loaded' && dataLoadStatus !== 'local') return;
         if (googleCalAutoSyncFiredRef.current) return;
+        if (googleDeviceOff) return;
         if (!googleCalConnected || !googleCalAutoSync) return;
         if (googleCalLastSync && formatDate(new Date(googleCalLastSync)) === todayStr) return;
         googleCalAutoSyncFiredRef.current = true;
         runGoogleCalendarSync({ silent: true });
-      }, [dataLoadStatus, googleCalConnected, googleCalAutoSync]);
+      }, [dataLoadStatus, googleCalConnected, googleCalAutoSync, googleDeviceOff]);
 
       // TODOを完了・追加・削除したら、少し待ってからGoogle側にも反映する。
       // 次に同期するまで完了済みのTODOがGoogleカレンダーに残らないようにするため
       useEffect(() => {
         if (dataLoadStatus !== 'loaded' && dataLoadStatus !== 'local') return;
+        if (googleDeviceOff) return;
         if (!googleCalConnected || !googleCalAutoSync) return;
         const signature = JSON.stringify(todos.map(t => [t.id, t.text, !!t.completed, t.dueDate || '', !!t.important, t.tag || '', t.minutes || 0]));
         if (todoSyncSignatureRef.current === null) { todoSyncSignatureRef.current = signature; return; }
@@ -2458,7 +2500,7 @@
           runGoogleCalendarSync({ silent: true, todosOnly: true });
         }, 5000);
         return () => clearTimeout(timer);
-      }, [todos, dataLoadStatus, googleCalConnected, googleCalAutoSync]);
+      }, [todos, dataLoadStatus, googleCalConnected, googleCalAutoSync, googleDeviceOff]);
 
       const cleanData = (obj) => { if(obj===undefined) return null; if(obj===null||typeof obj!=='object') return obj; const n=Array.isArray(obj)?[]:{}; for(const k in obj) n[k]=cleanData(obj[k]); return n; };
 
@@ -5653,6 +5695,21 @@
                         <p className="text-xs text-slate-600 dark:text-slate-400 mb-4 font-bold">
                           アプリを開いたときに、今日から1週間分の週案・年間タブの行事（今日から1年先まで）・未完了のTODOを自動でGoogleカレンダーに反映します（アプリを開いていない間は同期されません）。TODOはカレンダーの終日予定、または下の設定で「Googleタスク」として登録でき、アプリで完了・削除すると数秒後にGoogle側からも消えます。EduPlanner側で作成・更新した予定のみを対象とし、あなたがGoogleカレンダー側で直接追加した予定は削除されません。
                         </p>
+
+                        <div className="rounded-xl border border-slate-300 bg-white dark:bg-slate-800 dark:border-slate-600 p-3 mb-4">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="font-bold text-slate-800 dark:text-slate-200 text-sm">この端末ではGoogle連携を使わない</div>
+                              <div className="text-[11px] text-slate-500 dark:text-slate-400 font-bold leading-relaxed">学校の端末など、Googleの許可画面が管理者にブロックされる環境で使います。この設定はこの端末にだけ残るので、家の端末の同期はそのまま続きます。</div>
+                            </div>
+                            <button onClick={toggleGoogleDeviceOff} className={`w-14 h-8 rounded-full transition-colors relative shadow-inner shrink-0 ${googleDeviceOff ? 'bg-rose-600' : 'bg-slate-300'}`}>
+                              <div className={`absolute top-1 left-1 w-6 h-6 rounded-full bg-white shadow-sm transition-transform ${googleDeviceOff ? 'translate-x-6' : 'translate-x-0'}`}></div>
+                            </button>
+                          </div>
+                          {googleDeviceOff && googleDeviceOffReason && (
+                            <div className="mt-2 text-[11px] font-bold text-rose-700 dark:text-rose-300 leading-relaxed border-t border-slate-200 dark:border-slate-700 pt-2">{googleDeviceOffReason}</div>
+                          )}
+                        </div>
 
                         <div className="space-y-3">
                           <div>
