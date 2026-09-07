@@ -667,7 +667,7 @@
     // ============================
     // Sub Components
     // ============================
-    const DayTimelineView = ({ dateStr, dateObj, onClose, getCellData, getDaySetting, todos, onGoToWeekly }) => {
+    const DayTimelineView = ({ dateStr, dateObj, onClose, getCellData, getDaySetting, todos, gcalEvents = [], onGoToWeekly }) => {
       let dayIdx = dateObj.getDay() - 1; if (dayIdx === -1) dayIdx = 6;
       const setting = getDaySetting(dateStr, dayIdx);
       const dayName = DAYS[dayIdx];
@@ -687,6 +687,12 @@
         }
       });
 
+      // Googleカレンダーの予定。時刻がタイムラインの表示範囲(8時〜18時)に入るものだけ帯にし、
+      // 終日や範囲外のものは上の一覧にまとめる
+      const inTimelineRange = (t) => { const y = timeToY(t); return y !== null && y >= 0 && y <= TOTAL_HEIGHT; };
+      const gcalBlocks = gcalEvents.filter(g => !g.allDay && g.startTime && inTimelineRange(g.startTime));
+      const gcalNotes = gcalEvents.filter(g => !gcalBlocks.includes(g));
+
       const dayTodos = todos.filter(t => !t.completed && t.dueDate === dateStr);
       const now = new Date(); const isToday = dateStr === formatDate(now);
       const nowY = isToday ? timeToY(`${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`) : null;
@@ -704,6 +710,17 @@
                 {dayTodos.map(t => <div key={t.id} className="text-sm font-bold text-teal-900 flex items-center gap-1.5">{t.important && <span className="text-amber-500">★</span>}{t.text}</div>)}
               </div>
             )}
+            {gcalNotes.length > 0 && (
+              <div className="px-4 py-3 border-b border-slate-300 bg-violet-50 shrink-0">
+                <div className="text-xs font-black text-violet-700 mb-1">📅 Googleカレンダー</div>
+                {gcalNotes.map((g, i) => (
+                  <div key={i} className="text-sm font-bold text-violet-900 flex items-start gap-1.5">
+                    <span className="text-xs font-mono font-bold text-violet-600 shrink-0 pt-0.5">{g.allDay || !g.startTime ? '終日' : g.startTime}</span>
+                    <span className="break-words">{g.title}</span>
+                  </div>
+                ))}
+              </div>
+            )}
             <div className="flex-1 overflow-y-auto relative bg-slate-50/50">
               <div className="relative" style={{ height: TOTAL_HEIGHT + 'px', minHeight: '100%' }}>
                 {Array.from({ length: END_HOUR - START_HOUR + 1 }, (_, i) => START_HOUR + i).map(h => (
@@ -719,11 +736,24 @@
                     </div>
                   );
                 })}
+                {gcalBlocks.map((g, i) => {
+                  const topY = timeToY(g.startTime); const bottomY = g.endTime ? timeToY(g.endTime) : null;
+                  const height = bottomY ? Math.max(bottomY - topY, 28) : 45;
+                  return (
+                    <div key={'gcal-' + i} className="absolute rounded-lg border border-dashed border-violet-400 bg-violet-50/95 shadow-sm flex overflow-hidden" style={{ top: topY + 'px', height: height + 'px', left: '63%', right: '0.75rem' }}>
+                      <div className="w-1 shrink-0 bg-violet-400"></div>
+                      <div className="flex-1 px-1.5 py-1 overflow-hidden flex flex-col justify-center">
+                        <div className="text-[10px] font-bold text-violet-600">📅 {g.startTime}</div>
+                        <div className="text-[11px] font-black text-violet-900 break-words leading-tight overflow-y-auto hide-scrollbar">{g.title}</div>
+                      </div>
+                    </div>
+                  );
+                })}
                 {blocks.map(block => {
                   const topY = timeToY(block.startTime); const bottomY = timeToY(block.endTime);
                   if (topY === null) return null; const height = bottomY ? Math.max(bottomY - topY, 28) : 45;
                   return (
-                    <div key={block.id} className={`absolute left-14 right-3 rounded-lg border shadow-sm flex overflow-hidden ${block.color.bg}`} style={{ top: topY + 'px', height: height + 'px' }}>
+                    <div key={block.id} className={`absolute left-14 rounded-lg border shadow-sm flex overflow-hidden ${block.color.bg}`} style={{ top: topY + 'px', height: height + 'px', right: gcalBlocks.length > 0 ? '38%' : '0.75rem' }}>
                       <div className={`w-1 shrink-0 ${block.color.bar}`}></div>
                       <div className="flex-1 px-2 py-1 overflow-hidden flex flex-col justify-center"><div className="text-xs font-bold text-slate-700">{block.startTime}</div><div className={`text-xs sm:text-sm font-black break-words whitespace-pre-wrap leading-tight overflow-y-auto hide-scrollbar ${block.color.text}`}>{block.subject}</div></div>
                     </div>
@@ -761,6 +791,7 @@
                 if (e.type === 'holiday') { chip = dark ? 'bg-rose-950/50 border-rose-700 text-rose-100' : 'bg-rose-50 border-rose-300 text-rose-900'; tag = '祝・休日'; }
                 else if (e.type === 'event') { chip = e.impact ? e.impact.badge : (dark ? 'bg-pink-950/40 border-pink-700 text-pink-100' : 'bg-pink-50 border-pink-300 text-pink-900'); tag = e.impact?.label || '行事'; }
                 else if (e.type === 'todo') { chip = dark ? 'bg-blue-950/40 border-blue-700 text-blue-100' : 'bg-blue-50 border-blue-300 text-blue-900'; tag = 'TODO'; }
+                else if (e.type === 'gcal') { chip = dark ? 'bg-violet-950/40 border-violet-700 text-violet-100' : 'bg-violet-50 border-violet-300 text-violet-900'; tag = '📅 Googleカレンダー'; }
                 return (
                   <div key={idx} className={`rounded-xl border px-3 py-2.5 shadow-sm ${itemBase} ${chip}`}>
                     <div className="flex items-start justify-between gap-2">
@@ -788,7 +819,7 @@
       );
     };
 
-    const Dashboard = ({ weeklyData, baseTemplate, todos, syllabusData, yearlyData, vacations, weeklySettings, templateSettings, onGoToWeekly, onGoToDate, onDeleteTodo, onToggleTodo }) => {
+    const Dashboard = ({ weeklyData, baseTemplate, todos, syllabusData, yearlyData, vacations, weeklySettings, templateSettings, gcalEvents = [], onGoToWeekly, onGoToDate, onDeleteTodo, onToggleTodo }) => {
       const today = getJSTDate(); const todayStr = formatDate(today); let dayIdx = today.getDay() - 1; if (dayIdx === -1) dayIdx = 6;
       
       const isYearlyHoliday = (ds, yData) => isHolidayEventText(getYearlyEventText(yData, ds));
@@ -990,9 +1021,9 @@
                   <button onClick={onGoToWeekly} className="text-xs font-bold text-blue-700 bg-blue-100 px-3 py-1 rounded-lg hover:bg-blue-200 transition-colors">週案へ →</button>
                 </div>
                 <div className="flex-1 overflow-y-auto pr-1 space-y-1.5 hide-scrollbar">
-                  {isHoliday && todaySchedule.length === 0 ? (
+                  {isHoliday && todaySchedule.length === 0 && gcalEvents.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-full text-slate-500 gap-3 py-6 lg:py-0"><span className="text-5xl drop-shadow-sm opacity-80">🌴</span><span className="font-bold text-sm tracking-widest text-slate-600">今日はお休みです</span></div>
-                  ) : todaySchedule.length === 0 ? (
+                  ) : todaySchedule.length === 0 && gcalEvents.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-full text-slate-500 gap-3 py-6 lg:py-0"><span className="text-5xl drop-shadow-sm opacity-80">☕</span><span className="font-bold text-sm tracking-widest text-slate-600">まだ予定がありません</span></div>
                   ) : (
                     displaySchedule.map((item) => {
@@ -1017,6 +1048,20 @@
                         </div>
                       </div>
                     )})
+                  )}
+                  {gcalEvents.length > 0 && (
+                    <div className="pt-2 mt-1 border-t border-violet-200 space-y-1.5">
+                      <div className="text-[10px] font-black text-violet-700">📅 Googleカレンダー</div>
+                      {gcalEvents.map((g, i) => (
+                        <div key={'g'+i} className="flex items-center gap-2.5 px-2.5 py-2 rounded-xl bg-violet-50/70 border border-violet-200">
+                          <div className="w-9 h-9 rounded-lg bg-white border border-violet-200 flex items-center justify-center shrink-0 shadow-sm text-sm">📅</div>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-black text-violet-900 break-words leading-tight">{g.title}</div>
+                            <div className="text-[10px] font-mono text-violet-600 font-bold mt-0.5">{g.allDay || !g.startTime ? '終日' : `${g.startTime}${g.endTime ? '-' + g.endTime : ''}`}{g.location ? ` / ${g.location}` : ''}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </div>
               </div>
@@ -1302,6 +1347,12 @@
       const [googleTasksSync, setGoogleTasksSync] = useState(() => { try { return localStorage.getItem('eduplanner_googleTasksSync') === '1'; } catch (e) { return false; } });
       // 年間タブに入れた行事も、今日から1年先までGoogleカレンダーの終日予定として登録する
       const [googleYearlySync, setGoogleYearlySync] = useState(() => { try { return localStorage.getItem('eduplanner_googleYearlySync') !== '0'; } catch (e) { return true; } });
+      // Googleカレンダー側に入っている予定をアプリにも表示する（読み取りのみ。アプリのデータは書き換えない）
+      const [googleCalImport, setGoogleCalImport] = useState(() => { try { return localStorage.getItem('eduplanner_googleCalImport') === '1'; } catch (e) { return false; } });
+      // 読み込んだGoogleカレンダーの予定。{ '2026-04-01': [{ id, title, startTime, endTime, allDay, location }] }
+      const [gcalImported, setGcalImported] = useState(() => {
+        try { const v = JSON.parse(localStorage.getItem('eduplanner_gcalImported') || '{}'); return (v && typeof v === 'object' && !Array.isArray(v)) ? v : {}; } catch (e) { return {}; }
+      });
       const gisTokenClientRef = useRef(null);
       const gisTokenClientIdRef = useRef('');
       const gisTokenResolveRef = useRef(null);
@@ -1633,6 +1684,86 @@
         }));
       };
 
+      // ---- Googleカレンダー側の予定の読み込み（表示だけ。アプリのデータは書き換えない） ----
+
+      // Googleが返すISO時刻を日本時間の日付・時刻に直す。
+      // アプリ全体が getJSTDate と同じやり方（端末の時差を打ち消して9時間足す）で日本時間を扱っている
+      const toJstMoment = (iso) => {
+        const dt = new Date(iso);
+        if (Number.isNaN(dt.getTime())) return null;
+        const jst = new Date(dt.getTime() + dt.getTimezoneOffset() * 60000 + 9 * 3600000);
+        return {
+          date: formatDate(jst),
+          time: `${String(jst.getHours()).padStart(2, '0')}:${String(jst.getMinutes()).padStart(2, '0')}`,
+        };
+      };
+
+      const addOneDay = (ds) => { const [y, m, d] = ds.split('-').map(Number); return formatDate(new Date(y, m - 1, d + 1)); };
+
+      // EduPlanner自身が書き込んだ予定は読み込まない（同じ予定が二重に見えてしまうため）
+      const isEduPlannerOwnGcalEvent = (ev) => {
+        if (ev.extendedProperties?.private?.[GCAL_SYNC_TAG]) return true;
+        return /^eduplanner-\d{4}-\d{2}-\d{2}-\d+@eduplanner$/.test(ev.iCalUID || '');
+      };
+
+      // メインカレンダーの予定を日付ごとに集める。範囲は週案の同期と同じ「今日から1週間」
+      const fetchImportedGcalEvents = async (token, windowStart, windowEnd) => {
+        const byDate = {};
+        const push = (ds, item) => {
+          if (ds < windowStart || ds >= windowEnd) return;
+          (byDate[ds] = byDate[ds] || []).push(item);
+        };
+        let pageToken = '';
+        do {
+          const params = new URLSearchParams({
+            timeMin: new Date(`${windowStart}T00:00:00+09:00`).toISOString(),
+            timeMax: new Date(`${windowEnd}T00:00:00+09:00`).toISOString(),
+            singleEvents: 'true', orderBy: 'startTime', maxResults: '2500',
+          });
+          if (pageToken) params.set('pageToken', pageToken);
+          const res = await googleApiFetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events?${params.toString()}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (!res.ok) throw await googleApiError('gcal_import', res);
+          const data = await res.json();
+          for (const ev of (data.items || [])) {
+            if (ev.status === 'cancelled') continue;
+            if (isEduPlannerOwnGcalEvent(ev)) continue;
+            // 自分が「欠席」で返事をした予定は出さない
+            if ((ev.attendees || []).some(a => a.self && a.responseStatus === 'declined')) continue;
+            const base = { id: ev.id, title: (ev.summary || '(タイトルなし)').trim(), location: (ev.location || '').trim() };
+            if (ev.start?.date) {
+              // 終日予定。終了日は排他的なので前日までを埋める
+              const endExclusive = ev.end?.date || addOneDay(ev.start.date);
+              let ds = ev.start.date;
+              for (let guard = 0; ds < endExclusive && ds < windowEnd && guard < 400; guard++) {
+                push(ds, { ...base, allDay: true, startTime: '', endTime: '' });
+                ds = addOneDay(ds);
+              }
+            } else if (ev.start?.dateTime) {
+              const st = toJstMoment(ev.start.dateTime);
+              if (!st) continue;
+              const et = ev.end?.dateTime ? toJstMoment(ev.end.dateTime) : null;
+              push(st.date, { ...base, allDay: false, startTime: st.time, endTime: (et && et.date === st.date) ? et.time : '' });
+              // 日をまたぐ予定は、2日目以降を終日予定として並べる
+              if (et && et.date !== st.date) {
+                let ds = addOneDay(st.date);
+                for (let guard = 0; ds <= et.date && ds < windowEnd && guard < 400; guard++) {
+                  if (!(ds === et.date && et.time === '00:00')) push(ds, { ...base, allDay: true, startTime: '', endTime: '' });
+                  ds = addOneDay(ds);
+                }
+              }
+            }
+          }
+          pageToken = data.nextPageToken || '';
+        } while (pageToken);
+        Object.keys(byDate).forEach(ds => {
+          // 終日を先に、時刻つきは早い順に
+          byDate[ds].sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''));
+        });
+        return byDate;
+      };
+
       const deleteGcalEvent = async (token, eventId) => {
         const res = await googleApiFetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`, {
           method: 'DELETE',
@@ -1872,7 +2003,7 @@
       };
 
       // todosOnly: TODOの変更だけを反映する軽い同期（週案・年間予定には触れない）
-      const runGoogleCalendarSync = async ({ silent = false, tasksEnabled, yearlyEnabled, todosOnly = false } = {}) => {
+      const runGoogleCalendarSync = async ({ silent = false, tasksEnabled, yearlyEnabled, importEnabled, todosOnly = false } = {}) => {
         if (googleDeviceOffRef.current) {
           if (!silent) showToast('この端末ではGoogle連携を使わない設定になっています。設定画面から解除できます');
           return false;
@@ -1976,6 +2107,23 @@
             try { await upsertGcalEvent(token, existingMap, item); } catch (e) { noteFailure(e); }
           });
 
+          // Googleカレンダー側に入っている予定を読み込む（表示だけ。アプリのデータは書き換えない）
+          const useImport = importEnabled === undefined ? googleCalImport : importEnabled;
+          let importedCount = 0;
+          if (!todosOnly) {
+            if (useImport) {
+              try {
+                const imported = await fetchImportedGcalEvents(token, windowStart, windowEnd);
+                importedCount = Object.values(imported).reduce((n, list) => n + list.length, 0);
+                setGcalImported(imported);
+                try { localStorage.setItem('eduplanner_gcalImported', JSON.stringify(imported)); } catch (e) {}
+              } catch (e) { noteFailure(e); }
+            } else if (Object.keys(gcalImported).length > 0) {
+              setGcalImported({});
+              try { localStorage.removeItem('eduplanner_gcalImported'); } catch (e) {}
+            }
+          }
+
           let taskCount = 0;
           if (tasksGranted) taskCount = await syncTodosToGoogleTasks(token);
 
@@ -1993,7 +2141,8 @@
           }
           recordSyncError('');
           if (!silent) {
-            const msg = `Googleカレンダーに${allItems.length}件を同期しました（うち年間予定 ${yearlyEvents.length}件）`;
+            const importNote = useImport && !todosOnly ? `。Googleカレンダーから${importedCount}件を読み込みました` : '';
+            const msg = `Googleカレンダーに${allItems.length}件を同期しました（うち年間予定 ${yearlyEvents.length}件）${importNote}`;
             showToast(tasksGranted ? `${msg}（TODO ${taskCount}件はGoogleタスクに登録）` : msg);
           }
           return true;
@@ -2025,8 +2174,11 @@
       const handleDisconnectGoogleCalendar = () => {
         setGoogleCalConnected(false);
         gisTokenClientRef.current = null;
+        // 読み込み済みのGoogleカレンダーの予定も消す（解除したのに残り続けないように）
+        setGcalImported({});
         try {
           localStorage.setItem('eduplanner_googleCalConnected', '0');
+          localStorage.removeItem('eduplanner_gcalImported');
         } catch (e) {}
         saveToFirestore('extra', { googleCalSettings: { connected: false } });
         showToast('Googleカレンダー連携を解除しました（Google側の許可を完全に取り消すには、Googleアカウントの設定からもアプリ連携を削除してください）');
@@ -2070,6 +2222,22 @@
         // オンなら1年先まで登録、オフなら登録済みの先の行事をカレンダーから消す
         if (googleCalConnected) await runGoogleCalendarSync({ silent: false, yearlyEnabled: next });
         else showToast(next ? '年間予定も同期します（連携後に反映されます）' : '年間予定の同期をオフにしました');
+      };
+
+      // Googleカレンダー側の予定をアプリにも表示するかどうか
+      const toggleGoogleCalImport = async () => {
+        const next = !googleCalImport;
+        setGoogleCalImport(next);
+        try { localStorage.setItem('eduplanner_googleCalImport', next ? '1' : '0'); } catch (e) {}
+        saveToFirestore('extra', { googleCalSettings: { calImport: next } });
+        if (!next) {
+          setGcalImported({});
+          try { localStorage.removeItem('eduplanner_gcalImported'); } catch (e) {}
+          showToast('Googleカレンダーの予定の表示をやめました');
+          return;
+        }
+        if (googleCalConnected) await runGoogleCalendarSync({ silent: false, importEnabled: true });
+        else showToast('Googleカレンダーの予定も表示します（連携すると読み込まれます）');
       };
 
       const todayStr = formatDate(getJSTDate());
@@ -2440,6 +2608,7 @@
                 if (typeof g.autoSync === 'boolean') { setGoogleCalAutoSync(g.autoSync); try { localStorage.setItem('eduplanner_googleCalAutoSync', g.autoSync ? '1' : '0'); } catch(e) {} }
                 if (typeof g.tasksSync === 'boolean') { setGoogleTasksSync(g.tasksSync); try { localStorage.setItem('eduplanner_googleTasksSync', g.tasksSync ? '1' : '0'); } catch(e) {} }
                 if (typeof g.yearlySync === 'boolean') { setGoogleYearlySync(g.yearlySync); try { localStorage.setItem('eduplanner_googleYearlySync', g.yearlySync ? '1' : '0'); } catch(e) {} }
+                if (typeof g.calImport === 'boolean') { setGoogleCalImport(g.calImport); try { localStorage.setItem('eduplanner_googleCalImport', g.calImport ? '1' : '0'); } catch(e) {} }
               }
             }
             markLoaded('extra', s.exists());
@@ -4122,6 +4291,8 @@
         if(ed?.subject) {
           ed.subject.split('\n').filter(s=>s.trim()!=='').forEach(s => evs.push({type:'event',text:s.trim(),impact:getEventImpact(s.trim())}));
         }
+        // Googleカレンダー側の予定（読み込んで表示するだけ。アプリのデータには入らない）
+        (gcalImported[ds] || []).forEach(g => evs.push({ type:'gcal', text: (g.allDay || !g.startTime) ? g.title : `${g.startTime} ${g.title}` }));
         return evs; 
       };
       const getCalendarDays = () => { const y=currentMonth.getFullYear(); const m=currentMonth.getMonth(); const fd=new Date(y,m,1); const ld=new Date(y,m+1,0); let fdi=fd.getDay()-1; if(fdi===-1) fdi=6; const days=[]; for(let i=fdi-1;i>=0;i--) days.push({date:new Date(y,m-1,new Date(y,m,0).getDate()-i),isCurrentMonth:false}); for(let i=1;i<=ld.getDate();i++) days.push({date:new Date(y,m,i),isCurrentMonth:true}); while(days.length<42) days.push({date:new Date(y,m+1,days.length-ld.getDate()-fdi+1),isCurrentMonth:false}); return days; };
@@ -4485,7 +4656,7 @@
 
           <div className="flex-1 min-h-0 relative flex flex-col bg-[var(--paper)] dark:bg-slate-900">
 
-            {activeTab === 'dashboard' && <Dashboard weeklyData={weeklyData} baseTemplate={baseTemplate} todos={todos} syllabusData={syllabusData} yearlyData={yearlyData} vacations={vacations} weeklySettings={weeklySettings} templateSettings={templateSettings} onGoToWeekly={()=>setActiveTab('weekly')} onGoToDate={d=>setSelectedDateDetails({dateStr:formatDate(d),dateObj:d})} onDeleteTodo={(id)=>saveTodos(todos.filter(td=>td.id!==id))} onToggleTodo={(id)=>saveTodos(todos.map(td=>td.id===id?{...td,completed:!td.completed}:td))} />}
+            {activeTab === 'dashboard' && <Dashboard weeklyData={weeklyData} baseTemplate={baseTemplate} todos={todos} syllabusData={syllabusData} yearlyData={yearlyData} vacations={vacations} weeklySettings={weeklySettings} templateSettings={templateSettings} gcalEvents={gcalImported[todayStr] || []} onGoToWeekly={()=>setActiveTab('weekly')} onGoToDate={d=>setSelectedDateDetails({dateStr:formatDate(d),dateObj:d})} onDeleteTodo={(id)=>saveTodos(todos.filter(td=>td.id!==id))} onToggleTodo={(id)=>saveTodos(todos.map(td=>td.id===id?{...td,completed:!td.completed}:td))} />}
             {activeTab === 'field' && <FieldMode weeklyData={weeklyData} baseTemplate={baseTemplate} todos={todos} yearlyData={yearlyData} vacations={vacations} weeklySettings={weeklySettings} templateSettings={templateSettings} onGoToWeekly={()=>setActiveTab('weekly')} onToggleTodo={(id)=>saveTodos(todos.map(td=>td.id===id?{...td,completed:!td.completed}:td))} />}
             
             {/* 月間カレンダー */}
@@ -4525,7 +4696,7 @@
                               if(!emphasized) {
                                 return (
                                   <div key={idx} className={`flex items-center w-full min-w-0 leading-tight ${isMobile ? 'gap-0.5' : 'gap-1 px-0.5'}`} title={e.text}>
-                                    <span className={`rounded-full shrink-0 bg-sky-500 ${isMobile ? 'w-1 h-1' : 'w-1.5 h-1.5'}`}></span>
+                                    <span className={`rounded-full shrink-0 ${e.type==='gcal' ? 'bg-violet-500' : 'bg-sky-500'} ${isMobile ? 'w-1 h-1' : 'w-1.5 h-1.5'}`}></span>
                                     <span className={`truncate font-bold text-slate-700 dark:text-slate-200 ${sizeCls}`}>{e.text}</span>
                                   </div>
                                 );
@@ -4627,6 +4798,13 @@
                                 {activeTab==='weekly' && (
                                   <button type="button" onClick={() => setSelectedDateDetails({ dateStr: ds, dateObj: cd })} className={`text-[9px] sm:text-[10px] lg:text-[11px] font-black px-1 sm:px-1.5 py-0.5 rounded-md hover:scale-105 transition-transform cursor-pointer truncate ${isT?'bg-blue-600 text-white shadow hover:bg-blue-700':'text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-600'}`} title="タイムライン表示">
                                     {cd.getDate()}{isT&&<span className="hidden sm:inline"> 今日</span>}
+                                  </button>
+                                )}
+                                {activeTab==='weekly' && (gcalImported[ds]||[]).length > 0 && (
+                                  <button type="button" onClick={() => setSelectedDateDetails({ dateStr: ds, dateObj: cd })}
+                                    title={(gcalImported[ds]||[]).map(g => `${g.allDay||!g.startTime?'終日':g.startTime} ${g.title}`).join('\n')}
+                                    className="no-print text-[8px] sm:text-[9px] font-black px-1 py-0.5 rounded-md shrink-0 bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 border border-violet-300 dark:border-violet-700 hover:bg-violet-200 dark:hover:bg-violet-900/60 transition-colors">
+                                    📅{(gcalImported[ds]||[]).length}
                                   </button>
                                 )}
                               </div>
@@ -5764,6 +5942,16 @@
 
                               <div className="flex items-center justify-between pt-2 border-t border-emerald-100 dark:border-emerald-800">
                                 <div className="pr-3">
+                                  <div className="font-bold text-slate-800 dark:text-slate-200 text-sm">Googleカレンダーの予定をアプリにも表示する</div>
+                                  <div className="text-xs text-slate-500 dark:text-slate-400 font-bold">オンにすると、Googleカレンダー（メインのカレンダー）に入っている今日から1週間分の予定を読み込んで、月間カレンダー・週案の日付・タイムライン・ホームに表示します。読み込むだけなので、週案や行事欄の中身は書き換わりません。</div>
+                                </div>
+                                <button onClick={toggleGoogleCalImport} disabled={googleCalSyncing} className={`w-14 h-8 rounded-full transition-colors relative shadow-inner shrink-0 disabled:opacity-40 ${googleCalImport ? 'bg-violet-600' : 'bg-slate-300'}`}>
+                                  <div className={`absolute top-1 left-1 w-6 h-6 rounded-full bg-white shadow-sm transition-transform ${googleCalImport ? 'translate-x-6' : 'translate-x-0'}`}></div>
+                                </button>
+                              </div>
+
+                              <div className="flex items-center justify-between pt-2 border-t border-emerald-100 dark:border-emerald-800">
+                                <div className="pr-3">
                                   <div className="font-bold text-slate-800 dark:text-slate-200 text-sm">TODOを「Googleタスク」に登録する</div>
                                   <div className="text-xs text-slate-500 dark:text-slate-400 font-bold">オンにすると、TODOはカレンダーの予定ではなくGoogleカレンダー内の「ToDoリスト（Googleタスク）」に期日つきで登録されます。アプリで完了にするとGoogle側も完了、削除するとGoogle側も削除されます。初回はタスクへのアクセス許可を求められます。</div>
                                 </div>
@@ -6099,6 +6287,7 @@
               getCellData={getCellData}
               getDaySetting={getDaySetting}
               todos={todos}
+              gcalEvents={gcalImported[selectedDateDetails.dateStr] || []}
               onGoToWeekly={() => {
                 setSelectedDateDetails(null);
                 setCurrentWeekStart(getMonday(selectedDateDetails.dateObj));
