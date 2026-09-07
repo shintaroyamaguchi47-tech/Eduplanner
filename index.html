@@ -1349,6 +1349,10 @@
       const [googleYearlySync, setGoogleYearlySync] = useState(() => { try { return localStorage.getItem('eduplanner_googleYearlySync') !== '0'; } catch (e) { return true; } });
       // Googleカレンダー側に入っている予定をアプリにも表示する（読み取りのみ。アプリのデータは書き換えない）
       const [googleCalImport, setGoogleCalImport] = useState(() => { try { return localStorage.getItem('eduplanner_googleCalImport') === '1'; } catch (e) { return false; } });
+      // Googleカレンダー側で書き直された予定を、週案・年間予定にも反映する
+      const [googleCalWriteBack, setGoogleCalWriteBack] = useState(() => { try { return localStorage.getItem('eduplanner_googleCalWriteBack') === '1'; } catch (e) { return false; } });
+      // Googleカレンダーで新しく作った予定を、週案の行事欄に取り込む
+      const [googleCalAdopt, setGoogleCalAdopt] = useState(() => { try { return localStorage.getItem('eduplanner_googleCalAdopt') === '1'; } catch (e) { return false; } });
       // 読み込んだGoogleカレンダーの予定。{ '2026-04-01': [{ id, title, startTime, endTime, allDay, location }] }
       const [gcalImported, setGcalImported] = useState(() => {
         try { const v = JSON.parse(localStorage.getItem('eduplanner_gcalImported') || '{}'); return (v && typeof v === 'object' && !Array.isArray(v)) ? v : {}; } catch (e) { return {}; }
@@ -1483,6 +1487,14 @@
 
       // Googleカレンダー自動同期: アプリを開いたときに今日から1週間の予定と未完了TODOを反映
       const GCAL_SYNC_TAG = 'eduplannerSync';
+      // 前回アプリとGoogleカレンダーで内容が一致したときの署名。これと今の内容を見比べて、
+      // どちら側で書き直されたのかを判断する
+      const GCAL_SIG_TAG = 'eduplannerSig';
+      // Googleカレンダー側で作られた予定を、アプリが行事欄に取り込んだ印
+      const GCAL_ADOPTED_TAG = 'eduplannerAdopted';
+      const GCAL_ORIG_TITLE_TAG = 'eduplannerOrigTitle';
+      // 取り込みをやめた予定の印。もう一度取り込まないようにする
+      const GCAL_IGNORED_TAG = 'eduplannerIgnored';
       const GCAL_SCOPE = 'https://www.googleapis.com/auth/calendar.events';
       const GTASKS_SCOPE = 'https://www.googleapis.com/auth/tasks';
       const GTASKS_API = 'https://tasks.googleapis.com/tasks/v1';
@@ -1615,6 +1627,50 @@
 
       const getYearlyEventLines = (ds) => getYearlyEventText(yearlyData, ds).split('\n').map(s => s.trim()).filter(Boolean);
 
+      // 行事欄の行を「9:00-10:00 職員会議」「9:00 職員会議」のように読み分ける。
+      // 時刻が書いてあればGoogleカレンダーにも時刻つきの予定として登録する
+      const parseEventLine = (line) => {
+        const m = (line || '').match(/^(\d{1,2}):(\d{2})(?:\s*[-〜~–—]\s*(\d{1,2}):(\d{2}))?\s+(.+)$/);
+        if (!m) return { title: (line || '').trim(), startTime: null, endTime: null };
+        const h1 = Number(m[1]), n1 = Number(m[2]);
+        if (h1 > 23 || n1 > 59) return { title: (line || '').trim(), startTime: null, endTime: null };
+        const hhmm = (h, n) => `${String(h).padStart(2, '0')}:${String(n).padStart(2, '0')}`;
+        const startTime = hhmm(h1, n1);
+        let endTime = '';
+        if (m[3]) {
+          const h2 = Number(m[3]), n2 = Number(m[4]);
+          if (h2 <= 23 && n2 <= 59) endTime = hhmm(h2, n2);
+        }
+        // 終わりの時刻が書いていなければ1時間後にする。日付をまたぐときはその日の終わりで止める
+        if (!endTime) {
+          const total = h1 * 60 + n1 + 60;
+          endTime = total >= 1440 ? '23:59' : hhmm(Math.floor(total / 60), total % 60);
+        }
+        if (endTime <= startTime) endTime = '23:59';
+        return { title: m[5].trim(), startTime, endTime };
+      };
+
+      // 逆にGoogleカレンダーの予定を行事欄の1行に戻す
+      const gcalItemToEventLine = (gItem) => {
+        const title = (gItem.subject || '').replace(/^🚩\s*/, '').trim();
+        if (gItem.startTime && gItem.endTime) return `${gItem.startTime}-${gItem.endTime} ${title}`;
+        if (gItem.startTime) return `${gItem.startTime} ${title}`;
+        return title;
+      };
+
+      // 予定の中身を短い署名にする。メモ（説明）は、アプリが管理している予定のときだけ含める
+      const gcalSignature = (item, manageMemo) => {
+        const src = [
+          item.subject || '', manageMemo ? (item.memo || '') : '',
+          item.date || '', item.startTime || '', item.endTime || '',
+        ].join('\u001f');
+        let h = 2166136261;
+        for (let i = 0; i < src.length; i++) { h ^= src.charCodeAt(i); h = Math.imul(h, 16777619); }
+        return (h >>> 0).toString(36);
+      };
+
+      const dayIndexOf = (ds) => { const [y, m, d] = ds.split('-').map(Number); const di = new Date(y, m - 1, d).getDay() - 1; return di === -1 ? 6 : di; };
+
       const buildScheduleEventsForSync = (startDate, days) => {
         const events = [];
         const periodIds = ['p1','p2','p3','p4','p5','p6','morning','afterschool'];
@@ -1638,7 +1694,7 @@
                 }
                 continue;
               }
-              events.push({ key: `sched-${ds}-${pid}`, date: ds, subject: data.subject.trim(), memo: data.memo || '', startTime: data.startTime, endTime: data.endTime });
+              events.push({ key: `sched-${ds}-${pid}`, date: ds, subject: data.subject.trim(), memo: data.memo || '', startTime: data.startTime, endTime: data.endTime, manageMemo: true });
             }
           }
 
@@ -1653,7 +1709,8 @@
           eventSubject.split('\n').map(l => l.trim()).filter(Boolean)
             .filter(line => !yearlyLines.includes(line))
             .forEach((line, idx) => {
-              events.push({ key: `sched-${ds}-event-${idx}`, date: ds, subject: `🚩 ${line}`, memo: '', startTime: null, endTime: null });
+              const parsed = parseEventLine(line);
+              events.push({ key: `sched-${ds}-event-${idx}`, date: ds, subject: `🚩 ${parsed.title}`, memo: '', startTime: parsed.startTime, endTime: parsed.endTime });
             });
         }
         return events;
@@ -1667,7 +1724,8 @@
           cd.setDate(cd.getDate() + i);
           const ds = formatDate(cd);
           getYearlyEventLines(ds).forEach((line, idx) => {
-            events.push({ key: `yearly-${ds}-${idx}`, date: ds, subject: `🚩 ${line}`, memo: '', startTime: null, endTime: null });
+            const parsed = parseEventLine(line);
+            events.push({ key: `yearly-${ds}-${idx}`, date: ds, subject: `🚩 ${parsed.title}`, memo: '', startTime: parsed.startTime, endTime: parsed.endTime });
           });
         }
         return events;
@@ -1689,7 +1747,9 @@
       // Googleが返すISO時刻を日本時間の日付・時刻に直す。
       // アプリ全体が getJSTDate と同じやり方（端末の時差を打ち消して9時間足す）で日本時間を扱っている
       const toJstMoment = (iso) => {
-        const dt = new Date(iso);
+        // Googleは時差つきで返すが、万一時差が無いときは日本時間として読む
+        const text = /(?:Z|[+-]\d{2}:?\d{2})$/.test(iso || '') ? iso : `${iso}+09:00`;
+        const dt = new Date(text);
         if (Number.isNaN(dt.getTime())) return null;
         const jst = new Date(dt.getTime() + dt.getTimezoneOffset() * 60000 + 9 * 3600000);
         return {
@@ -1709,6 +1769,8 @@
       // メインカレンダーの予定を日付ごとに集める。範囲は週案の同期と同じ「今日から1週間」
       const fetchImportedGcalEvents = async (token, windowStart, windowEnd) => {
         const byDate = {};
+        // 行事欄に取り込める予定（1日で収まるものだけ）
+        const candidates = [];
         const push = (ds, item) => {
           if (ds < windowStart || ds >= windowEnd) return;
           (byDate[ds] = byDate[ds] || []).push(item);
@@ -1729,6 +1791,8 @@
           for (const ev of (data.items || [])) {
             if (ev.status === 'cancelled') continue;
             if (isEduPlannerOwnGcalEvent(ev)) continue;
+            // 一度取り込んで、あとで行事欄から消した予定は、もう取り込まない
+            if (ev.extendedProperties?.private?.[GCAL_IGNORED_TAG]) continue;
             // 自分が「欠席」で返事をした予定は出さない
             if ((ev.attendees || []).some(a => a.self && a.responseStatus === 'declined')) continue;
             const base = { id: ev.id, title: (ev.summary || '(タイトルなし)').trim(), location: (ev.location || '').trim() };
@@ -1740,11 +1804,17 @@
                 push(ds, { ...base, allDay: true, startTime: '', endTime: '' });
                 ds = addOneDay(ds);
               }
+              if (ev.start.date >= windowStart && ev.start.date < windowEnd && endExclusive === addOneDay(ev.start.date)) {
+                candidates.push({ ...base, date: ev.start.date, allDay: true, startTime: '', endTime: '' });
+              }
             } else if (ev.start?.dateTime) {
               const st = toJstMoment(ev.start.dateTime);
               if (!st) continue;
               const et = ev.end?.dateTime ? toJstMoment(ev.end.dateTime) : null;
               push(st.date, { ...base, allDay: false, startTime: st.time, endTime: (et && et.date === st.date) ? et.time : '' });
+              if (st.date >= windowStart && st.date < windowEnd && (!et || et.date === st.date)) {
+                candidates.push({ ...base, date: st.date, allDay: false, startTime: st.time, endTime: et ? et.time : '' });
+              }
               // 日をまたぐ予定は、2日目以降を終日予定として並べる
               if (et && et.date !== st.date) {
                 let ds = addOneDay(st.date);
@@ -1761,7 +1831,7 @@
           // 終日を先に、時刻つきは早い順に
           byDate[ds].sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''));
         });
-        return byDate;
+        return { byDate, candidates };
       };
 
       const deleteGcalEvent = async (token, eventId) => {
@@ -1793,7 +1863,13 @@
             const key = ev.extendedProperties?.private?.eduplannerKey;
             if (!key) return;
             if (map[key]) duplicateIds.push(ev.id);
-            else map[key] = { id: ev.id, summary: ev.summary || '', description: ev.description || '', start: ev.start || {}, end: ev.end || {} };
+            else map[key] = {
+              id: ev.id, summary: ev.summary || '', description: ev.description || '',
+              start: ev.start || {}, end: ev.end || {},
+              sig: ev.extendedProperties?.private?.[GCAL_SIG_TAG] || '',
+              adopted: !!ev.extendedProperties?.private?.[GCAL_ADOPTED_TAG],
+              origTitle: ev.extendedProperties?.private?.[GCAL_ORIG_TITLE_TAG] || '',
+            };
           });
           pageToken = data.nextPageToken || '';
         } while (pageToken);
@@ -1826,28 +1902,63 @@
         } while (pageToken);
       };
 
-      // 既存イベントが同じ内容かどうか。同じなら無駄な更新リクエストを送らない
-      const isSameGcalEvent = (existing, item, allDayEnd) => {
-        if (!existing) return false;
-        if ((existing.summary || '') !== item.subject) return false;
-        if ((existing.description || '') !== (item.memo || '')) return false;
-        if (item.startTime && item.endTime) {
-          const startAt = (existing.start?.dateTime || '').slice(0, 19);
-          const endAt = (existing.end?.dateTime || '').slice(0, 19);
-          return startAt === `${item.date}T${item.startTime}:00` && endAt === `${item.date}T${item.endTime}:00`;
+      // Googleカレンダーの予定を、アプリ側の項目と同じ形にそろえて比べられるようにする
+      const gcalEventToItem = (existing) => {
+        const item = { subject: existing.summary || '', memo: existing.description || '', date: '', startTime: '', endTime: '' };
+        if (existing.start?.dateTime) {
+          const st = toJstMoment(existing.start.dateTime);
+          const et = existing.end?.dateTime ? toJstMoment(existing.end.dateTime) : null;
+          if (st) { item.date = st.date; item.startTime = st.time; }
+          if (et && et.date === item.date) item.endTime = et.time;
+        } else if (existing.start?.date) {
+          item.date = existing.start.date;
         }
-        return existing.start?.date === item.date && existing.end?.date === allDayEnd;
+        return item;
       };
 
-      const upsertGcalEvent = async (token, existingMap, item) => {
-        const body = {
-          summary: item.subject,
-          extendedProperties: { private: { [GCAL_SYNC_TAG]: '1', eduplannerKey: item.key } },
-        };
-        if (item.memo) body.description = item.memo;
+      // 取り込んだ予定は、Googleカレンダー側の題名をそのまま残す（🚩を付けて勝手に書き換えない）
+      const gcalItemForEvent = (existing, item) => (existing?.adopted && /^🚩/.test(item.subject || ''))
+        ? { ...item, subject: (item.subject || '').replace(/^🚩\s*/, '') }
+        : item;
+
+      // アプリとGoogleカレンダーのどちらで書き直されたのかを判断する。
+      // 前回一致したときの署名を手がかりにする（署名が無い＝判断できないときはアプリを優先）
+      const decideGcalAction = (existing, item, writeBackOn) => {
+        if (!existing) return { action: 'push' };
+        const gItem = gcalEventToItem(existing);
+        const gSig = gcalSignature(gItem, item.manageMemo);
+        const appSig = gcalSignature(item, item.manageMemo);
+        if (gSig === appSig) return { action: existing.sig === appSig ? 'none' : 'stamp', sig: appSig };
+        if (!existing.sig) return { action: 'push' };
+        const gChanged = gSig !== existing.sig;
+        const appChanged = appSig !== existing.sig;
+        if (gChanged && !appChanged) return writeBackOn ? { action: 'pull', gItem, sig: gSig } : { action: 'push' };
+        return { action: 'push', conflict: gChanged && appChanged };
+      };
+
+      // 拡張プロパティ（印）だけを書き換える
+      const patchGcalProps = async (token, eventId, props, extraBody) => {
+        const res = await googleApiFetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`, {
+          method: 'PATCH',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...(extraBody || {}), extendedProperties: { private: props } }),
+        });
+        if (!res.ok && res.status !== 404 && res.status !== 410) throw await googleApiError('gcal_props', res);
+      };
+
+      const upsertGcalEvent = async (token, existingMap, item, extraProps) => {
         const existing = existingMap[item.key];
         const existingId = existing?.id;
-        let allDayEnd = '';
+        const body = {
+          summary: item.subject,
+          extendedProperties: { private: {
+            [GCAL_SYNC_TAG]: '1', eduplannerKey: item.key,
+            [GCAL_SIG_TAG]: gcalSignature(item, item.manageMemo),
+            ...(extraProps || {}),
+          } },
+        };
+        // メモ（説明）は授業のコマだけアプリが管理する。行事や取り込んだ予定の説明には触らない
+        if (item.manageMemo) body.description = item.memo || '';
         if (item.startTime && item.endTime) {
           body.start = { dateTime: `${item.date}T${item.startTime}:00`, timeZone: 'Asia/Tokyo' };
           body.end = { dateTime: `${item.date}T${item.endTime}:00`, timeZone: 'Asia/Tokyo' };
@@ -1859,15 +1970,13 @@
         } else {
           // 終日イベントの終了日は排他的（翌日を指定）
           const [y, m, d] = item.date.split('-').map(Number);
-          allDayEnd = formatDate(new Date(y, m - 1, d + 1));
           body.start = { date: item.date };
-          body.end = { date: allDayEnd };
+          body.end = { date: formatDate(new Date(y, m - 1, d + 1)) };
           if (existingId) {
             body.start.dateTime = null;
             body.end.dateTime = null;
           }
         }
-        if (isSameGcalEvent(existing, item, allDayEnd)) return false;
         const url = existingId
           ? `https://www.googleapis.com/calendar/v3/calendars/primary/events/${existingId}`
           : `https://www.googleapis.com/calendar/v3/calendars/primary/events`;
@@ -1877,6 +1986,141 @@
           body: JSON.stringify(body),
         });
         if (!res.ok) throw await googleApiError('gcal_upsert', res);
+        return true;
+      };
+
+      // 取り込んだ予定をアプリの管理から外す。消さずにGoogleカレンダー側へ返す
+      const releaseAdoptedGcalEvent = async (token, existing) => {
+        const props = {
+          [GCAL_SYNC_TAG]: null, eduplannerKey: null, [GCAL_SIG_TAG]: null,
+          [GCAL_ADOPTED_TAG]: null, [GCAL_ORIG_TITLE_TAG]: null, [GCAL_IGNORED_TAG]: '1',
+        };
+        const extra = (existing.origTitle && existing.origTitle !== existing.summary) ? { summary: existing.origTitle } : null;
+        await patchGcalProps(token, existing.id, props, extra);
+      };
+
+      // ---- Googleカレンダーでの書き直しをアプリに戻す ----
+      // 変更はいったん下書きにためて、同期の最後に1回だけ保存する
+      const draftWeekly = (draft) => (draft.weekly || (draft.weekly = { ...weeklyData }));
+      const draftYearly = (draft) => (draft.yearly || (draft.yearly = { ...yearlyData }));
+      const draftYearlyLines = (draft, ds) => getYearlyEventText(draft.yearly || yearlyData, ds)
+        .split('\n').map(l => l.trim()).filter(Boolean);
+
+      // その日の行事欄のうち、週案だけに書いた行（年間予定から来た行は除く）
+      const weeklyOnlyEventLines = (draft, ds, di) => {
+        const override = draftWeekly(draft)[`${ds}-event`];
+        const merged = (override && !override.useTemplate)
+          ? (override.subject || '')
+          : (getCellData(ds, 'event', di).subject || '');
+        const yearlyLines = draftYearlyLines(draft, ds);
+        return merged.split('\n').map(l => l.trim()).filter(Boolean).filter(l => !yearlyLines.includes(l));
+      };
+
+      const setWeeklyEventLines = (draft, ds, di, lines) => {
+        const w = draftWeekly(draft);
+        const wk = `${ds}-event`;
+        const override = w[wk];
+        const base = (override && !override.useTemplate) ? override : getCellData(ds, 'event', di);
+        w[wk] = { ...base, subject: lines.join('\n'), useTemplate: false };
+      };
+
+      // Googleカレンダーで書き直された1件を、対応する週案・年間予定に戻す。
+      // 戻せた場合だけ true を返す（戻し先が見つからないときはアプリの内容で上書きし直す）
+      const applyGcalWriteBack = (draft, key, gItem) => {
+        // Googleカレンダー側で別の日に動かされた予定は戻さない。
+        // 予定をどの日のどの枠に置くかは週案側で決めるため、次の同期で元の日に戻す
+        const keyDate = (key.match(/-(\d{4}-\d{2}-\d{2})-/) || [])[1] || '';
+        if (keyDate && gItem.date && gItem.date !== keyDate) return false;
+        const yearlyMatch = key.match(/^yearly-(\d{4}-\d{2}-\d{2})-(\d+)$/);
+        if (yearlyMatch) {
+          const ds = yearlyMatch[1];
+          const idx = Number(yearlyMatch[2]);
+          const lines = draftYearlyLines(draft, ds);
+          const nextLine = gcalItemToEventLine(gItem);
+          if (idx >= lines.length || !nextLine || nextLine === lines[idx]) return false;
+          const next = [...lines];
+          next[idx] = nextLine;
+          const [y, m, d] = ds.split('-').map(Number);
+          const sy = m < 4 ? y - 1 : y;
+          const yr = draftYearly(draft);
+          yr[sy] = { ...(yr[sy] || {}), [`${m}-${d}`]: next.join('\n') };
+          draft.count++;
+          return true;
+        }
+
+        const schedMatch = key.match(/^sched-(\d{4}-\d{2}-\d{2})-(p[1-6]|morning|afterschool|event)(?:-(\d+))?$/);
+        if (!schedMatch) return false;
+        const ds = schedMatch[1];
+        const pid = schedMatch[2];
+        const idx = schedMatch[3] === undefined ? null : Number(schedMatch[3]);
+        const di = dayIndexOf(ds);
+        const w = draftWeekly(draft);
+        const wk = `${ds}-${pid}`;
+        const override = w[wk];
+        const base = (override && !override.useTemplate) ? override : getCellData(ds, pid, di);
+
+        if (pid === 'event') {
+          if (idx === null) return false;
+          const lines = weeklyOnlyEventLines(draft, ds, di);
+          const nextLine = gcalItemToEventLine(gItem);
+          if (idx >= lines.length || !nextLine || nextLine === lines[idx]) return false;
+          const next = [...lines];
+          next[idx] = nextLine;
+          setWeeklyEventLines(draft, ds, di, next);
+          draft.count++;
+          return true;
+        }
+
+        if (idx !== null) {
+          // 放課後の枠に複数入れた予定のうちの1件
+          if (pid !== 'afterschool') return false;
+          const events = [...(base.events || [])];
+          if (!events[idx]) return false;
+          events[idx] = { ...events[idx], subject: (gItem.subject || '').trim(), startTime: gItem.startTime || '', endTime: gItem.endTime || '' };
+          w[wk] = { ...base, events, useTemplate: false };
+          draft.count++;
+          return true;
+        }
+
+        if (!(gItem.subject || '').trim()) return false;
+        w[wk] = {
+          ...base,
+          subject: (gItem.subject || '').trim(),
+          memo: gItem.memo || '',
+          startTime: gItem.startTime || '',
+          endTime: gItem.endTime || '',
+          useTemplate: false,
+        };
+        draft.count++;
+        return true;
+      };
+
+      // Googleカレンダーで作った予定を、その日の行事欄に1行として取り込む
+      const adoptGcalEvent = async (token, draft, existingMap, cand) => {
+        const ds = cand.date;
+        const di = dayIndexOf(ds);
+        const lines = weeklyOnlyEventLines(draft, ds, di);
+        const line = (cand.allDay || !cand.startTime)
+          ? cand.title
+          : (cand.endTime ? `${cand.startTime}-${cand.endTime} ${cand.title}` : `${cand.startTime} ${cand.title}`);
+        if (!line || lines.includes(line)) return false;
+        const idx = lines.length;
+        const key = `sched-${ds}-event-${idx}`;
+        // 同じ番号の行事がすでにあるときは無理に入れず、次の同期にまわす
+        if (existingMap[key]) return false;
+        const parsed = parseEventLine(line);
+        const item = { key, date: ds, subject: parsed.title, memo: '', startTime: parsed.startTime, endTime: parsed.endTime };
+        // Googleカレンダー側の題名・時刻はそのままで、アプリの管理下に入った印だけ付ける
+        await upsertGcalEvent(token, { [key]: { id: cand.id } }, item, {
+          [GCAL_ADOPTED_TAG]: '1',
+          [GCAL_ORIG_TITLE_TAG]: (cand.title || '').slice(0, 900),
+        });
+        setWeeklyEventLines(draft, ds, di, [...lines, line]);
+        existingMap[key] = {
+          id: cand.id, summary: item.subject, description: '', start: {}, end: {},
+          sig: gcalSignature(item, false), adopted: true, origTitle: cand.title,
+        };
+        draft.count++;
         return true;
       };
 
@@ -2003,7 +2247,7 @@
       };
 
       // todosOnly: TODOの変更だけを反映する軽い同期（週案・年間予定には触れない）
-      const runGoogleCalendarSync = async ({ silent = false, tasksEnabled, yearlyEnabled, importEnabled, todosOnly = false } = {}) => {
+      const runGoogleCalendarSync = async ({ silent = false, tasksEnabled, yearlyEnabled, importEnabled, writeBackEnabled, adoptEnabled, todosOnly = false } = {}) => {
         if (googleDeviceOffRef.current) {
           if (!silent) showToast('この端末ではGoogle連携を使わない設定になっています。設定画面から解除できます');
           return false;
@@ -2090,7 +2334,10 @@
 
           await runInBatches(keysToDelete, 2, async (key) => {
             try {
-              await deleteGcalEvent(token, existingMap[key].id);
+              const existing = existingMap[key];
+              // 取り込んだ予定はGoogleカレンダー側のものなので、消さずに管理から外すだけにする
+              if (existing.adopted) await releaseAdoptedGcalEvent(token, existing);
+              else await deleteGcalEvent(token, existing.id);
               delete existingMap[key];
             } catch (e) { noteFailure(e); }
           });
@@ -2103,25 +2350,88 @@
             );
           }
 
+          // アプリのデータが読み込めていないうちに書き戻すと、空の週案で上書きしてしまう
+          const appDataReady = dataLoadStatus === 'loaded' || dataLoadStatus === 'local';
+          const useWriteBack = (writeBackEnabled === undefined ? googleCalWriteBack : writeBackEnabled)
+            && !todosOnly && appDataReady;
+          const draft = { weekly: null, yearly: null, count: 0 };
+          const pulls = [];
+          let conflictCount = 0;
+          // 署名の付け直しは、1回の同期で少しずつ進める（Googleの利用上限に当たらないように）
+          let stampBudget = 60;
+
           await runInBatches(allItems, 2, async (item) => {
-            try { await upsertGcalEvent(token, existingMap, item); } catch (e) { noteFailure(e); }
+            try {
+              const existing = existingMap[item.key];
+              const shaped = gcalItemForEvent(existing, item);
+              const decision = decideGcalAction(existing, shaped, useWriteBack);
+              if (decision.conflict) conflictCount++;
+              if (decision.action === 'none') return;
+              if (decision.action === 'stamp') {
+                if (stampBudget-- > 0) await patchGcalProps(token, existing.id, { [GCAL_SIG_TAG]: decision.sig });
+                return;
+              }
+              // 書き戻しは順番に行う（同じ日の行事欄を同時に書き換えないため）
+              if (decision.action === 'pull') { pulls.push({ item: shaped, existing, gItem: decision.gItem, sig: decision.sig }); return; }
+              await upsertGcalEvent(token, existingMap, shaped);
+            } catch (e) { noteFailure(e); }
           });
+
+          for (const pull of pulls) {
+            try {
+              if (applyGcalWriteBack(draft, pull.item.key, pull.gItem)) {
+                await patchGcalProps(token, pull.existing.id, { [GCAL_SIG_TAG]: pull.sig });
+              } else {
+                // 戻し先が見つからなかったので、これまでどおりアプリの内容で上書きする
+                await upsertGcalEvent(token, existingMap, pull.item);
+              }
+            } catch (e) { noteFailure(e); }
+          }
 
           // Googleカレンダー側に入っている予定を読み込む（表示だけ。アプリのデータは書き換えない）
           const useImport = importEnabled === undefined ? googleCalImport : importEnabled;
+          const useAdopt = (adoptEnabled === undefined ? googleCalAdopt : adoptEnabled)
+            && useImport && !todosOnly && appDataReady;
           let importedCount = 0;
+          let adoptedCount = 0;
           if (!todosOnly) {
             if (useImport) {
               try {
-                const imported = await fetchImportedGcalEvents(token, windowStart, windowEnd);
-                importedCount = Object.values(imported).reduce((n, list) => n + list.length, 0);
-                setGcalImported(imported);
-                try { localStorage.setItem('eduplanner_gcalImported', JSON.stringify(imported)); } catch (e) {}
+                const { byDate, candidates } = await fetchImportedGcalEvents(token, windowStart, windowEnd);
+                if (useAdopt) {
+                  const adoptedIds = new Set();
+                  for (const cand of candidates) {
+                    try {
+                      if (await adoptGcalEvent(token, draft, existingMap, cand)) { adoptedIds.add(cand.id); adoptedCount++; }
+                    } catch (e) { noteFailure(e); }
+                  }
+                  // 行事欄に入れた予定は、Googleカレンダーの予定としては重ねて表示しない
+                  Object.keys(byDate).forEach(ds => {
+                    byDate[ds] = byDate[ds].filter(g => !adoptedIds.has(g.id));
+                    if (byDate[ds].length === 0) delete byDate[ds];
+                  });
+                }
+                importedCount = Object.values(byDate).reduce((n, list) => n + list.length, 0);
+                setGcalImported(byDate);
+                try { localStorage.setItem('eduplanner_gcalImported', JSON.stringify(byDate)); } catch (e) {}
               } catch (e) { noteFailure(e); }
             } else if (Object.keys(gcalImported).length > 0) {
               setGcalImported({});
               try { localStorage.removeItem('eduplanner_gcalImported'); } catch (e) {}
             }
+          }
+
+          // 書き戻し・取り込みでアプリ側に入った変更を、まとめて保存する
+          if (draft.weekly) saveAll(baseTemplate, templateSettings, draft.weekly, weeklySettings);
+          if (draft.yearly) saveExtraData(draft.yearly, documents, vacations);
+          if (draft.count > 0 || conflictCount > 0) {
+            const parts = [];
+            const writeBackCount = draft.count - adoptedCount;
+            if (writeBackCount > 0) parts.push(`Googleカレンダーでの変更を${writeBackCount}件、週案に反映しました`);
+            if (adoptedCount > 0) parts.push(`Googleカレンダーの予定${adoptedCount}件を行事欄に取り込みました`);
+            if (conflictCount > 0) parts.push(`${conflictCount}件は両方で変更されていたのでアプリの内容を優先しました`);
+            // 自動同期でも、週案が書き換わったことは知らせる
+            showToast(parts.join('。'));
           }
 
           let taskCount = 0;
@@ -2238,6 +2548,28 @@
         }
         if (googleCalConnected) await runGoogleCalendarSync({ silent: false, importEnabled: true });
         else showToast('Googleカレンダーの予定も表示します（連携すると読み込まれます）');
+      };
+
+      // Googleカレンダーでの書き直しを週案・年間予定に戻すかどうか
+      const toggleGoogleCalWriteBack = async () => {
+        const next = !googleCalWriteBack;
+        setGoogleCalWriteBack(next);
+        try { localStorage.setItem('eduplanner_googleCalWriteBack', next ? '1' : '0'); } catch (e) {}
+        saveToFirestore('extra', { googleCalSettings: { calWriteBack: next } });
+        if (next && googleCalConnected) await runGoogleCalendarSync({ silent: false, writeBackEnabled: true });
+        else showToast(next ? 'Googleカレンダーでの書き直しをアプリに反映します' : 'これまでどおり、アプリの内容でGoogleカレンダーを上書きします');
+      };
+
+      // Googleカレンダーで作った予定を行事欄に取り込むかどうか
+      const toggleGoogleCalAdopt = async () => {
+        const next = !googleCalAdopt;
+        setGoogleCalAdopt(next);
+        try { localStorage.setItem('eduplanner_googleCalAdopt', next ? '1' : '0'); } catch (e) {}
+        saveToFirestore('extra', { googleCalSettings: { calAdopt: next } });
+        if (!next) { showToast('Googleカレンダーの予定を行事欄に取り込むのをやめました（取り込み済みの行事はそのまま残ります）'); return; }
+        if (!googleCalImport) { showToast('先に「Googleカレンダーの予定をアプリにも表示する」をオンにしてください'); return; }
+        if (googleCalConnected) await runGoogleCalendarSync({ silent: false, adoptEnabled: true });
+        else showToast('Googleカレンダーの予定を行事欄に取り込みます（連携すると反映されます）');
       };
 
       const todayStr = formatDate(getJSTDate());
@@ -2609,6 +2941,8 @@
                 if (typeof g.tasksSync === 'boolean') { setGoogleTasksSync(g.tasksSync); try { localStorage.setItem('eduplanner_googleTasksSync', g.tasksSync ? '1' : '0'); } catch(e) {} }
                 if (typeof g.yearlySync === 'boolean') { setGoogleYearlySync(g.yearlySync); try { localStorage.setItem('eduplanner_googleYearlySync', g.yearlySync ? '1' : '0'); } catch(e) {} }
                 if (typeof g.calImport === 'boolean') { setGoogleCalImport(g.calImport); try { localStorage.setItem('eduplanner_googleCalImport', g.calImport ? '1' : '0'); } catch(e) {} }
+                if (typeof g.calWriteBack === 'boolean') { setGoogleCalWriteBack(g.calWriteBack); try { localStorage.setItem('eduplanner_googleCalWriteBack', g.calWriteBack ? '1' : '0'); } catch(e) {} }
+                if (typeof g.calAdopt === 'boolean') { setGoogleCalAdopt(g.calAdopt); try { localStorage.setItem('eduplanner_googleCalAdopt', g.calAdopt ? '1' : '0'); } catch(e) {} }
               }
             }
             markLoaded('extra', s.exists());
@@ -5947,6 +6281,26 @@
                                 </div>
                                 <button onClick={toggleGoogleCalImport} disabled={googleCalSyncing} className={`w-14 h-8 rounded-full transition-colors relative shadow-inner shrink-0 disabled:opacity-40 ${googleCalImport ? 'bg-violet-600' : 'bg-slate-300'}`}>
                                   <div className={`absolute top-1 left-1 w-6 h-6 rounded-full bg-white shadow-sm transition-transform ${googleCalImport ? 'translate-x-6' : 'translate-x-0'}`}></div>
+                                </button>
+                              </div>
+
+                              <div className="flex items-center justify-between pt-2 border-t border-emerald-100 dark:border-emerald-800">
+                                <div className="pr-3">
+                                  <div className="font-bold text-slate-800 dark:text-slate-200 text-sm">Googleカレンダーでの書き直しを週案に戻す</div>
+                                  <div className="text-xs text-slate-500 dark:text-slate-400 font-bold">オンにすると、Googleカレンダーでこのアプリの予定の題名・時刻・説明を直したとき、その内容を週案や年間予定にも反映します。同じ予定をアプリとGoogleカレンダーの両方で直していたときは、アプリの内容を残します。オフのままだと、これまでどおりアプリの内容でGoogleカレンダーを上書きします。</div>
+                                </div>
+                                <button onClick={toggleGoogleCalWriteBack} disabled={googleCalSyncing} className={`w-14 h-8 rounded-full transition-colors relative shadow-inner shrink-0 disabled:opacity-40 ${googleCalWriteBack ? 'bg-violet-600' : 'bg-slate-300'}`}>
+                                  <div className={`absolute top-1 left-1 w-6 h-6 rounded-full bg-white shadow-sm transition-transform ${googleCalWriteBack ? 'translate-x-6' : 'translate-x-0'}`}></div>
+                                </button>
+                              </div>
+
+                              <div className="flex items-center justify-between pt-2 border-t border-emerald-100 dark:border-emerald-800">
+                                <div className="pr-3">
+                                  <div className="font-bold text-slate-800 dark:text-slate-200 text-sm">Googleカレンダーで作った予定を行事欄に入れる</div>
+                                  <div className="text-xs text-slate-500 dark:text-slate-400 font-bold">オンにすると、Googleカレンダーで新しく作った予定を、その日の行事欄に1行として書き込みます（時刻があれば「16:00-17:00 職員会議」の形）。以後はアプリの行事として扱われ、どちらで直しても両方に反映されます。行事欄から消したときは、Googleカレンダー側の予定は消さずに連携だけ外します。「表示する」がオンのときだけ働きます。</div>
+                                </div>
+                                <button onClick={toggleGoogleCalAdopt} disabled={googleCalSyncing || !googleCalImport} className={`w-14 h-8 rounded-full transition-colors relative shadow-inner shrink-0 disabled:opacity-40 ${googleCalAdopt ? 'bg-violet-600' : 'bg-slate-300'}`}>
+                                  <div className={`absolute top-1 left-1 w-6 h-6 rounded-full bg-white shadow-sm transition-transform ${googleCalAdopt ? 'translate-x-6' : 'translate-x-0'}`}></div>
                                 </button>
                               </div>
 
