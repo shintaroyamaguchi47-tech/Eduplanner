@@ -381,6 +381,21 @@
     };
     // 月間カレンダーなどに出す時間帯の短い表示。時刻がなければ空文字
     const eventTimeLabel = ({ startTime, endTime }) => startTime ? (endTime ? `${startTime}-${endTime}` : startTime) : '';
+    // 行事の1行を時間帯つきの予定として読む。タイムラインの帯やGoogleカレンダー登録に使う。
+    // 時刻が書かれていなければ startTime は空。終わりの時刻がなければ1時間後にする
+    const eventTimeRange = (line) => {
+      const { title, startTime, endTime: written } = splitEventTime(line);
+      if (!startTime) return { title, startTime: '', endTime: '' };
+      let endTime = written;
+      if (!endTime) {
+        const [h, n] = startTime.split(':').map(Number);
+        const total = h * 60 + n + 60;
+        // 日付をまたぐときはその日の終わりで止める
+        endTime = total >= 1440 ? '23:59' : `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+      }
+      if (endTime <= startTime) endTime = '23:59';
+      return { title, startTime, endTime };
+    };
 
     // 行事テキストから休日判定。「休業前」「休業(日)明け」は授業日・出勤日なので除外
     const isHolidayEventText = (text) => (text || '').split('\n').some(line =>
@@ -705,9 +720,21 @@
       const getTimelineColor = (subject, rowId, customColor) => { const ct = customColor && CONTENT_COLORS[customColor] ? customColor : getContentType(subject, rowId); const cc = CONTENT_COLORS[ct] || CONTENT_COLORS.lesson; return { bg: cc.tlBg, text: cc.tlText, bar: cc.tlBar }; };
 
       const blocks = []; const times = SCHEDULE_TIMES[setting.type];
+      const eventNotes = [];
       ROWS.filter(r => r.id !== 'diary').forEach(row => {
         const data = getCellData(dateStr, row.id, dayIdx);
-        if (row.id === 'afterschool' && data.events?.length > 0) {
+        if (row.id === 'event') {
+          // 行事欄。時刻を書いた行は帯にし、終日の行と表示範囲(8時〜18時)の外の行は上の一覧にまとめる
+          (data.subject || '').split('\n').filter(s => s.trim()).forEach((line, idx) => {
+            const ev = eventTimeRange(line);
+            const y = ev.startTime ? timeToY(ev.startTime) : null;
+            if (y !== null && y >= 0 && y <= TOTAL_HEIGHT) {
+              blocks.push({ id: `event-${idx}`, periodId: row.id, subject: ev.title, memo: '', startTime: ev.startTime, endTime: ev.endTime, color: getTimelineColor(ev.title, row.id, data.color) });
+            } else {
+              eventNotes.push({ time: ev.startTime ? eventTimeLabel(ev) : '終日', title: ev.title });
+            }
+          });
+        } else if (row.id === 'afterschool' && data.events?.length > 0) {
           data.events.forEach((ev, idx) => { if (ev.subject) { const st = ev.startTime || (times?.afterschool?.start) || ''; if (st) blocks.push({ id: `${row.id}-${idx}`, periodId: row.id, subject: ev.subject, memo: ev.memo || '', startTime: st, endTime: ev.endTime || '', color: getTimelineColor(ev.subject, row.id, data.color) }); } });
         } else if (data.subject) {
           let st = data.startTime || (times?.[row.id]?.start) || ''; let et = data.endTime || (times?.[row.id]?.end) || '';
@@ -736,6 +763,17 @@
               <div className="px-4 py-3 border-b border-slate-300 bg-teal-50 shrink-0">
                 <div className="text-xs font-black text-teal-700 mb-1">✅ この日のTODO</div>
                 {dayTodos.map(t => <div key={t.id} className="text-sm font-bold text-teal-900 flex items-center gap-1.5">{t.important && <span className="text-amber-500">★</span>}{t.text}</div>)}
+              </div>
+            )}
+            {eventNotes.length > 0 && (
+              <div className="px-4 py-3 border-b border-slate-300 bg-pink-50 shrink-0">
+                <div className="text-xs font-black text-pink-700 mb-1">🚩 行事</div>
+                {eventNotes.map((e, i) => (
+                  <div key={i} className="text-sm font-bold text-pink-900 flex items-start gap-1.5">
+                    <span className="text-xs font-mono font-bold text-pink-600 shrink-0 pt-0.5">{e.time}</span>
+                    <span className="break-words">{e.title}</span>
+                  </div>
+                ))}
               </div>
             )}
             {gcalNotes.length > 0 && (
@@ -1664,18 +1702,8 @@
       // 行事欄の行を「9:00-10:00 職員会議」「9:00 職員会議」のように読み分ける。
       // 時刻が書いてあればGoogleカレンダーにも時刻つきの予定として登録する
       const parseEventLine = (line) => {
-        const { title, startTime, endTime: written } = splitEventTime(line);
-        if (!startTime) return { title, startTime: null, endTime: null };
-        const hhmm = (h, n) => `${String(h).padStart(2, '0')}:${String(n).padStart(2, '0')}`;
-        let endTime = written;
-        // 終わりの時刻が書いていなければ1時間後にする。日付をまたぐときはその日の終わりで止める
-        if (!endTime) {
-          const [h1, n1] = startTime.split(':').map(Number);
-          const total = h1 * 60 + n1 + 60;
-          endTime = total >= 1440 ? '23:59' : hhmm(Math.floor(total / 60), total % 60);
-        }
-        if (endTime <= startTime) endTime = '23:59';
-        return { title, startTime, endTime };
+        const r = eventTimeRange(line);
+        return r.startTime ? r : { title: r.title, startTime: null, endTime: null };
       };
 
       // 逆にGoogleカレンダーの予定を行事欄の1行に戻す
@@ -5412,6 +5440,13 @@
                     if (st) { if (!et) { const [h,m]=st.split(':').map(Number); et = String(h).padStart(2,'0')+':'+String(m+45).padStart(2,'0'); } out.push({ key: row.id, row, data, subject: data.subject, memo: data.memo||'', startTime: st, endTime: et, color: tlColor(data.subject, row.id, data.color) }); }
                   }
                 });
+                // 行事欄に時刻を書いた行も帯にする。時刻なしの行は上の「🚩行事」行に残す
+                const evData = getCellData(ds, 'event', di);
+                (evData.subject || '').split('\n').filter(s => s.trim()).forEach((line, idx) => {
+                  const ev = eventTimeRange(line);
+                  if (!ev.startTime) return;
+                  out.push({ key: 'event-'+idx, row: eventRow, data: evData, subject: ev.title, memo: '', startTime: ev.startTime, endTime: ev.endTime, color: tlColor(ev.title, 'event', evData.color) });
+                });
                 return out;
               };
               return (
@@ -5456,9 +5491,9 @@
 
                     {/* 行事（終日）行 */}
                     <div className="flex border-b border-slate-200 dark:border-slate-700 shrink-0 bg-white dark:bg-slate-800">
-                      <div className="w-10 sm:w-14 shrink-0 border-r border-slate-200 dark:border-slate-700 flex items-center justify-center text-[8px] sm:text-[10px] font-black text-slate-400 dark:text-slate-500 sticky left-0 bg-white dark:bg-slate-800 z-10">🚩行事</div>
+                      <div title="終日の行事。時刻を入れた行事は下のタイムラインに帯で出ます" className="w-10 sm:w-14 shrink-0 border-r border-slate-200 dark:border-slate-700 flex items-center justify-center text-[8px] sm:text-[10px] font-black text-slate-400 dark:text-slate-500 sticky left-0 bg-white dark:bg-slate-800 z-10">🚩行事</div>
                       <div className="flex-1 grid grid-cols-7" style={{minWidth:'350px'}}>
-                        {days.map((d,i)=>{ const ds=formatDate(d); const di=i; const ev=getCellData(ds,'event',di); const lines=(ev.subject||'').split('\n').filter(s=>s.trim()); const isH=isNoClassType(getDaySetting(ds,di).type);
+                        {days.map((d,i)=>{ const ds=formatDate(d); const di=i; const ev=getCellData(ds,'event',di); const lines=(ev.subject||'').split('\n').filter(s=>s.trim()&&!splitEventTime(s).startTime); const isH=isNoClassType(getDaySetting(ds,di).type);
                           return (
                             <div key={i} onClick={()=>openEditModal(getCellData(ds,'event',di),ds,eventRow,di,DAYS[di],isH)} className="min-w-0 border-r border-slate-200 dark:border-slate-700 last:border-0 p-0.5 min-h-[1.4rem] space-y-0.5 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/30">
                               {lines.map((line,li)=>(<div key={li} className="text-[8px] sm:text-[10px] font-bold leading-tight bg-pink-100 dark:bg-pink-900/40 text-pink-800 dark:text-pink-200 rounded px-1 py-0.5 truncate" title={line}>{line}</div>))}
