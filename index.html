@@ -4823,31 +4823,29 @@
                     {hasData && (
                       <div className={`cell-card ${blockClasses} rounded-md sm:rounded-lg flex flex-col px-0.5 py-0.5 sm:px-1 sm:py-1 border-l-[3px] sm:border-l-[4px] transition-colors ${row.id === 'morning' ? 'overflow-visible' : 'overflow-y-auto'} ${row.id !== 'afterschool' ? 'hide-scrollbar' : ''} ${blockBg} ${blockBorder}`} style={{...blockStyle, boxShadow:'0 1px 3px rgba(0,0,0,0.08), 0 1px 1px rgba(0,0,0,0.04)'}}>
                         {row.id === 'event' ? (
-                          <div className="flex flex-col w-full my-auto space-y-1">
+                          <div className="flex flex-col w-full my-auto space-y-0.5">
                             {data.subject.split('\n').filter(s => s.trim() !== '').map((s, idx) => {
                               const ev = eventTimeRange(s);
-                              if (!ev.startTime) {
-                                return (
-                                  <div key={idx} className={`${fontSizeClass} font-black break-words ${blockText} leading-tight border-b border-pink-200/50 last:border-0 pb-0.5 last:pb-0`} title={s}>
+                              // 時刻つきの行事は、元のテキスト行の下にその日(0時〜24時)の中での位置と長さを示す帯を添える。
+                              // 休日は下の期間グリッドが renderHolidayOverlays の大きなタイムラインになるので、ここでは重複させない
+                              let barStyle = null;
+                              if (ev.startTime && !(activeTab === 'weekly' && isH)) {
+                                const toMin = (t) => { const [h, n] = t.split(':').map(Number); return h * 60 + n; };
+                                const pct = (m) => Math.max(0, Math.min(100, (m / 1440) * 100));
+                                const leftPct = pct(toMin(ev.startTime));
+                                const widthPct = Math.max(pct(toMin(ev.endTime)) - leftPct, 4);
+                                barStyle = { left: `${leftPct}%`, width: `${widthPct}%` };
+                              }
+                              return (
+                                <div key={idx} className="w-full border-b border-pink-200/50 last:border-0 pb-0.5 last:pb-0">
+                                  <div className={`${fontSizeClass} font-black break-words ${blockText} leading-tight`} title={s}>
                                     {s}
                                   </div>
-                                );
-                              }
-                              // 時刻つきの行事は、表示範囲(8時〜18時)内の位置と長さを帯で表す
-                              const RANGE_START = 8 * 60, RANGE_END = 18 * 60;
-                              const toMin = (t) => { const [h, n] = t.split(':').map(Number); return h * 60 + n; };
-                              const pct = (m) => Math.max(0, Math.min(100, ((m - RANGE_START) / (RANGE_END - RANGE_START)) * 100));
-                              const leftPct = pct(toMin(ev.startTime));
-                              const widthPct = Math.max(pct(toMin(ev.endTime)) - leftPct, 4);
-                              return (
-                                <div key={idx} className="w-full pb-1 border-b border-pink-200/50 last:border-0 last:pb-0" title={`${eventTimeLabel(ev)} ${ev.title}`}>
-                                  <div className="relative w-full h-1.5 sm:h-2 bg-pink-100/70 dark:bg-pink-900/30 rounded-full overflow-hidden">
-                                    <div className={`absolute top-0 h-full rounded-full ${cc.tlBar || 'bg-pink-500'}`} style={{ left: `${leftPct}%`, width: `${widthPct}%` }}></div>
-                                  </div>
-                                  <div className="flex items-baseline gap-1 mt-0.5 min-w-0">
-                                    <span className={`text-[8px] sm:text-[9px] font-mono font-bold shrink-0 ${blockText} opacity-80`}>{eventTimeLabel(ev)}</span>
-                                    <span className={`${fontSizeClass} font-black break-words ${blockText} leading-tight`}>{ev.title}</span>
-                                  </div>
+                                  {barStyle && (
+                                    <div className="relative w-full h-[3px] mt-0.5 bg-pink-200/50 dark:bg-pink-900/30 rounded-full overflow-hidden">
+                                      <div className={`absolute top-0 h-full rounded-full ${cc.tlBar || 'bg-pink-500'}`} style={barStyle}></div>
+                                    </div>
+                                  )}
                                 </div>
                               );
                             })}
@@ -4920,6 +4918,13 @@
               allItems.push({ start:cd.startTime||'', end:cd.endTime||'', subject:cd.subject, memo:cd.memo||'', pid });
             }
           });
+          // 行事欄。時刻を書いた行だけ週予定と同じ帯としてタイムラインに乗せる。
+          // 終日の行（「敬老の日」など）は上の🚩行事行にトピックとして残す
+          const evData = getCellData(dateStr, 'event', i);
+          (evData.subject || '').split('\n').filter(s => s.trim()).forEach(line => {
+            const ev = eventTimeRange(line);
+            if (ev.startTime) allItems.push({ start: ev.startTime, end: ev.endTime, subject: ev.title, memo: '', pid: 'event' });
+          });
 
           const RANGE_START = 7.5 * 60; // 7:30
           const RANGE_END = 21 * 60;    // 21:00
@@ -4976,7 +4981,7 @@
                             afternoonUntimedCounter++;
                           }
                         }
-                        const color = COLORS[idx % COLORS.length];
+                        const color = e.pid === 'event' ? '#ec4899' : COLORS[idx % COLORS.length];
                         return (
                           <div key={idx} onClick={(ev)=>{ev.stopPropagation(); openEditModal(getCellData(dateStr,e.pid,i),dateStr,ROWS.find(r=>r.id===e.pid),i,day,true,null);}}
                                className="absolute left-1 right-1 sm:left-1.5 sm:right-1.5 rounded shadow-md cursor-pointer hover:shadow-lg z-40 hover:z-50 overflow-y-auto overflow-x-hidden hide-scrollbar overscroll-contain flex flex-col px-1 py-0.5 sm:px-1.5 sm:py-1 transition-all bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 touch-pan-y"
