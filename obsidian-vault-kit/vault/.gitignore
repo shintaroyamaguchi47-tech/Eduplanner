@@ -1,0 +1,12 @@
+# Obsidian のワークスペース状態（端末ごとに違うのでバージョン管理しない）
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+.obsidian/cache
+.trash/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code のローカル設定（個人の許可設定。共有しない）
+.claude/settings.local.json
