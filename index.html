@@ -2689,7 +2689,50 @@
         saveAll(nt, ns, weeklyData, weeklySettings);
         setTemplateTermPick(ds);
         setTemplateTermDraft('');
-        showToast(`${formatTermLabel(ds)}の時間割を作りました（中身はそれまでの時間割のまま）。組み替えてください`);
+        showToast(`${formatTermLabel(ds)}の時間割を作りました。組み替えたら「📚 週案の授業をこの時間割で組み直す」を押してください`);
+      };
+      // 切り替え日より前の時間割で週案に自動入力した授業は、そのまま残って基本時間割より優先される。
+      // 切り替え日（今日より前なら今日）以降の単元計画の授業コマ（例: 201社会（単元名 3/5））をいったん外し、
+      // 教科・クラスごとに最も早いコマの単元・時間から、切り替え後の時間割のコマへ入れ直す。
+      // 自習・行事などの手入力や空きコマはそのまま残す
+      const reflowLessonsFromTerm = (termKey) => {
+        const today = formatDate(getJSTDate());
+        const from = termKey > today ? termKey : today;
+        const periodIds = ['p1','p2','p3','p4','p5','p6'];
+        const starts = new Map();
+        const keysToClear = [];
+        Object.keys(weeklyData).forEach(wk => {
+          const m = wk.match(/^(\d{4}-\d{2}-\d{2})-(p[1-6])$/);
+          if (!m || m[1] < from) return;
+          const cell = weeklyData[wk];
+          if (!cell || cell.useTemplate || !cell.subject) return;
+          const li = getCellLessonInfo(cell.subject.trim());
+          if (!li) return;
+          keysToClear.push(wk);
+          const id = `${li.idx}|${li.cls || ''}`;
+          const order = `${m[1]}-${periodIds.indexOf(m[2])}`;
+          const cur = starts.get(id);
+          if (!cur || order < cur.order) starts.set(id, { order, li, count: (cur?.count || 0) + 1 });
+          else cur.count++;
+        });
+        if (keysToClear.length === 0) { showToast(`${from.slice(5).replace('-', '/')}以降の週案に、組み直す授業コマはありません`); return; }
+        if (!window.confirm(`${from.slice(5).replace('-', '/')}以降の週案に入っている授業コマ（${keysToClear.length}コマ）を、いまの基本時間割のコマに入れ直します。\n単元の続きはそのまま引き継ぎます。入れ直すコマに書いたメモは消えます。\n自習・行事などの手入力や空きコマはそのまま残ります。よろしいですか？`)) return;
+        let nd = { ...weeklyData };
+        keysToClear.forEach(wk => { nd[wk] = { ...nd[wk], useTemplate: true, subject: '', memo: '', startTime: '', endTime: '' }; });
+        let up = [...syllabusData];
+        let filled = 0;
+        // 外したコマ数だけ、学年末（3/20、全期間の自動入力と同じ）までに入れ直す
+        const until = `${getSchoolYearOf(from) + 1}-03-20`;
+        starts.forEach(({ li, count }) => {
+          const res = fillUnitSequence({ weekly: nd, subj: up[li.idx], cls: li.cls, startUnitIdx: li.unitIdx, startHour: li.hour, fromDateStr: from, fromPid: '', startSlot: null, color: '', maxSlots: count, untilDateStr: until });
+          nd = res.weekly;
+          filled += res.filled;
+          up[li.idx] = setClassProgress(up[li.idx], li.cls, res.endUnitIdx, res.endHour);
+        });
+        saveSyllabus(up);
+        saveAll(baseTemplate, templateSettings, nd, weeklySettings);
+        const left = keysToClear.length - filled;
+        showToast(`📚 基本時間割に合わせて${filled}コマ入れ直しました${left > 0 ? `（学年末までに入りきらない授業が${left}コマあります）` : ''}`);
       };
       const deleteTemplateTerm = (ds) => {
         if (!window.confirm(`${formatTermLabel(ds)}の時間割を削除しますか？\nこの日からも、それまでの時間割が続けて使われます。`)) return;
@@ -3834,7 +3877,8 @@
       // 単元テスト・自習など手入力したコマは飛ばし、その次のコマから連番を続ける。
       // 週末で止めず、残りの全単元を埋め終わるか探索上限日数に達するまで続ける。
       const AUTO_FILL_HORIZON_DAYS = 180;
-      const fillUnitSequence = ({ weekly, subj, cls, startUnitIdx, startHour, fromDateStr, fromPid, startSlot, color }) => {
+      // maxSlots・untilDateStr（この日の前日まで）を渡すと、埋めるコマ数と期間をそこまでに抑える
+      const fillUnitSequence = ({ weekly, subj, cls, startUnitIdx, startHour, fromDateStr, fromPid, startSlot, color, maxSlots, untilDateStr }) => {
         const noop = { weekly, filled: 0, endUnitIdx: startUnitIdx, endHour: startHour, lastUnitName: '' };
         if (!subj || subj.type !== 'auto' || !subj.units?.length) return noop;
 
@@ -3847,6 +3891,7 @@
         for (let ui = startUnitIdx; ui < subj.units.length; ui++) {
           remaining += ui === startUnitIdx ? Math.max(0, subj.units[ui].hours - startHour + 1) : subj.units[ui].hours;
         }
+        if (maxSlots !== undefined) remaining = Math.min(remaining, maxSlots);
         if (remaining <= 0) return noop;
 
         const slots = startSlot ? [startSlot] : [];
@@ -3859,6 +3904,7 @@
         for (let offset = 0; offset <= AUTO_FILL_HORIZON_DAYS && slots.length < remaining; offset++) {
           const cd = new Date(startDate); cd.setDate(cd.getDate() + offset);
           const dstr = formatDate(cd);
+          if (untilDateStr && dstr >= untilDateStr) break;
           const dayIdx = cd.getDay() === 0 ? 6 : cd.getDay() - 1;
           const setting = getDaySetting(dstr, dayIdx);
           if (isNoClassType(setting.type)) continue;
@@ -5292,6 +5338,9 @@
                               {templateTermKey === k && <button onClick={() => deleteTemplateTerm(k)} className="px-1.5 py-1 border-l border-purple-400 hover:bg-purple-700" title="この切り替え日を削除">×</button>}
                             </span>
                           ))}
+                          {templateTermKey && (
+                            <button onClick={() => reflowLessonsFromTerm(templateTermKey)} className="px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-700 hover:bg-blue-100" title="切り替え日以降の週案に入っている授業を、この時間割のコマに入れ直す">📚 週案の授業をこの時間割で組み直す</button>
+                          )}
                           <span className="inline-flex items-center gap-1">
                             <input type="date" value={templateTermDraft} min={`${templateSchoolYear}-04-02`} max={`${templateSchoolYear + 1}-03-31`} onChange={e => setTemplateTermDraft(e.target.value)} className="px-1.5 py-0.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200" title="時間割が切り替わる日（後期の開始日など）" />
                             <button onClick={() => addTemplateTerm(templateTermDraft)} disabled={!templateTermDraft} className="px-2.5 py-1 rounded-lg bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-700 hover:bg-purple-200 disabled:opacity-40">＋ 切り替え日を追加</button>
