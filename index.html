@@ -26,7 +26,7 @@
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@400;500;700;900&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 
   <style>
     :root {
@@ -50,7 +50,9 @@
       --border: #334155;
     }
     body {
-      font-family: 'Zen Maru Gothic', sans-serif;
+      font-family: 'Inter', 'Noto Sans JP', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', Meiryo, sans-serif;
+      font-feature-settings: 'palt' 1;
+      -webkit-font-smoothing: antialiased;
       -webkit-tap-highlight-color: transparent;
       background-color: var(--paper);
       color: var(--ink);
@@ -58,7 +60,7 @@
       font-size: 16px;
       line-height: 1.5;
     }
-    .font-mono { font-family: 'IBM Plex Mono', monospace; }
+    .font-mono { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; }
     .hide-scrollbar::-webkit-scrollbar { display: none; }
     .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     ::-webkit-scrollbar { width: 5px; height: 5px; }
@@ -86,7 +88,10 @@
     }
     .cell-card:hover {
       box-shadow: 0 3px 10px rgba(0,0,0,0.13) !important;
+      transform: translateY(-1px);
     }
+    /* 極太(900)は小さなコマで潰れるので、全体を一段落として階層は bold/extrabold で付ける */
+    .font-black { font-weight: 800; }
 
     /* 視認性を優先した共通フォーカス。キーボード操作でも現在地を見失わない。 */
     button:focus-visible,
@@ -118,17 +123,6 @@
     .nav-tab {
       position: relative;
       transition: color 0.18s ease, background-color 0.18s ease;
-    }
-    .nav-tab.active::after {
-      content: '';
-      position: absolute;
-      bottom: -2px;
-      left: 20%;
-      right: 20%;
-      height: 3px;
-      background: currentColor;
-      border-radius: 2px 2px 0 0;
-      opacity: 0.7;
     }
 
     /* 週グリッド行 */
@@ -162,6 +156,15 @@
     .editor-content b, .editor-content strong { font-weight: 900; color: #1d4ed8; }
     .dark .editor-content h1 { border-bottom-color: #475569; }
     .dark .editor-content b, .dark .editor-content strong { color: #60a5fa; }
+
+    @media print {
+      @page { size: A4 landscape; margin: 8mm; }
+      html, body, #root { background: #ffffff !important; color: #0f172a !important; overflow: visible !important; height: auto !important; }
+      .no-print { display: none !important; }
+      .weekly-panel { box-shadow: none !important; border: 1px solid #cbd5e1 !important; height: auto !important; overflow: visible !important; }
+      .cell-card { transform: none !important; box-shadow: none !important; }
+      * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
   </style>
 </head>
 <body class="selection:bg-blue-100 selection:text-blue-900 overflow-hidden">
@@ -538,29 +541,63 @@
     const parseUnits = (text) => { if(!text) return []; return text.split('\n').filter(l=>l.trim()!=='').map(l => { const p=l.split(','); return {name:p[0]?.trim()||'',hours:parseInt(p[1])||1}; }); };
     const formatUnits = (units) => { if(!units) return ''; return units.map(u=>`${u.name},${u.hours}`).join('\n'); };
 
+    // 手書き・写真はBase64のまま保存されるため、Firestoreの1ドキュメント上限(1MiB)に収まるよう
+    // 長辺800px・白背景のJPEGに縮めてから保存する
+    const compressImageDataUrl = (srcDataUrl, maxWidth = 800, quality = 0.72) => new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const scale = Math.min(1, maxWidth / Math.max(img.width, img.height));
+          const w = Math.max(1, Math.round(img.width * scale));
+          const h = Math.max(1, Math.round(img.height * scale));
+          const canvas = document.createElement('canvas');
+          canvas.width = w; canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, w, h);
+          ctx.drawImage(img, 0, 0, w, h);
+          const out = canvas.toDataURL('image/jpeg', quality);
+          resolve(out.length < srcDataUrl.length ? out : srcDataUrl);
+        } catch (e) { resolve(srcDataUrl); }
+      };
+      img.onerror = () => resolve(srcDataUrl);
+      img.src = srcDataUrl;
+    });
+
 
     // 内容に基づく色分け（授業/会議/特別活動/テスト等）
+    // 枠線は細いインセットリング＋左端のアクセントバー。ダークモードでは透過色にしてセルだけ浮かないようにする
     const CONTENT_COLORS = {
-      lesson:  { bg: 'bg-blue-50 hover:bg-blue-100', border: 'border-blue-500', text: 'text-blue-900',
-                 tlBg: 'bg-blue-100 border-blue-400', tlText: 'text-blue-900', tlBar: 'bg-blue-500' },
-      practical: { bg: 'bg-violet-50 hover:bg-violet-100', border: 'border-violet-500', text: 'text-violet-900',
-                   tlBg: 'bg-violet-100 border-violet-400', tlText: 'text-violet-900', tlBar: 'bg-violet-500' },
-      meeting: { bg: 'bg-orange-50 hover:bg-orange-100', border: 'border-orange-500', text: 'text-orange-900',
-                 tlBg: 'bg-orange-100 border-orange-400', tlText: 'text-orange-900', tlBar: 'bg-orange-500' },
-      special: { bg: 'bg-emerald-50 hover:bg-emerald-100', border: 'border-emerald-500', text: 'text-emerald-900',
-                 tlBg: 'bg-emerald-100 border-emerald-400', tlText: 'text-emerald-900', tlBar: 'bg-emerald-500' },
-      test:    { bg: 'bg-rose-50 hover:bg-rose-100', border: 'border-rose-500', text: 'text-rose-900',
-                 tlBg: 'bg-rose-100 border-rose-400', tlText: 'text-rose-900', tlBar: 'bg-rose-500' },
-      event:   { bg: 'bg-pink-50 hover:bg-pink-100', border: 'border-pink-500', text: 'text-pink-900',
-                 tlBg: 'bg-pink-100 border-pink-400', tlText: 'text-pink-900', tlBar: 'bg-pink-500' },
-      lunch:   { bg: 'bg-amber-50 hover:bg-amber-100', border: 'border-amber-500', text: 'text-amber-900',
-                 tlBg: 'bg-amber-100 border-amber-400', tlText: 'text-amber-900', tlBar: 'bg-amber-500' },
-      morning: { bg: 'bg-yellow-50 hover:bg-yellow-100', border: 'border-yellow-500', text: 'text-yellow-900',
-                 tlBg: 'bg-yellow-100 border-yellow-400', tlText: 'text-yellow-900', tlBar: 'bg-yellow-500' },
-      afterschool: { bg: 'bg-teal-50 hover:bg-teal-100', border: 'border-teal-500', text: 'text-teal-900',
-                     tlBg: 'bg-teal-100 border-teal-400', tlText: 'text-teal-900', tlBar: 'bg-teal-500' },
-      private: { bg: 'bg-fuchsia-50 hover:bg-fuchsia-100', border: 'border-fuchsia-500', text: 'text-fuchsia-900',
-                 tlBg: 'bg-fuchsia-100 border-fuchsia-400', tlText: 'text-fuchsia-900', tlBar: 'bg-fuchsia-500' },
+      lesson: { bg: 'bg-blue-50/85 hover:bg-blue-50 dark:bg-blue-500/15 dark:hover:bg-blue-500/25 ring-1 ring-inset ring-blue-500/20 dark:ring-blue-400/30',
+        border: 'border-blue-500 dark:border-blue-400', text: 'text-blue-950 dark:text-blue-100',
+        tlBg: 'bg-blue-100/90 dark:bg-blue-500/25 border-blue-400 dark:border-blue-400/50', tlText: 'text-blue-900 dark:text-blue-100', tlBar: 'bg-blue-500 dark:bg-blue-400' },
+      practical: { bg: 'bg-violet-50/85 hover:bg-violet-50 dark:bg-violet-500/15 dark:hover:bg-violet-500/25 ring-1 ring-inset ring-violet-500/20 dark:ring-violet-400/30',
+        border: 'border-violet-500 dark:border-violet-400', text: 'text-violet-950 dark:text-violet-100',
+        tlBg: 'bg-violet-100/90 dark:bg-violet-500/25 border-violet-400 dark:border-violet-400/50', tlText: 'text-violet-900 dark:text-violet-100', tlBar: 'bg-violet-500 dark:bg-violet-400' },
+      meeting: { bg: 'bg-orange-50/85 hover:bg-orange-50 dark:bg-orange-500/15 dark:hover:bg-orange-500/25 ring-1 ring-inset ring-orange-500/20 dark:ring-orange-400/30',
+        border: 'border-orange-500 dark:border-orange-400', text: 'text-orange-950 dark:text-orange-100',
+        tlBg: 'bg-orange-100/90 dark:bg-orange-500/25 border-orange-400 dark:border-orange-400/50', tlText: 'text-orange-900 dark:text-orange-100', tlBar: 'bg-orange-500 dark:bg-orange-400' },
+      special: { bg: 'bg-emerald-50/85 hover:bg-emerald-50 dark:bg-emerald-500/15 dark:hover:bg-emerald-500/25 ring-1 ring-inset ring-emerald-500/20 dark:ring-emerald-400/30',
+        border: 'border-emerald-500 dark:border-emerald-400', text: 'text-emerald-950 dark:text-emerald-100',
+        tlBg: 'bg-emerald-100/90 dark:bg-emerald-500/25 border-emerald-400 dark:border-emerald-400/50', tlText: 'text-emerald-900 dark:text-emerald-100', tlBar: 'bg-emerald-500 dark:bg-emerald-400' },
+      test: { bg: 'bg-rose-50/85 hover:bg-rose-50 dark:bg-rose-500/15 dark:hover:bg-rose-500/25 ring-1 ring-inset ring-rose-500/20 dark:ring-rose-400/30',
+        border: 'border-rose-500 dark:border-rose-400', text: 'text-rose-950 dark:text-rose-100',
+        tlBg: 'bg-rose-100/90 dark:bg-rose-500/25 border-rose-400 dark:border-rose-400/50', tlText: 'text-rose-900 dark:text-rose-100', tlBar: 'bg-rose-500 dark:bg-rose-400' },
+      event: { bg: 'bg-pink-50/85 hover:bg-pink-50 dark:bg-pink-500/15 dark:hover:bg-pink-500/25 ring-1 ring-inset ring-pink-500/20 dark:ring-pink-400/30',
+        border: 'border-pink-500 dark:border-pink-400', text: 'text-pink-950 dark:text-pink-100',
+        tlBg: 'bg-pink-100/90 dark:bg-pink-500/25 border-pink-400 dark:border-pink-400/50', tlText: 'text-pink-900 dark:text-pink-100', tlBar: 'bg-pink-500 dark:bg-pink-400' },
+      lunch: { bg: 'bg-amber-50/85 hover:bg-amber-50 dark:bg-amber-500/15 dark:hover:bg-amber-500/25 ring-1 ring-inset ring-amber-500/20 dark:ring-amber-400/30',
+        border: 'border-amber-500 dark:border-amber-400', text: 'text-amber-950 dark:text-amber-100',
+        tlBg: 'bg-amber-100/90 dark:bg-amber-500/25 border-amber-400 dark:border-amber-400/50', tlText: 'text-amber-900 dark:text-amber-100', tlBar: 'bg-amber-500 dark:bg-amber-400' },
+      morning: { bg: 'bg-yellow-50/85 hover:bg-yellow-50 dark:bg-yellow-500/15 dark:hover:bg-yellow-500/25 ring-1 ring-inset ring-yellow-500/20 dark:ring-yellow-400/30',
+        border: 'border-yellow-500 dark:border-yellow-400', text: 'text-yellow-950 dark:text-yellow-100',
+        tlBg: 'bg-yellow-100/90 dark:bg-yellow-500/25 border-yellow-400 dark:border-yellow-400/50', tlText: 'text-yellow-900 dark:text-yellow-100', tlBar: 'bg-yellow-500 dark:bg-yellow-400' },
+      afterschool: { bg: 'bg-teal-50/85 hover:bg-teal-50 dark:bg-teal-500/15 dark:hover:bg-teal-500/25 ring-1 ring-inset ring-teal-500/20 dark:ring-teal-400/30',
+        border: 'border-teal-500 dark:border-teal-400', text: 'text-teal-950 dark:text-teal-100',
+        tlBg: 'bg-teal-100/90 dark:bg-teal-500/25 border-teal-400 dark:border-teal-400/50', tlText: 'text-teal-900 dark:text-teal-100', tlBar: 'bg-teal-500 dark:bg-teal-400' },
+      private: { bg: 'bg-fuchsia-50/85 hover:bg-fuchsia-50 dark:bg-fuchsia-500/15 dark:hover:bg-fuchsia-500/25 ring-1 ring-inset ring-fuchsia-500/20 dark:ring-fuchsia-400/30',
+        border: 'border-fuchsia-500 dark:border-fuchsia-400', text: 'text-fuchsia-950 dark:text-fuchsia-100',
+        tlBg: 'bg-fuchsia-100/90 dark:bg-fuchsia-500/25 border-fuchsia-400 dark:border-fuchsia-400/50', tlText: 'text-fuchsia-900 dark:text-fuchsia-100', tlBar: 'bg-fuchsia-500 dark:bg-fuchsia-400' },
     };
     const getContentType = (subject, rowId) => {
       if (rowId === 'event') return 'event';
@@ -585,7 +622,7 @@
       { key:'auth',       label:'ログイン認証',             need:'required', host:'identitytoolkit.googleapis.com', url:'https://identitytoolkit.googleapis.com/v1/projects',                                                           note:'×だとログインできません。' },
       { key:'firestore',  label:'データの保存・読み込み',   need:'required', host:'firestore.googleapis.com',     url:() => `https://firestore.googleapis.com/v1/projects/${FIREBASE_CONFIG.projectId}/databases/(default)/documents`, note:'×だと週案の保存・同期ができません。' },
       { key:'authdomain', label:'認証ドメイン',             need:'optional', host:FIREBASE_CONFIG.authDomain,     url:() => `https://${FIREBASE_CONFIG.authDomain}/__/auth/handler`,                                                    note:'' },
-      { key:'fonts',      label:'Webフォント',              need:'optional', host:'fonts.googleapis.com',         url:'https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic&display=swap',                                          note:'×でも文字が標準フォントになるだけです。' },
+      { key:'fonts',      label:'Webフォント',              need:'optional', host:'fonts.googleapis.com',         url:'https://fonts.googleapis.com/css2?family=Noto+Sans+JP&display=swap',                                          note:'×でも文字が標準フォントになるだけです。' },
       { key:'gsi',        label:'Google連携の同意画面',     need:'optional', host:'accounts.google.com',          url:'https://accounts.google.com/gsi/client',                                                                         note:'×だとGoogleカレンダー連携が始められません。' },
       { key:'gcal',       label:'Googleカレンダー同期',     need:'optional', host:'www.googleapis.com',           url:'https://www.googleapis.com/discovery/v1/apis?preferred=true',                                                    note:'×だと予定の自動同期ができません。' },
       { key:'gtasks',     label:'Google ToDo同期',          need:'optional', host:'tasks.googleapis.com',         url:'https://tasks.googleapis.com/$discovery/rest?version=v1',                                                        note:'×だとToDoの同期ができません。' },
@@ -1038,11 +1075,11 @@
       return (
         <div className="flex-1 overflow-y-auto p-3 sm:p-4 pb-24 bg-[var(--paper)]">
           <div className="max-w-5xl mx-auto space-y-3">
-            <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-300 anim-fade-up relative overflow-hidden">
+            <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 sm:p-5 shadow-sm ring-1 ring-slate-900/5 dark:ring-white/10 anim-fade-up relative overflow-hidden">
               <div className="relative z-10 flex items-center justify-between gap-3 flex-wrap">
                 <div>
-                  <div className="text-xs font-bold text-slate-500 mb-0.5">{today.getFullYear()}年{today.getMonth()+1}月{today.getDate()}日 ({DAYS[dayIdx]}曜日)</div>
-                  <div className="text-xl sm:text-2xl font-black text-slate-800 flex items-center gap-2">{greeting} <span className="text-2xl inline-block origin-bottom-right hover:animate-pulse cursor-default">👋</span></div>
+                  <div className="text-xs font-bold text-slate-500 dark:text-slate-400 mb-0.5">{today.getFullYear()}年{today.getMonth()+1}月{today.getDate()}日 ({DAYS[dayIdx]}曜日)</div>
+                  <div className="text-xl sm:text-2xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2">{greeting} <span className="text-2xl inline-block origin-bottom-right hover:animate-pulse cursor-default">👋</span></div>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap justify-end">
                   <span className={`text-xs font-bold px-3 py-1.5 rounded-lg border ${SCHEDULE_TYPES[setting.type].color}`}>{SCHEDULE_TYPES[setting.type].label}日課</span>
@@ -1051,52 +1088,52 @@
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">
-              <div className="bg-white rounded-2xl p-3 sm:p-4 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-300 anim-fade-up" style={{animationDelay:'0.02s'}}>
-                <div className="text-xs font-black text-slate-500 mb-2">{isFreeDay ? 'いま見る予定' : 'いま見る授業'}</div>
+              <div className="bg-gradient-to-br from-indigo-600 to-blue-700 text-white rounded-2xl p-3 sm:p-4 shadow-md shadow-indigo-600/20 anim-fade-up" style={{animationDelay:'0.02s'}}>
+                <div className="text-xs font-bold text-indigo-100 mb-2">{isFreeDay ? 'いま見る予定' : 'いま・次の授業'}</div>
                 {isHoliday && !nextFocus ? (
-                  <div className="text-sm font-black text-slate-700">今日は休日です</div>
+                  <div className="text-sm font-bold text-white">今日は休日です</div>
                 ) : nextFocus ? (
                   <button onClick={onGoToWeekly} className="text-left w-full group">
                     <div className="flex items-center justify-between gap-2 mb-1">
-                      <span className={`text-[10px] font-black px-2 py-1 rounded-md ${currentLesson ? 'bg-blue-100 text-blue-800' : 'bg-emerald-100 text-emerald-800'}`}>{currentLesson ? '進行中' : '次の予定'}</span>
-                      <span className="text-[10px] font-mono font-bold text-slate-500">{formatTimeRange(nextFocus.startTime, nextFocus.endTime)}</span>
+                      <span className={`text-[10px] font-bold px-2 py-1 rounded-md ${currentLesson ? 'bg-white/20 text-white' : 'bg-emerald-400/25 text-emerald-50'}`}>{currentLesson ? '進行中' : '次の予定'}</span>
+                      <span className="text-[11px] font-mono font-medium text-indigo-100">{formatTimeRange(nextFocus.startTime, nextFocus.endTime)}</span>
                     </div>
-                    <div className="text-base font-black text-slate-800 leading-tight group-hover:text-blue-800 transition-colors break-words">{nextFocus.subject}</div>
-                    {nextFocus.memo && <div className="text-xs font-bold text-slate-500 mt-1 line-clamp-2">{nextFocus.memo}</div>}
+                    <div className="text-lg font-extrabold text-white leading-tight break-words">{nextFocus.subject}</div>
+                    {nextFocus.memo && <div className="text-xs font-medium text-indigo-100 mt-1 line-clamp-2">{nextFocus.memo}</div>}
                   </button>
                 ) : (
-                  <div className="text-sm font-black text-slate-700">この後の予定はありません</div>
+                  <div className="text-sm font-bold text-white">この後の予定はありません</div>
                 )}
               </div>
 
-              <div className="bg-white rounded-2xl p-3 sm:p-4 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-300 anim-fade-up" style={{animationDelay:'0.04s'}}>
-                <div className="text-xs font-black text-slate-500 mb-2">締切アラート</div>
+              <div className="bg-white dark:bg-slate-800 rounded-2xl p-3 sm:p-4 shadow-sm ring-1 ring-slate-900/5 dark:ring-white/10 anim-fade-up" style={{animationDelay:'0.04s'}}>
+                <div className="text-xs font-black text-slate-500 dark:text-slate-400 mb-2">締切アラート</div>
                 <div className="grid grid-cols-2 gap-2">
-                  <div className="rounded-xl border border-rose-200 bg-rose-50 p-3">
-                    <div className="text-2xl font-black text-rose-700 leading-none">{overdueTodos.length}</div>
-                    <div className="text-[10px] font-black text-rose-700 mt-1">期限超過</div>
+                  <div className="rounded-xl border border-rose-200 dark:border-rose-500/30 bg-rose-50 dark:bg-rose-500/10 p-3">
+                    <div className="text-2xl font-black text-rose-700 dark:text-rose-300 leading-none">{overdueTodos.length}</div>
+                    <div className="text-[10px] font-black text-rose-700 dark:text-rose-300 mt-1">期限超過</div>
                   </div>
-                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
-                    <div className="text-2xl font-black text-amber-700 leading-none">{dueTodayTodos.length}</div>
-                    <div className="text-[10px] font-black text-amber-700 mt-1">今日まで</div>
+                  <div className="rounded-xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 p-3">
+                    <div className="text-2xl font-black text-amber-700 dark:text-amber-300 leading-none">{dueTodayTodos.length}</div>
+                    <div className="text-[10px] font-black text-amber-700 dark:text-amber-300 mt-1">今日まで</div>
                   </div>
                 </div>
               </div>
 
-              <div className="bg-white rounded-2xl p-3 sm:p-4 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-300 anim-fade-up" style={{animationDelay:'0.06s'}}>
-                <div className="text-xs font-black text-slate-500 mb-2">使えそうな空き時間</div>
+              <div className="bg-white dark:bg-slate-800 rounded-2xl p-3 sm:p-4 shadow-sm ring-1 ring-slate-900/5 dark:ring-white/10 anim-fade-up" style={{animationDelay:'0.06s'}}>
+                <div className="text-xs font-black text-slate-500 dark:text-slate-400 mb-2">使えそうな空き時間</div>
                 {slotSuggestions.length === 0 ? (
-                  <div className="text-sm font-black text-slate-700">20分以上の空きは少なめです</div>
+                  <div className="text-sm font-black text-slate-700 dark:text-slate-200">20分以上の空きは少なめです</div>
                 ) : (
                   <div className="space-y-1.5">
                     {slotSuggestions.map((slot, idx) => (
-                      <div key={idx} className="rounded-lg border border-teal-200 bg-teal-50 px-2.5 py-2">
+                      <div key={idx} className="rounded-lg border border-teal-200 dark:border-teal-500/30 bg-teal-50 dark:bg-teal-500/10 px-2.5 py-2">
                         <div className="flex items-center justify-between gap-2">
-                          <span className="text-xs font-mono font-bold text-teal-800">{slot.start}-{slot.end}</span>
-                          <span className="text-[10px] font-black text-teal-700">{slot.minutes}分</span>
+                          <span className="text-xs font-mono font-bold text-teal-800 dark:text-teal-200">{slot.start}-{slot.end}</span>
+                          <span className="text-[10px] font-black text-teal-700 dark:text-teal-300">{slot.minutes}分</span>
                         </div>
                         {slot.todo && (
-                          <div className="mt-1 text-[11px] font-black text-teal-900 truncate">
+                          <div className="mt-1 text-[11px] font-black text-teal-900 dark:text-teal-100 truncate">
                             {slot.todo.important && <span className="text-amber-500 mr-1">★</span>}
                             {slot.todo.text}
                             <span className="ml-1 text-[10px] text-teal-700">({slot.todo.minutes || 15}分)</span>
@@ -1108,42 +1145,42 @@
                 )}
               </div>
 
-              <button onClick={onGoToWeekly} className="bg-white rounded-2xl p-3 sm:p-4 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-300 anim-fade-up text-left hover:border-blue-300 hover:bg-blue-50/40 transition-colors" style={{animationDelay:'0.08s'}}>
-                <div className="text-xs font-black text-slate-500 mb-2">週案へ</div>
-                <div className="text-sm font-black text-slate-800">今日の列を開く</div>
+              <button onClick={onGoToWeekly} className="bg-white dark:bg-slate-800 rounded-2xl p-3 sm:p-4 shadow-sm ring-1 ring-slate-900/5 dark:ring-white/10 anim-fade-up text-left hover:ring-blue-300 hover:bg-blue-50/40 dark:hover:bg-blue-500/10 transition-colors" style={{animationDelay:'0.08s'}}>
+                <div className="text-xs font-black text-slate-500 dark:text-slate-400 mb-2">週案へ</div>
+                <div className="text-sm font-black text-slate-800 dark:text-slate-100">今日の列を開く</div>
                 <div className="text-[10px] font-bold text-blue-700 mt-1">予定の修正・入力はこちら</div>
               </button>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-              <div className="bg-white rounded-2xl p-3 sm:p-4 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-300 anim-fade-up flex flex-col lg:h-[60vh] lg:min-h-[360px] lg:max-h-[520px]" style={{animationDelay:'0.05s'}}>
+              <div className="bg-white dark:bg-slate-800 rounded-2xl p-3 sm:p-4 shadow-sm ring-1 ring-slate-900/5 dark:ring-white/10 anim-fade-up flex flex-col lg:h-[60vh] lg:min-h-[360px] lg:max-h-[520px]" style={{animationDelay:'0.05s'}}>
                 <div className="flex justify-between items-center mb-2 shrink-0">
-                  <h3 className="text-base font-black text-slate-800 flex items-center gap-1.5"><span className="text-lg">📅</span> 今日の予定</h3>
+                  <h3 className="text-base font-black text-slate-800 dark:text-slate-100 flex items-center gap-1.5"><span className="text-lg">📅</span> 今日の予定</h3>
                   <button onClick={onGoToWeekly} className="text-xs font-bold text-blue-700 bg-blue-100 px-3 py-1 rounded-lg hover:bg-blue-200 transition-colors">週案へ →</button>
                 </div>
                 <div className="flex-1 overflow-y-auto pr-1 space-y-1.5 hide-scrollbar">
                   {isHoliday && todaySchedule.length === 0 && gcalEvents.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-full text-slate-500 gap-3 py-6 lg:py-0"><span className="text-5xl drop-shadow-sm opacity-80">🌴</span><span className="font-bold text-sm tracking-widest text-slate-600">今日はお休みです</span></div>
+                    <div className="flex flex-col items-center justify-center h-full text-slate-500 dark:text-slate-400 gap-3 py-6 lg:py-0"><span className="text-5xl drop-shadow-sm opacity-80">🌴</span><span className="font-bold text-sm tracking-widest text-slate-600 dark:text-slate-300">今日はお休みです</span></div>
                   ) : todaySchedule.length === 0 && gcalEvents.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-full text-slate-500 gap-3 py-6 lg:py-0"><span className="text-5xl drop-shadow-sm opacity-80">☕</span><span className="font-bold text-sm tracking-widest text-slate-600">まだ予定がありません</span></div>
+                    <div className="flex flex-col items-center justify-center h-full text-slate-500 dark:text-slate-400 gap-3 py-6 lg:py-0"><span className="text-5xl drop-shadow-sm opacity-80">☕</span><span className="font-bold text-sm tracking-widest text-slate-600 dark:text-slate-300">まだ予定がありません</span></div>
                   ) : (
                     displaySchedule.map((item) => {
                       const itemEvents = item.id === 'afterschool' && item.data?.events?.length
                         ? item.data.events.filter(e => e.subject?.trim()).slice().sort((a,b)=>(a.startTime||'99:99').localeCompare(b.startTime||'99:99'))
                         : null;
                       return (
-                      <div key={item.id} className="flex items-center gap-2.5 px-2.5 py-2 rounded-xl bg-slate-50 border border-slate-200 hover:border-blue-300 hover:bg-blue-50/50 transition-colors group">
-                        <div className="w-9 h-9 rounded-lg bg-white border border-slate-300 flex items-center justify-center shrink-0 shadow-sm text-slate-600 group-hover:text-blue-600 group-hover:border-blue-300 transition-colors"><span className="text-xs font-black">{isFreeDay && item.id !== 'event' ? '🕐' : item.id.startsWith('p') ? item.id.replace('p','') : item.icon}</span></div>
+                      <div key={item.id} className="flex items-center gap-2.5 px-2.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200/70 dark:border-slate-700 hover:border-blue-300 hover:bg-blue-50/50 transition-colors group">
+                        <div className="w-9 h-9 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 flex items-center justify-center shrink-0 shadow-sm text-slate-600 dark:text-slate-300 group-hover:text-blue-600 group-hover:border-blue-300 transition-colors"><span className="text-xs font-black">{isFreeDay && item.id !== 'event' ? '🕐' : item.id.startsWith('p') ? item.id.replace('p','') : item.icon}</span></div>
                         <div className="flex-1 min-w-0">
                           {itemEvents ? itemEvents.map((ev, idx) => (
                             <div key={idx} className="py-0.5">
-                              <div className="text-sm font-black text-slate-800 break-words whitespace-pre-wrap leading-tight group-hover:text-blue-900 transition-colors">{ev.subject}</div>
-                              {ev.startTime && <div className="text-[10px] font-mono text-slate-500 font-bold mt-0.5">{formatTimeRange(ev.startTime, ev.endTime)}</div>}
+                              <div className="text-sm font-bold text-slate-800 dark:text-slate-100 break-words whitespace-pre-wrap leading-tight group-hover:text-blue-900 transition-colors">{ev.subject}</div>
+                              {ev.startTime && <div className="text-[10px] font-mono text-slate-500 dark:text-slate-400 font-bold mt-0.5">{formatTimeRange(ev.startTime, ev.endTime)}</div>}
                             </div>
                           )) : (
                             <>
-                              <div className="text-sm font-black text-slate-800 break-words whitespace-pre-wrap leading-tight group-hover:text-blue-900 transition-colors">{item.data?.subject}</div>
-                              {item.time?.start && <div className="text-[10px] font-mono text-slate-500 font-bold mt-0.5">{formatTimeRange(item.time.start, item.time.end)}</div>}
+                              <div className="text-sm font-bold text-slate-800 dark:text-slate-100 break-words whitespace-pre-wrap leading-tight group-hover:text-blue-900 transition-colors">{item.data?.subject}</div>
+                              {item.time?.start && <div className="text-[10px] font-mono text-slate-500 dark:text-slate-400 font-bold mt-0.5">{formatTimeRange(item.time.start, item.time.end)}</div>}
                             </>
                           )}
                         </div>
@@ -1167,28 +1204,28 @@
                 </div>
               </div>
 
-              <div className="bg-white rounded-2xl p-3 sm:p-4 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-300 anim-fade-up flex flex-col lg:h-[60vh] lg:min-h-[360px] lg:max-h-[520px]" style={{animationDelay:'0.1s'}}>
+              <div className="bg-white dark:bg-slate-800 rounded-2xl p-3 sm:p-4 shadow-sm ring-1 ring-slate-900/5 dark:ring-white/10 anim-fade-up flex flex-col lg:h-[60vh] lg:min-h-[360px] lg:max-h-[520px]" style={{animationDelay:'0.1s'}}>
                 <div className="flex justify-between items-center mb-2 shrink-0">
-                  <h3 className="text-base font-black text-slate-800 flex items-center gap-1.5"><span className="text-lg">☑️</span> やることリスト</h3>
-                  <span className="text-xs font-bold text-slate-600 bg-slate-100 px-3 py-1 rounded-lg">直近5件</span>
+                  <h3 className="text-base font-black text-slate-800 dark:text-slate-100 flex items-center gap-1.5"><span className="text-lg">☑️</span> やることリスト</h3>
+                  <span className="text-xs font-bold text-slate-600 dark:text-slate-300 bg-slate-100 px-3 py-1 rounded-lg">直近5件</span>
                 </div>
                 <div className="flex-1 overflow-y-auto pr-1 space-y-1.5 hide-scrollbar">
                   {upcomingTodos.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-full text-slate-500 gap-3 py-6 lg:py-0"><span className="text-5xl drop-shadow-sm opacity-80">✨</span><span className="font-bold text-sm tracking-widest text-slate-600">すべて完了しています！</span></div>
+                    <div className="flex flex-col items-center justify-center h-full text-slate-500 dark:text-slate-400 gap-3 py-6 lg:py-0"><span className="text-5xl drop-shadow-sm opacity-80">✨</span><span className="font-bold text-sm tracking-widest text-slate-600 dark:text-slate-300">すべて完了しています！</span></div>
                   ) : (
                     upcomingTodos.map(t => {
                       const isOverdue = t.dueDate && t.dueDate < todayStr;
                       const isToday = t.dueDate === todayStr;
-                      let cardStyle = "bg-white border-slate-300 hover:border-blue-400"; let dueStyle = "text-slate-500"; let dueText = t.dueDate;
+                      let cardStyle = "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-blue-400"; let dueStyle = "text-slate-500 dark:text-slate-400"; let dueText = t.dueDate;
                       if (isOverdue) { cardStyle = "bg-rose-50/60 border-rose-300"; dueStyle = "text-rose-600"; dueText = "期限超過"; } else if (isToday) { cardStyle = "bg-amber-50/60 border-amber-300"; dueStyle = "text-amber-600"; dueText = "今日まで"; }
                       return (
                         <div key={t.id} className={`flex items-start gap-2.5 p-2.5 rounded-xl border shadow-sm transition-all group ${cardStyle}`}>
                           <button type="button" onClick={() => onToggleTodo && onToggleTodo(t.id)} aria-label="完了" className={`w-5 h-5 rounded-md border-[3px] mt-0.5 shrink-0 flex items-center justify-center bg-white hover:bg-slate-50 transition-colors ${t.important ? 'border-amber-500' : isOverdue ? 'border-rose-500' : 'border-slate-400'}`}></button>
                           <div className="flex-1 min-w-0 flex flex-col justify-center">
-                            <div className="text-sm font-black text-slate-800 leading-snug break-words whitespace-pre-wrap">{t.important && <span className="text-amber-500 mr-1.5">★</span>}{t.text}</div>
+                            <div className="text-sm font-black text-slate-800 dark:text-slate-100 leading-snug break-words whitespace-pre-wrap">{t.important && <span className="text-amber-500 mr-1.5">★</span>}{t.text}</div>
                             <div className="flex items-center gap-2 flex-wrap mt-1">
                               {t.dueDate && <div className={`text-[10px] font-bold font-mono ${dueStyle}`}>{dueText} : {t.dueDate}</div>}
-                              <span className="text-[10px] font-black text-slate-500 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded">{t.minutes || 15}分</span>
+                              <span className="text-[10px] font-black text-slate-500 dark:text-slate-400 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded">{t.minutes || 15}分</span>
                             </div>
                           </div>
                           <button type="button" onClick={() => onDeleteTodo && onDeleteTodo(t.id)} aria-label="削除" className="text-rose-400 bg-white border border-rose-200 hover:bg-rose-50 hover:text-rose-600 rounded-lg p-1.5 shrink-0 text-xs shadow-sm opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all">🗑</button>
@@ -1363,6 +1400,13 @@
       });
       
       const [showTodo, setShowTodo] = useState(false);
+      // 横断検索パレット（🔍 / Cmd+K）
+      const [showSearch, setShowSearch] = useState(false);
+      const [searchQuery, setSearchQuery] = useState('');
+      // 週案: クラス別ハイライトと2タップ入替
+      const [highlightClass, setHighlightClass] = useState(null);
+      const [swapMode, setSwapMode] = useState(false);
+      const [swapSource, setSwapSource] = useState(null);
       const [baseTemplate, setBaseTemplate] = useState({});
       const [templateSettings, setTemplateSettings] = useState(DEFAULT_TEMPLATE_SETTINGS);
       const [weeklyData, setWeeklyData] = useState({});
@@ -2844,6 +2888,7 @@
           if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); handleUndo(); }
           if ((e.metaKey || e.ctrlKey) && e.key === 'z' && e.shiftKey) { e.preventDefault(); handleRedo(); }
           if ((e.metaKey || e.ctrlKey) && e.key === 'y') { e.preventDefault(); handleRedo(); }
+          if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); setShowSearch(v => !v); }
         };
         window.addEventListener('resize', hRes); window.addEventListener('online', hOn); window.addEventListener('offline', hOff);
         window.addEventListener('keydown', hKey);
@@ -2859,16 +2904,10 @@
         let isM = true;
         const init = async () => {
           try {
-            // IndexedDBキャッシュが破損している場合、一度だけクリアしてリロード
-            const CACHE_VERSION = 'v3';
-            if (localStorage.getItem('ep_cache_ver') !== CACHE_VERSION) {
-              localStorage.setItem('ep_cache_ver', CACHE_VERSION);
-              const dbs = await (indexedDB.databases ? indexedDB.databases() : Promise.resolve([]));
-              const deletes = dbs
-                .filter(d => d.name && d.name.startsWith('firestore'))
-                .map(d => new Promise(resolve => { const req = indexedDB.deleteDatabase(d.name); req.onsuccess = resolve; req.onerror = resolve; req.onblocked = resolve; }));
-              if (deletes.length > 0) { await Promise.all(deletes); window.location.reload(); return; }
-            }
+            // 起動時の自動キャッシュ削除は、オフラインで書き溜めた未同期データを消すおそれがあるため行わない。
+            // 必要なときは設定タブの「キャッシュを修復して再読み込み」から手動で行う。
+            // 以前の版がパスワードを保存していた場合は消しておく（ログイン状態は Firebase Auth が保持する）
+            try { localStorage.removeItem('ep_pass'); } catch(e) {}
 
             const { initializeApp } = await _importDynamic("https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js");
             const { getAuth, onAuthStateChanged, setPersistence, browserLocalPersistence, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } = await _importDynamic("https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js");
@@ -2886,6 +2925,7 @@
             
             window.__firebaseAuth = auth;
             window.__firebaseDb = db;
+            window.__firestoreMod = firestoreMod;
             window.__firebaseSignIn = signInWithEmailAndPassword;
             window.__firebaseCreateUser = createUserWithEmailAndPassword;
             window.__firebaseSignOut = signOut;
@@ -2895,9 +2935,7 @@
             await setPersistence(auth, browserLocalPersistence);
             
             const savedE = localStorage.getItem('ep_mail');
-            const savedP = localStorage.getItem('ep_pass');
             if (savedE) setAuthEmail(savedE);
-            if (savedP) setAuthPassword(atob(savedP));
 
             onAuthStateChanged(auth, async u => { 
               if(isM){ 
@@ -2906,20 +2944,8 @@
                   setAuthLoading(false);
                   setIsAutoLoggingIn(false);
                 } else {
-                  if (savedE && savedP) {
-                    setIsAutoLoggingIn(true);
-                    try {
-                      await signInWithEmailAndPassword(auth, savedE, atob(savedP));
-                    } catch (err) {
-                      localStorage.removeItem('ep_pass');
-                      setCloudUser(null);
-                      setAuthLoading(false); 
-                      setIsAutoLoggingIn(false);
-                    }
-                  } else {
-                    setCloudUser(null);
-                    setAuthLoading(false); 
-                  }
+                  setCloudUser(null);
+                  setAuthLoading(false); 
                 } 
               } 
             });
@@ -3307,6 +3333,35 @@
         }
         return count;
       };
+      // 明日から学年末休業開始日までに、基本時間割上でこのクラス・教科に割り当てられているコマ数。
+      // 休日・休業日と、別の教科や行事・テストで上書きされたコマは数えない
+      const getYearEndDate = () => {
+        const v = (vacations || []).find(v => /学年末/.test(v.name || '') && getSchoolYearOf(v.start || '') === schoolYear);
+        if (v?.start) { const [y, m, d] = v.start.split('-').map(Number); return new Date(y, m - 1, d); }
+        return new Date(schoolYear + 1, 2, 20);
+      };
+      const calcRemainingClassSlots = (s, cls) => {
+        if (s.type !== 'auto') return 0;
+        const target = `${cls || ''}${s.name}`;
+        const esc = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const samePat = new RegExp(`^${esc(target)}(（.*）)?$`);
+        const endDate = getYearEndDate();
+        const cd = getJSTDate(); cd.setHours(0, 0, 0, 0); cd.setDate(cd.getDate() + 1);
+        let count = 0;
+        for (; cd < endDate; cd.setDate(cd.getDate() + 1)) {
+          const ds = formatDate(cd);
+          const di = (cd.getDay() + 6) % 7;
+          if (isNoClassType(getDaySetting(ds, di).type)) continue;
+          const tmpl = getTemplateFor(ds);
+          for (const pid of ['p1','p2','p3','p4','p5','p6']) {
+            if ((tmpl[`${di}-${pid}`]?.subject || '').trim() !== target) continue;
+            const ov = weeklyData[`${ds}-${pid}`];
+            if (ov && !ov.useTemplate && !samePat.test((ov.subject || '').split('\n')[0].trim())) continue;
+            count++;
+          }
+        }
+        return count;
+      };
       const getActualProgressFromHours = (units, doneHours) => {
         let rem = doneHours;
         for (let ui = 0; ui < units.length; ui++) {
@@ -3347,6 +3402,134 @@
       const saveExtraData = (ny,nd,nv) => { setYearlyData(ny); setDocuments(nd); setVacations(nv); saveToFirestore('extra',{yearlyData:ny,documents:nd,vacations:nv}); saveToLocal({yearlyData:ny,documents:nd,vacations:nv}); };
       const saveQuickMemos = (nm) => { setQuickMemos(nm); saveToFirestore('quickMemos',{memos:nm}); saveToLocal({quickMemos:nm}); };
 
+      // 週案: 担当クラス一覧（クラス別ハイライト用）と、コマがそのクラスかどうかの判定
+      const highlightClassList = Array.from(new Set((syllabusData || []).flatMap(s => s.classes || []).filter(Boolean)));
+      const cellMatchesClass = (subject, cls) => {
+        const line = (subject || '').split('\n')[0].trim();
+        if (!cls || !line.startsWith(cls)) return false;
+        // 「2」で「21社会」を拾わないよう、数字で終わるクラス名の直後に数字が続くものは別クラスとみなす
+        return !(/\d$/.test(cls) && /^\d/.test(line.slice(cls.length)));
+      };
+
+      // 2つのコマの中身を入れ替える。同じクラス・教科・単元どうしなら、早いコマに小さい時間数が来るよう直す
+      const executeSwapCells = (a, b) => {
+        if (!a || !b || (a.dateStr === b.dateStr && a.periodId === b.periodId)) return;
+        const rowIdx = (pid) => ROWS.findIndex(r => r.id === pid);
+        const strip = ({ startTime, endTime, useTemplate, ...rest }) => rest;
+        const dataA = getCellData(a.dateStr, a.periodId, a.dayIndex);
+        const dataB = getCellData(b.dateStr, b.periodId, b.dayIndex);
+        let nextA = { ...strip(dataB), startTime: dataA.startTime || '', endTime: dataA.endTime || '', useTemplate: false };
+        let nextB = { ...strip(dataA), startTime: dataB.startTime || '', endTime: dataB.endTime || '', useTemplate: false };
+        const mA = (nextA.subject || '').match(CELL_UNIT_PAT);
+        const mB = (nextB.subject || '').match(CELL_UNIT_PAT);
+        if (mA && mB && mA[1] === mB[1] && mA[2] === mB[2]) {
+          const aFirst = a.dateStr < b.dateStr || (a.dateStr === b.dateStr && rowIdx(a.periodId) < rowIdx(b.periodId));
+          const [early, late] = aFirst ? [nextA, nextB] : [nextB, nextA];
+          const eh = parseInt((early.subject.match(CELL_UNIT_PAT) || [])[3], 10);
+          const lh = parseInt((late.subject.match(CELL_UNIT_PAT) || [])[3], 10);
+          if (eh > lh) { const t = early.subject; early.subject = late.subject; late.subject = t; }
+        }
+        const nd = { ...weeklyData, [`${a.dateStr}-${a.periodId}`]: nextA, [`${b.dateStr}-${b.periodId}`]: nextB };
+        saveAll(baseTemplate, templateSettings, nd, weeklySettings);
+        showToast('🔄 コマを入れ替えました');
+      };
+      const handleSwapCellClick = (target) => {
+        if (!swapSource) { setSwapSource(target); return; }
+        if (swapSource.dateStr === target.dateStr && swapSource.periodId === target.periodId) { setSwapSource(null); return; }
+        executeSwapCells(swapSource, target);
+        setSwapSource(null);
+      };
+
+      // 横断検索。週案・年間行事・未完了ToDo・ノート・単元計画をまとめて探す
+      const stripTags = (html) => (html || '').replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+      const ROW_LABELS = { morning:'朝', p1:'1限', p2:'2限', p3:'3限', p4:'4限', lunch:'昼', p5:'5限', p6:'6限', afterschool:'放課後', event:'行事', diary:'メモ' };
+      const getSearchResults = (q) => {
+        const query = (q || '').trim().toLowerCase();
+        if (!query) return [];
+        const hit = (t) => (t || '').toLowerCase().includes(query);
+        const snippet = (t) => {
+          const txt = (t || '').replace(/\s+/g, ' ');
+          const i = txt.toLowerCase().indexOf(query);
+          if (i < 0) return txt.slice(0, 60);
+          const st = Math.max(0, i - 20);
+          return (st > 0 ? '…' : '') + txt.slice(st, i + query.length + 40);
+        };
+        const fmtDs = (ds) => { const [y, m, d] = ds.split('-').map(Number); const dt = new Date(y, m - 1, d); return `${m}/${d}(${'日月火水木金土'[dt.getDay()]})`; };
+        const out = [];
+        Object.keys(weeklyData || {}).forEach(k => {
+          const m = k.match(/^(\d{4}-\d{2}-\d{2})-(.+)$/);
+          if (!m) return;
+          const [, ds, pid] = m; const v = weeklyData[k] || {};
+          if (pid === 'weekMemos') {
+            (v.memos || []).forEach(memo => { const t = stripTags(memo.htmlContent); if (hit(t)) out.push({ kind: 'weekly', icon: '🗒️', group: '週メモ', ds, title: `${fmtDs(ds)}の週 週メモ`, sub: snippet(t) }); });
+            return;
+          }
+          if (v.useTemplate) return;
+          const texts = [v.subject, v.memo, ...((v.events || []).map(e => e.subject))].filter(Boolean).join(' / ');
+          const t = pid === 'diary' ? stripTags(texts) : texts;
+          if (hit(t)) out.push({ kind: 'weekly', icon: pid === 'event' ? '🚩' : '📘', group: '週案', ds, title: `${fmtDs(ds)} ${ROW_LABELS[pid] || pid}`, sub: snippet(t) });
+        });
+        Object.keys(yearlyData || {}).forEach(sy => {
+          Object.entries(yearlyData[sy] || {}).forEach(([md, text]) => {
+            if (typeof text !== 'string' || !hit(text)) return;
+            const [mm, dd] = md.split('-').map(Number);
+            if (!mm || !dd) return;
+            const y = mm < 4 ? Number(sy) + 1 : Number(sy);
+            const ds = `${y}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`;
+            out.push({ kind: 'weekly', icon: '🗓️', group: '年間行事', ds, title: `${y}年${fmtDs(ds)}`, sub: snippet(text) });
+          });
+        });
+        (todos || []).filter(t => !t.completed && hit(`${t.text} ${t.tag || ''}`)).forEach(t => out.push({ kind: 'todo', icon: '📝', group: 'ToDo', title: t.text, sub: t.dueDate ? `期限 ${t.dueDate}` : '' }));
+        (notesData || []).forEach(n => { const t = stripTags(n.content); if (hit(n.title) || hit(t)) out.push({ kind: 'note', icon: '📓', group: 'ノート', note: n, title: n.title || '（無題）', sub: snippet(t) }); });
+        (syllabusData || []).forEach(sub => {
+          (sub.units || []).forEach(u => {
+            if (hit(u.name)) out.push({ kind: 'unit', icon: '📚', group: '単元計画', title: `${sub.name}：${u.name}`, sub: `${u.hours}時間` });
+            (u.lessonContents || []).forEach((c, hi) => { if (hit(c)) out.push({ kind: 'unit', icon: '📚', group: '単元計画', title: `${sub.name}：${u.name} ${hi + 1}/${u.hours}`, sub: snippet(c) }); });
+          });
+        });
+        out.sort((a, b) => (a.ds && b.ds) ? b.ds.localeCompare(a.ds) : 0);
+        return out.slice(0, 80);
+      };
+      const openSearchResult = (r) => {
+        setShowSearch(false);
+        if (r.kind === 'weekly' && r.ds) {
+          const [y, m, d] = r.ds.split('-').map(Number);
+          const dt = new Date(y, m - 1, d);
+          setCurrentWeekStart(getMonday(dt));
+          setCurrentMonth(new Date(y, m - 1, 1));
+          setActiveTab('weekly');
+        } else if (r.kind === 'todo') {
+          setShowTodo(true);
+        } else if (r.kind === 'note') {
+          setActiveTab('notes');
+          setEditingNote(r.note);
+        } else if (r.kind === 'unit') {
+          setActiveTab('unitplan');
+        }
+      };
+
+      // 端末内のFirestoreキャッシュ(IndexedDB)を消して読み直す。未同期の変更が消えないよう、オンラインで同期を待ってから行う
+      const repairLocalCache = async () => {
+        if (!navigator.onLine) { showToast('⚠️ オフライン中は修復できません（未同期のデータが消えるため）'); return; }
+        if (!window.confirm('端末内のキャッシュを削除して再読み込みします。\nクラウドに保存済みのデータは消えません。\n実行しますか？')) return;
+        const fm = window.__firestoreMod; const db = window.__firebaseDb;
+        try {
+          if (fm && db) {
+            if (fm.waitForPendingWrites) { await Promise.race([fm.waitForPendingWrites(db), new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 10000))]); }
+            if (fm.terminate) await fm.terminate(db);
+            if (fm.clearIndexedDbPersistence) await fm.clearIndexedDbPersistence(db);
+          }
+        } catch (e) {
+          if (e && e.message === 'timeout') { showToast('⚠️ 未同期の変更がクラウドに送れていません。通信を確認してから再度お試しください'); return; }
+        }
+        try {
+          const dbs = await (indexedDB.databases ? indexedDB.databases() : Promise.resolve([]));
+          await Promise.all(dbs.filter(d => d.name && d.name.startsWith('firestore'))
+            .map(d => new Promise(resolve => { const req = indexedDB.deleteDatabase(d.name); req.onsuccess = resolve; req.onerror = resolve; req.onblocked = resolve; })));
+        } catch (e) {}
+        window.location.reload();
+      };
+
       const showToast = (msg) => { setToastMessage(msg); setTimeout(() => setToastMessage(''), 3000); };
       const handleAuthSubmit = async (e) => { 
         e.preventDefault(); setAuthError(''); 
@@ -3356,10 +3539,8 @@
           
           if (rememberMe) {
             localStorage.setItem('ep_mail', authEmail);
-            localStorage.setItem('ep_pass', btoa(authPassword));
           } else {
             localStorage.removeItem('ep_mail');
-            localStorage.removeItem('ep_pass');
           }
         } catch(err) { setAuthError(err.message); } 
       };
@@ -3367,7 +3548,6 @@
       const handleLogout = async () => {
         try {
           localStorage.removeItem('ep_mail');
-          localStorage.removeItem('ep_pass');
           await window.__firebaseSignOut(window.__firebaseAuth);
           showToast('ログアウトしました');
         } catch (e) {
@@ -4578,8 +4758,9 @@
         const file = e.target.files[0];
         if (!file) return;
         const reader = new FileReader();
-        reader.onload = (event) => {
-          restoreSelectionAndInsertHtml(`<img src="${event.target.result}" alt="添付画像" style="max-width:100%; border-radius:8px; margin:8px 0; border:1px solid #e2e8f0;"><br>`, editorId);
+        reader.onload = async (event) => {
+          const small = await compressImageDataUrl(event.target.result);
+          restoreSelectionAndInsertHtml(`<img src="${small}" alt="添付画像" style="max-width:100%; border-radius:8px; margin:8px 0; border:1px solid #e2e8f0;"><br>`, editorId);
         };
         reader.readAsDataURL(file);
         e.target.value = '';
@@ -4711,7 +4892,7 @@
         }
       };
 
-      const saveHandwriting = () => { 
+      const saveHandwriting = async () => { 
         const canvas = quickCanvasRef.current;
         if (!canvas) return;
         try {
@@ -4721,7 +4902,7 @@
           tCtx.fillStyle = '#ffffff'; 
           tCtx.fillRect(0,0,tempCanvas.width,tempCanvas.height);
           tCtx.drawImage(canvas, 0, 0);
-          const du = tempCanvas.toDataURL('image/png'); 
+          const du = await compressImageDataUrl(tempCanvas.toDataURL('image/png'));
           
           if (handwritingMode === 'quick') {
             saveQuickMemos([{id:Date.now(),dataUrl:du,timestamp:new Date().toISOString()},...quickMemos]); 
@@ -4824,7 +5005,7 @@
         const isShortRow = row.id === 'morning' || row.id === 'lunch';
         const zClass = row.id === 'event' ? 'relative z-50' : 'relative z-0';
         const isLastInGroup = row.id === 'afterschool';
-        const borderBottomClassRow = isLastInGroup ? '' : 'border-b border-slate-200 dark:border-slate-700';
+        const borderBottomClassRow = isLastInGroup ? '' : 'border-b border-slate-200/60 dark:border-slate-800';
 
         return (
           <div key={row.id} className={`flex w-full ${fc} ${rh} ${rb} ${zClass} ${borderBottomClassRow}${customStyle.flex ? ' overflow-hidden' : ''}`} style={customStyle}>
@@ -4843,7 +5024,7 @@
 
                 if (activeTab === 'weekly' && isH && row.id !== 'event' && row.id !== 'afterschool') {
                   return (
-                    <div key={i} className={`min-w-0 ${cf} border-r border-slate-200 dark:border-slate-700 last:border-r-0 ${cellBg} h-full`}></div>
+                    <div key={i} className={`min-w-0 ${cf} border-r border-slate-200/60 dark:border-slate-800 last:border-r-0 ${cellBg} h-full`}></div>
                   );
                 }
 
@@ -4877,12 +5058,25 @@
                   }
                 }
 
+                // クラス別ハイライトと2タップ入替（週案の授業コマのみ）
+                const isSwappable = activeTab === 'weekly' && row.id.startsWith('p') && !isH;
+                const cellRef = { dateStr: ds, periodId: row.id, dayIndex: i };
+                const isSwapSrc = swapMode && swapSource && swapSource.dateStr === ds && swapSource.periodId === row.id;
+                let hlClass = '';
+                if (activeTab === 'weekly' && highlightClass && row.id !== 'event' && hasData) {
+                  hlClass = cellMatchesClass(data.subject, highlightClass) ? 'ring-2 ring-indigo-600 dark:ring-indigo-400 shadow-md' : 'opacity-25 scale-[0.98]';
+                }
+                const dragProps = (isSwappable && !isMobile) ? {
+                  onDragOver: (e) => { if (e.dataTransfer.types.includes('application/x-ep-cell')) e.preventDefault(); },
+                  onDrop: (e) => { const raw = e.dataTransfer.getData('application/x-ep-cell'); if (!raw) return; e.preventDefault(); try { executeSwapCells(JSON.parse(raw), cellRef); } catch (err) {} setSwapSource(null); },
+                } : {};
+
                 const fontSizeClass = row.id === 'event' ? getEventFontSize(data.subject, isMobile, true) : (row.id === 'lunch' || row.id === 'morning') ? getEventFontSize(data.subject, isMobile) : getDynamicFontSize(data.subject, isMobile, activeTab === 'weekly');
 
                 return (
-                  <div key={i} onClick={()=>{if(isMobile && activeTab==='weekly' && hasData) openViewModal(data,ds,row,i,day,isH); else openEditModal(data,ds,row,i,day,isH,null);}} className={`min-w-0 ${cf} border-r border-slate-200 dark:border-slate-700 last:border-r-0 p-0.5 sm:p-1 cursor-pointer flex flex-col justify-start relative ${overflowClass} ${activeTab==='weekly'&&isT?'today-column':''} ${cellBg} hover:bg-slate-100/80 dark:hover:bg-slate-700/30 transition-colors h-full`}>
+                  <div key={i} {...dragProps} onClick={()=>{if(swapMode && isSwappable){handleSwapCellClick(cellRef);return;} if(isMobile && activeTab==='weekly' && hasData) openViewModal(data,ds,row,i,day,isH); else openEditModal(data,ds,row,i,day,isH,null);}} className={`min-w-0 ${cf} border-r border-slate-200/60 dark:border-slate-800 last:border-r-0 p-0.5 sm:p-1 cursor-pointer flex flex-col justify-start relative ${overflowClass} ${activeTab==='weekly'&&isT?'today-column':''} ${cellBg} ${swapMode && isSwappable ? 'hover:bg-amber-50 dark:hover:bg-amber-500/10' : 'hover:bg-slate-100/80 dark:hover:bg-slate-700/30'} ${isSwapSrc ? 'outline outline-2 outline-amber-500 -outline-offset-2 bg-amber-50/70 dark:bg-amber-500/10' : ''} transition-colors h-full`}>
                     {hasData && (
-                      <div className={`cell-card ${blockClasses} rounded-md sm:rounded-lg flex flex-col px-0.5 py-0.5 sm:px-1 sm:py-1 border-l-[3px] sm:border-l-[4px] transition-colors ${row.id === 'morning' ? 'overflow-visible' : 'overflow-y-auto'} ${row.id !== 'afterschool' ? 'hide-scrollbar' : ''} ${blockBg} ${blockBorder}`} style={{...blockStyle, boxShadow:'0 1px 3px rgba(0,0,0,0.08), 0 1px 1px rgba(0,0,0,0.04)'}}>
+                      <div draggable={isSwappable && !isMobile} onDragStart={(isSwappable && !isMobile) ? (e) => { e.dataTransfer.setData('application/x-ep-cell', JSON.stringify(cellRef)); e.dataTransfer.effectAllowed = 'move'; } : undefined} className={`cell-card ${blockClasses} rounded-md sm:rounded-lg flex flex-col px-0.5 py-0.5 sm:px-1 sm:py-1 border-l-[3px] sm:border-l-[4px] transition-all ${row.id === 'morning' ? 'overflow-visible' : 'overflow-y-auto'} ${row.id !== 'afterschool' ? 'hide-scrollbar' : ''} ${blockBg} ${blockBorder} ${hlClass}`} style={{...blockStyle, boxShadow: hlClass.startsWith('ring') ? undefined : '0 1px 2px rgba(15,23,42,0.06)'}}>
                         {row.id === 'event' ? (
                           <div className="flex flex-col w-full my-auto space-y-0.5">
                             {data.subject.split('\n').filter(s => s.trim() !== '').map((s, idx) => {
@@ -4899,7 +5093,7 @@
                               }
                               return (
                                 <div key={idx} className="w-full border-b border-pink-200/50 last:border-0 pb-0.5 last:pb-0">
-                                  <div className={`${fontSizeClass} font-black break-words ${blockText} leading-tight`} title={s}>
+                                  <div className={`${fontSizeClass} font-bold break-words ${blockText} leading-tight`} title={s}>
                                     {s}
                                   </div>
                                   {barStyle && (
@@ -4916,7 +5110,7 @@
                             {(data.events?.length?data.events:[{subject:data.subject,start:data.startTime}]).filter(e=>e.subject).slice().sort((a,b)=>(a.startTime||'99:99').localeCompare(b.startTime||'99:99')).map((e,idx)=>(
                               <div key={idx} className="flex flex-col">
                                 {e.startTime && <div className={`text-[8px] sm:text-[9px] font-mono font-bold leading-none opacity-80 ${blockText} mb-0.5`}>{e.startTime}{e.endTime?`-${e.endTime}`:''}</div>}
-                                <div className={`${fontSizeClass} font-black mt-0.5 break-words ${activeTab === 'weekly' && row.id !== 'event' ? 'whitespace-pre-wrap line-clamp-3 overflow-hidden' : ''} ${blockText}`} title={e.subject}>{e.subject}</div>
+                                <div className={`${fontSizeClass} font-bold mt-0.5 break-words ${activeTab === 'weekly' && row.id !== 'event' ? 'whitespace-pre-wrap line-clamp-3 overflow-hidden' : ''} ${blockText}`} title={e.subject}>{e.subject}</div>
                               </div>
                             ))}
                           </div>
@@ -4935,23 +5129,23 @@
                               const lessonText = lesson?.content || '';
                               if (isMobile && activeTab === 'weekly' && row.id.startsWith('p')) {
                                 const label = sm ? sm[1] : data.subject.split('\n')[0];
-                                return <div className={`text-[10px] font-black ${blockText} line-clamp-2 break-words leading-tight`} title={lessonText ? `${data.subject}\n${lessonText}` : data.subject}>{label}</div>;
+                                return <div className={`text-[10px] font-extrabold ${blockText} line-clamp-2 break-words leading-tight`} title={lessonText ? `${data.subject}\n${lessonText}` : data.subject}>{label}</div>;
                               }
                               if (sm) return (
                                 <div className="flex flex-col min-w-0" title={lessonText ? `${data.subject}\n${lessonText}` : data.subject}>
                                   <div className="flex items-baseline gap-1 min-w-0">
-                                    <span className={`${fontSizeClass} font-black ${blockText} truncate`}>{sm[1]}</span>
-                                    <span className={`text-[8px] sm:text-[9px] font-black shrink-0 ${blockText} opacity-75 bg-white/60 dark:bg-black/20 px-1 rounded`}>{sm[3]}/{sm[4]}</span>
+                                    <span className={`${fontSizeClass} font-extrabold ${blockText} truncate`}>{sm[1]}</span>
+                                    <span className={`text-[8px] sm:text-[9px] font-mono font-semibold shrink-0 ${blockText} opacity-75 bg-white/60 dark:bg-black/20 px-1 rounded`}>{sm[3]}/{sm[4]}</span>
                                   </div>
-                                  <div className={`text-[8px] sm:text-[9px] font-bold ${blockText} opacity-75 leading-tight line-clamp-2 break-words`}>{sm[2]}</div>
+                                  <div className={`text-[8px] sm:text-[9px] font-semibold ${blockText} opacity-70 leading-tight line-clamp-2 break-words`}>{sm[2]}</div>
                                   {lessonText && (
-                                    <div className={`text-[8px] sm:text-[9px] font-bold ${blockText} opacity-70 leading-tight line-clamp-2 break-words mt-0.5 pl-1 border-l-2 border-current/25`}>{lessonText}</div>
+                                    <div className={`text-[8px] sm:text-[9px] font-medium ${blockText} opacity-80 leading-tight line-clamp-2 break-words mt-0.5 pl-1 border-l-2 border-current/25`}>{lessonText}</div>
                                   )}
                                 </div>
                               );
-                              return <div className={`${fontSizeClass} font-black break-words ${row.id === 'lunch' || row.id === 'morning' ? 'leading-[1.1]' : ''} ${activeTab === 'weekly' && row.id !== 'event' ? 'whitespace-pre-wrap line-clamp-3 overflow-hidden' : ''} ${blockText}`} title={data.subject}>{data.subject}</div>;
+                              return <div className={`${fontSizeClass} font-bold break-words ${row.id === 'lunch' || row.id === 'morning' ? 'leading-[1.1]' : ''} ${activeTab === 'weekly' && row.id !== 'event' ? 'whitespace-pre-wrap line-clamp-3 overflow-hidden' : ''} ${blockText}`} title={data.subject}>{data.subject}</div>;
                             })()}
-                            {data.memo && row.id !== 'lunch' && <div className={`text-[8px] sm:text-[9px] font-bold mt-0.5 opacity-80 break-words leading-tight ${activeTab === 'weekly' && row.id !== 'event' ? 'line-clamp-2 overflow-hidden' : 'line-clamp-1'} ${blockText}`}>{data.memo}</div>}
+                            {data.memo && row.id !== 'lunch' && <div className={`text-[8px] sm:text-[9px] font-medium mt-0.5 opacity-80 break-words leading-tight ${activeTab === 'weekly' && row.id !== 'event' ? 'line-clamp-2 overflow-hidden' : 'line-clamp-1'} ${blockText}`}>{data.memo}</div>}
                           </div>
                         )}
                       </div>
@@ -5081,7 +5275,7 @@
                   
                   <label className="flex items-center gap-2 text-xs text-slate-600 font-bold cursor-pointer px-1">
                     <input type="checkbox" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer" />
-                    <span>次回から自動的にログインする</span>
+                    <span>メールアドレスを記憶する（パスワードは保存しません）</span>
                   </label>
 
                   <button type="submit" disabled={isAutoLoggingIn} className="w-full bg-blue-600 text-white p-3 rounded-xl font-bold hover:bg-blue-700 transition-colors disabled:opacity-50">{isRegistering?'登録':'ログイン'}</button>
@@ -5099,7 +5293,41 @@
 
       return (
         <div className={`flex flex-col h-[100dvh] w-full relative overflow-hidden transition-colors ${theme === 'dark' ? 'dark bg-slate-900 text-slate-200' : ''}`}>
-          {toastMessage && <div className="fixed top-[calc(4rem+env(safe-area-inset-top))] left-1/2 -translate-x-1/2 bg-slate-800 text-white px-4 py-2 rounded-full z-[300] shadow-lg anim-scale-in font-bold text-sm">{toastMessage}</div>}
+          {showSearch && (() => {
+            const results = getSearchResults(searchQuery);
+            return (
+              <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[200] flex items-start justify-center p-3 pt-[calc(4rem+env(safe-area-inset-top))] no-print" onClick={() => setShowSearch(false)}>
+                <div className="w-full max-w-xl bg-white dark:bg-slate-900 rounded-2xl shadow-2xl ring-1 ring-slate-900/10 dark:ring-white/10 overflow-hidden anim-scale-in" onClick={e => e.stopPropagation()}>
+                  <div className="flex items-center gap-2 px-4 border-b border-slate-200 dark:border-slate-700">
+                    <span className="text-base">🔍</span>
+                    <input autoFocus value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Escape') setShowSearch(false); if (e.key === 'Enter' && results[0]) openSearchResult(results[0]); }}
+                      placeholder="週案・行事・ToDo・ノート・単元を検索" className="flex-1 py-3.5 bg-transparent outline-none text-sm font-medium text-slate-800 dark:text-slate-100 placeholder:text-slate-400" />
+                    <kbd className="hidden sm:inline text-[10px] font-mono text-slate-400 border border-slate-200 dark:border-slate-700 rounded px-1.5 py-0.5">Esc</kbd>
+                  </div>
+                  <div className="max-h-[60vh] overflow-y-auto p-2">
+                    {!searchQuery.trim() ? (
+                      <div className="text-center text-xs text-slate-400 font-medium py-8">キーワードを入力してください</div>
+                    ) : results.length === 0 ? (
+                      <div className="text-center text-xs text-slate-400 font-medium py-8">「{searchQuery}」に一致する項目はありません</div>
+                    ) : results.map((r, i) => (
+                      <button key={i} onClick={() => openSearchResult(r)} className="w-full text-left flex items-start gap-3 px-3 py-2 rounded-xl hover:bg-indigo-50 dark:hover:bg-indigo-500/15 transition-colors">
+                        <span className="text-base leading-6 shrink-0">{r.icon}</span>
+                        <span className="min-w-0 flex-1">
+                          <span className="flex items-center gap-2">
+                            <span className="text-sm font-semibold text-slate-800 dark:text-slate-100 truncate">{r.title}</span>
+                            <span className="text-[10px] font-bold text-slate-400 shrink-0">{r.group}</span>
+                          </span>
+                          {r.sub && <span className="block text-xs text-slate-500 dark:text-slate-400 truncate">{r.sub}</span>}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+          {toastMessage && <div className="no-print fixed top-[calc(4rem+env(safe-area-inset-top))] left-1/2 -translate-x-1/2 bg-slate-800 text-white px-4 py-2 rounded-full z-[300] shadow-lg anim-scale-in font-bold text-sm">{toastMessage}</div>}
           {showConnCheck && <ConnectionCheck onClose={()=>setShowConnCheck(false)} />}
           {(dataLoadStatus === 'loading' || dataLoadStatus === 'timeout' || dataLoadStatus === 'empty' || dataLoadStatus === 'local') && (
             <div className="fixed top-[calc(4rem+env(safe-area-inset-top))] left-1/2 -translate-x-1/2 z-[200] max-w-md w-[90%]">
@@ -5112,7 +5340,7 @@
             </div>
           )}
           
-          <header className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 flex items-center px-3 sm:px-5 justify-between no-print shrink-0 z-30 pt-[env(safe-area-inset-top)] h-[calc(2.75rem+env(safe-area-inset-top))] transition-colors" style={{boxShadow:'0 1px 6px rgba(0,0,0,0.07)'}}>
+          <header className="bg-white/85 dark:bg-slate-900/85 backdrop-blur-md border-b border-slate-900/5 dark:border-white/10 flex items-center px-3 sm:px-5 justify-between no-print shrink-0 z-30 pt-[env(safe-area-inset-top)] h-[calc(2.75rem+env(safe-area-inset-top))] transition-colors relative" style={{boxShadow:'0 1px 12px rgba(15,23,42,0.06)'}}>
             <div className="flex items-center gap-2 sm:gap-3 shrink-0">
               <h1 className="font-black text-blue-700 dark:text-blue-400 flex items-center gap-1.5 sm:gap-2">
                 <div className="bg-blue-600 text-white rounded-lg p-1 shadow-sm">
@@ -5129,6 +5357,9 @@
                     <button onClick={handleRedo} className="px-1.5 py-0.5 text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-white dark:hover:bg-slate-800 transition-colors h-full flex items-center" title="やり直す (Redo)"><span className="text-sm">↪️</span></button>
                   </div>
                 )}
+                <button onClick={() => setShowSearch(true)} className="bg-slate-100 dark:bg-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 border border-slate-200 dark:border-slate-600 hover:border-indigo-300 px-1.5 sm:px-2.5 py-1 h-7 rounded-md text-[10px] font-bold text-slate-600 dark:text-slate-300 hover:text-indigo-700 dark:hover:text-indigo-300 transition-all flex items-center gap-1 sm:gap-1.5 active:scale-95" title={`検索 (${/Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? '⌘' : 'Ctrl'}+K)`}>
+                  <span className="text-sm leading-none">🔍</span><span className="hidden lg:inline">検索</span>
+                </button>
                 <button onClick={() => setShowQuickMemoList(true)} className="bg-slate-100 dark:bg-slate-700 hover:bg-yellow-50 dark:hover:bg-yellow-900/30 border border-slate-200 dark:border-slate-600 hover:border-yellow-300 px-1.5 sm:px-2.5 py-1 h-7 rounded-md text-[10px] font-bold text-slate-600 dark:text-slate-300 hover:text-yellow-700 dark:hover:text-yellow-300 transition-all flex items-center gap-1 sm:gap-1.5 active:scale-95" title="クイックメモ">
                   <span className="text-sm leading-none">✍️</span><span className="hidden lg:inline">メモ</span>
                 </button>
@@ -5143,17 +5374,17 @@
               </div>
             </div>
 
-            <div className="flex gap-0.5 sm:gap-1 overflow-x-auto hide-scrollbar pl-3 ml-auto">
+            <div className="flex gap-0.5 overflow-x-auto hide-scrollbar ml-3 sm:ml-auto bg-slate-200/70 dark:bg-slate-800 p-1 rounded-xl">
               {['dashboard','field','yearly','monthly','weekly','schedule','unitplan','notes','documents','settings'].map(t=>{
                 const label = t==='dashboard'?'今日':t==='field'?'現場':t==='yearly'?'年間':t==='monthly'?'月間':t==='weekly'?'週案':t==='schedule'?'週予定':t==='unitplan'?'単元計画':t==='notes'?'ノート':t==='documents'?'資料':'設定';
                 const isActive = activeTab===t;
                 return (
-                  <button key={t} onClick={()=>setActiveTab(t)} className={`nav-tab px-2 sm:px-3 py-1 rounded-md text-[11px] sm:text-xs font-black whitespace-nowrap transition-all ${isActive?'bg-blue-600 text-white shadow-sm':'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700'} ${isActive?'active':''}`}>
+                  <button key={t} onClick={()=>setActiveTab(t)} className={`nav-tab px-2 sm:px-3 py-0.5 rounded-lg text-[11px] sm:text-xs font-bold whitespace-nowrap transition-all ${isActive?'bg-white dark:bg-slate-700 text-indigo-600 dark:text-white shadow-sm':'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-white/50 dark:hover:bg-slate-700/50'} ${isActive?'active':''}`}>
                     {label}
                   </button>
                 );
               })}
-              <button onClick={()=>setActiveTab('template')} className={`nav-tab px-2 sm:px-3 py-1 rounded-md text-[11px] sm:text-xs font-black whitespace-nowrap transition-all ${activeTab==='template'?'bg-purple-600 text-white shadow-sm':'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>
+              <button onClick={()=>setActiveTab('template')} className={`nav-tab px-2 sm:px-3 py-0.5 rounded-lg text-[11px] sm:text-xs font-bold whitespace-nowrap transition-all ${activeTab==='template'?'bg-white dark:bg-slate-700 text-purple-600 dark:text-white shadow-sm':'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-white/50 dark:hover:bg-slate-700/50'}`}>
                 基本
               </button>
             </div>
@@ -5246,7 +5477,7 @@
                         <button onClick={() => { setCurrentWeekStart(getMonday(getJSTDate())); }} className="text-[10px] sm:text-xs font-black text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 px-2.5 py-1.5 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors shrink-0 whitespace-nowrap">今週</button>
 
                         {!isMobile && (
-                          <div className="flex gap-1.5 ml-auto">
+                          <div className="flex gap-1.5 ml-auto no-print">
                             {syllabusData.some(s => s.type === 'auto' && s.units?.length > 0) && (
                               <>
                                 <button onClick={handleAutoFillWeek} className="action-btn text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2.5 py-1.5 rounded-lg hover:bg-blue-100 transition-colors flex items-center gap-1 whitespace-nowrap" title="基本設定の教科と進度データを照合し、今週の授業を自動入力">
@@ -5300,6 +5531,32 @@
                       </div>
                     )}
                   </div>
+                  {activeTab === 'weekly' && (
+                    <div className={`flex items-center gap-1.5 overflow-x-auto hide-scrollbar border-b border-slate-200/60 dark:border-slate-800 bg-white dark:bg-slate-800 shrink-0 no-print ${isMobile ? 'px-1.5 py-1' : 'px-3 py-1.5'}`}>
+                      {highlightClassList.length > 0 && (
+                        <div className="flex items-center gap-0.5 bg-slate-100 dark:bg-slate-900 p-0.5 rounded-lg shrink-0">
+                          {[null, ...highlightClassList].map(cls => (
+                            <button key={cls || 'all'} onClick={() => setHighlightClass(cls)} className={`px-2 py-0.5 rounded-md text-[10px] sm:text-[11px] font-bold whitespace-nowrap transition-all ${highlightClass === cls ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'}`}>
+                              {cls ? (/^\d+$/.test(cls) ? `${cls}組` : cls) : '全表示'}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      <button onClick={() => { setSwapMode(v => !v); setSwapSource(null); }} className={`px-2.5 py-1 rounded-lg text-[10px] sm:text-[11px] font-bold whitespace-nowrap border transition-colors shrink-0 ${swapMode ? 'bg-amber-500 text-white border-amber-500 shadow-sm' : 'bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-200 border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-600'}`} title="2つのコマを順にタップして入れ替え（PCはドラッグでも可）">
+                        🔄 コマ入替{swapMode ? '中' : ''}
+                      </button>
+                      {swapMode && (
+                        <span className="text-[10px] sm:text-[11px] font-medium text-amber-700 dark:text-amber-300 whitespace-nowrap">
+                          {swapSource ? '入れ替え先のコマをタップ（同じコマで取消）' : '入れ替えるコマを1つ目タップ'}
+                        </span>
+                      )}
+                      {!isMobile && (
+                        <button onClick={() => { if (theme !== 'dark') { window.print(); return; } setTheme('light'); setTimeout(() => { window.print(); setTheme('dark'); }, 150); }} className="ml-auto px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap border bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-200 border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-600 transition-colors shrink-0" title="A4横1枚で印刷">
+                          🖨️ 印刷
+                        </button>
+                      )}
+                    </div>
+                  )}
 
                   <div className={`flex-1 flex flex-col relative min-h-0 hide-scrollbar overflow-y-auto`}>
                     <div className={`flex bg-slate-100 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-30 shrink-0 ${isMobile && activeTab === 'weekly' ? 'min-h-0 py-0.5' : 'min-h-[3rem]'}`} style={{boxShadow:'0 2px 6px rgba(0,0,0,0.06)'}}>
@@ -5903,6 +6160,37 @@
                       ))}
                     </div>
 
+                    {/* 学年末までの残り可能時数 vs 必要時数 */}
+                    {subj?.type === 'auto' && totalHours > 0 && (
+                      <div className="mb-4 bg-white dark:bg-slate-800 rounded-2xl p-4 shadow-sm ring-1 ring-slate-900/5 dark:ring-white/10">
+                        <div className="flex items-center justify-between gap-2 flex-wrap mb-3">
+                          <h3 className="text-sm font-bold text-slate-700 dark:text-slate-200">
+                            ⏳ 学年末までの見通し（{subj.name}）
+                            <span className="ml-2 text-[10px] font-medium text-slate-400 dark:text-slate-500">明日〜{(() => { const e = getYearEndDate(); e.setDate(e.getDate() - 1); return `${e.getMonth() + 1}/${e.getDate()}`; })()}の基本時間割から算出</span>
+                          </h3>
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                          {clsListForProg.map(cls => {
+                            const slots = calcRemainingClassSlots(subj, cls);
+                            const need = Math.max(0, totalHours - calcCompletedHours(subj, cls));
+                            const diff = slots - need;
+                            return (
+                              <div key={cls || 'all'} className="rounded-xl bg-slate-50 dark:bg-slate-900/50 ring-1 ring-slate-900/5 dark:ring-white/10 p-3">
+                                <div className="flex items-center justify-between gap-1 mb-1.5">
+                                  <span className="text-sm font-bold text-slate-800 dark:text-slate-100">{cls ? (/^\d+$/.test(cls) ? `${cls}組` : cls) : subj.name}</span>
+                                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md whitespace-nowrap ${diff >= 0 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300' : 'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300'}`}>
+                                    {diff >= 0 ? `+${diff}h 余裕` : `⚠️ ${diff}h 不足見込み`}
+                                  </span>
+                                </div>
+                                <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400 flex justify-between"><span>残り枠</span><span className="font-mono font-semibold text-slate-700 dark:text-slate-200">{slots}h</span></div>
+                                <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400 flex justify-between"><span>残り必要時数</span><span className="font-mono font-semibold text-slate-700 dark:text-slate-200">{need}h</span></div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
                     {/* 今年度の累計実施時数 */}
                     <div className="mb-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 shadow-sm">
                       <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
@@ -6286,6 +6574,11 @@
                       <h3 className="text-lg font-black text-slate-800 mb-2 flex items-center gap-2">🔌 接続チェック</h3>
                       <p className="text-xs text-slate-600 mb-4 font-bold leading-relaxed">学校のChromebookなどで「アクセスがブロックされました」と出るときに使います。アプリが使っている接続先をひとつずつ試して、どこが止められているかを調べます。</p>
                       <button onClick={()=>setShowConnCheck(true)} className="w-full bg-slate-800 text-white py-2.5 rounded-xl font-black text-sm hover:bg-slate-900 transition-colors">接続チェックを実行</button>
+                      <div className="mt-4 pt-4 border-t border-slate-200">
+                        <h4 className="text-sm font-black text-slate-800 mb-1">🧹 キャッシュの修復</h4>
+                        <p className="text-xs text-slate-600 mb-3 font-bold leading-relaxed">データが古いまま更新されない・読み込みが終わらないときに使います。端末内のキャッシュだけを削除し、クラウドから読み直します（オンライン時のみ）。</p>
+                        <button onClick={repairLocalCache} className="w-full bg-white text-slate-700 border border-slate-300 py-2.5 rounded-xl font-black text-sm hover:bg-slate-100 transition-colors">🧹 キャッシュを修復して再読み込み</button>
+                      </div>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
