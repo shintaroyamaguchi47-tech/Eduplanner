@@ -204,8 +204,8 @@
           '',
           'React: ' + (typeof React !== 'undefined' ? '読み込み済み' : '未読み込み'),
           'ReactDOM: ' + (typeof ReactDOM !== 'undefined' ? '読み込み済み' : '未読み込み'),
-          'Babel: ' + (typeof Babel !== 'undefined' ? '読み込み済み' : '未読み込み'),
-          'Tailwind: ' + (typeof tailwind !== 'undefined' ? '読み込み済み' : '未読み込み'),
+          'Babel: ' + (window.__EP_BUILD ? '不要（ビルド済み ' + window.__EP_BUILD + '）' : typeof Babel !== 'undefined' ? '読み込み済み' : '未読み込み'),
+          'Tailwind: ' + (window.__EP_BUILD ? 'ビルド済みCSS' : typeof tailwind !== 'undefined' ? '読み込み済み' : '未読み込み'),
           '画面の描画: ' + (window.__appMounted ? '完了' : '未完了')
         ];
         if (window.__bootErrors.length) {
@@ -239,9 +239,9 @@
         el('boot-actions').style.display = 'flex';
       }
 
-      // 起動を止めるもの（React・Babel・Tailwind）だけを失敗として扱う。
+      // 起動を止めるもの（React・Babel・Tailwind、ビルド版では /assets/ のファイル）だけを失敗として扱う。
       // フォントや Google 連携が落ちてもアプリ自体は動くので、記録だけして待つ
-      function isCritical(url) { return /react|babel|tailwindcss/i.test(url); }
+      function isCritical(url) { return /react|babel|tailwindcss|\/assets\//i.test(url); }
 
       function recordError(message, fatal) {
         window.__bootErrors.push(String(message).slice(0, 300));
@@ -614,7 +614,8 @@
     // ============================
     // 接続チェック（学校のフィルタで何が止められているかを調べる）
     // ============================
-    const CONNECTION_TARGETS = [
+    // ビルド済みの公開版（window.__EP_BUILD あり）は React と見た目のCSSをアプリと同じ場所から配るので、unpkg / Tailwind CDN は使わない
+    const CONNECTION_TARGETS_ALL = [
       { key:'app',        label:'アプリ本体',              need:'required', host:() => location.host,            url:() => `${location.origin}/?connCheck=${Date.now()}`,                                                              note:'ここが×だと、アプリそのものが開けません。' },
       { key:'unpkg',      label:'React（画面の土台）',      need:'required', host:'unpkg.com',                    url:'https://unpkg.com/react@18.3.1/umd/react.production.min.js',                                                     note:'×だと画面が真っ白のままになります。' },
       { key:'tailwind',   label:'Tailwind CSS（見た目）',   need:'required', host:'cdn.tailwindcss.com',          url:'https://cdn.tailwindcss.com/3.4.17',                                                                             note:'×だとレイアウトが大きく崩れます。' },
@@ -628,6 +629,7 @@
       { key:'gtasks',     label:'Google ToDo同期',          need:'optional', host:'tasks.googleapis.com',         url:'https://tasks.googleapis.com/$discovery/rest?version=v1',                                                        note:'×だとToDoの同期ができません。' },
       { key:'gcalweb',    label:'「カレンダーに追加」ボタン', need:'optional', host:'calendar.google.com',          url:'https://calendar.google.com/calendar/render',                                                                    note:'×だと、このボタンを押したときに新しいタブでブロック画面が出ます。' },
     ];
+    const CONNECTION_TARGETS = window.__EP_BUILD ? CONNECTION_TARGETS_ALL.filter(t => t.key !== 'unpkg' && t.key !== 'tailwind') : CONNECTION_TARGETS_ALL;
 
     const probeUrl = async (url, timeoutMs = 7000) => {
       const controller = new AbortController();
