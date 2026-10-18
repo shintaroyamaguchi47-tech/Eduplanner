@@ -1544,6 +1544,8 @@
       const gisTokenResolveRef = useRef(null);
       const googleCalAutoSyncFiredRef = useRef(false);
       const googleDeviceOffRef = useRef(googleDeviceOff);
+      // 取得したGoogleの許可（アクセストークン）。期限内なら使い回して、許可画面を何度も開かずに済ませる
+      const googleTokenCacheRef = useRef(null);
       const googleCalSyncInFlightRef = useRef(false);
       const todoSyncSignatureRef = useRef(null);
 
@@ -1712,6 +1714,18 @@
         gisTokenClientRef.current = client;
         gisTokenClientIdRef.current = cacheKey;
         return client;
+      };
+
+      // iPhone・iPadのSafariは、ボタンを押したとき以外に開くポップアップを必ずブロックする。
+      // iPadOSはMacと同じ名前を名乗るので、タッチ操作できるかどうかで見分ける
+      const isIOSDevice = /iPhone|iPad|iPod/.test(navigator.userAgent || '')
+        || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+      const getCachedGoogleToken = (scope) => {
+        const cached = googleTokenCacheRef.current;
+        if (!cached || cached.expiresAt <= Date.now()) return null;
+        const granted = (cached.scope || '').split(' ');
+        return scope.split(' ').every(s => granted.includes(s)) ? cached.resp : null;
       };
 
       const disableGoogleOnThisDevice = (reason) => {
@@ -2456,13 +2470,20 @@
         try {
           const useTasks = tasksEnabled === undefined ? googleTasksSync : tasksEnabled;
           const scope = useTasks ? `${GCAL_SCOPE} ${GTASKS_SCOPE}` : GCAL_SCOPE;
-          let tokenResp = await requestGoogleToken(silent ? '' : 'consent', scope);
+          let tokenResp = getCachedGoogleToken(scope);
+          // iPhone・iPadでは、自動同期で許可画面を開いても必ずブロックされる。
+          // 「今すぐ同期」で許可を取るまで自動同期は何もしない（連携を止める必要はない）
+          if (!tokenResp && silent && isIOSDevice) return false;
+          if (!tokenResp) tokenResp = await requestGoogleToken(silent ? '' : 'consent', scope);
           if (!tokenResp || tokenResp.error || !tokenResp.access_token) {
             const reason = tokenResp?.error;
             const closed = reason === 'popup_closed' || reason === 'popup_failed_to_open';
             // 自動同期は本来ポップアップを開かずに済む。開いて失敗したということは、
-            // この端末では許可を取れない。繰り返すたびにブロック画面が開くので、ここで止める
-            if (silent && reason !== 'no_client_id' && reason !== 'gis_not_ready') {
+            // この端末では許可を取れない。繰り返すたびにブロック画面が開くので、ここで止める。
+            // ただし通信が遅いだけのときや、自分で「使う」に戻した端末では止めない
+            let userChoseOn = false;
+            try { userChoseOn = localStorage.getItem('eduplanner_googleDeviceOff') === '0'; } catch (e) {}
+            if (silent && !userChoseOn && reason !== 'no_client_id' && reason !== 'gis_not_ready' && reason !== 'token_timeout') {
               disableGoogleOnThisDevice('この端末では、Googleの許可を自動で取得できませんでした。学校のアカウントでは、管理者が外部アプリとの連携を止めていることがあります。同期したいときは「今すぐ同期」を押してください');
               return false;
             }
@@ -2477,6 +2498,9 @@
             return false;
           }
           const token = tokenResp.access_token;
+          // 期限の1分前までは使い回す
+          const expiresIn = Number(tokenResp.expires_in) || 3600;
+          googleTokenCacheRef.current = { resp: tokenResp, scope: tokenResp.scope || scope, expiresAt: Date.now() + (expiresIn - 60) * 1000 };
           // タスクの権限が許可されなかった場合は、TODOは従来どおりカレンダーの予定として登録する
           const tasksGranted = useTasks && (tokenResp.scope || '').split(' ').includes(GTASKS_SCOPE);
           if (useTasks && !tasksGranted && !silent) {
@@ -2625,6 +2649,8 @@
 
           if (failedCount > 0) {
             console.error('Google Calendar sync partial failure:', lastFailure);
+            // 許可が取り消された・期限切れの可能性があるので、次回は取り直す
+            googleTokenCacheRef.current = null;
             recordSyncError(`${failedCount}件の予定を反映できませんでした。${describeSyncError(lastFailure)}`);
             if (!silent) showToast(`${failedCount}件の予定を反映できませんでした。設定画面の表示を確認してください`);
             return false;
@@ -2644,6 +2670,7 @@
           return true;
         } catch (e) {
           console.error('Google Calendar sync error:', e);
+          googleTokenCacheRef.current = null;
           recordSyncError(describeSyncError(e?.message || e));
           if (!silent) showToast('カレンダー同期中にエラーが発生しました');
           return false;
@@ -2670,6 +2697,7 @@
       const handleDisconnectGoogleCalendar = () => {
         setGoogleCalConnected(false);
         gisTokenClientRef.current = null;
+        googleTokenCacheRef.current = null;
         // 読み込み済みのGoogleカレンダーの予定も消す（解除したのに残り続けないように）
         setGcalImported({});
         try {
