@@ -507,6 +507,41 @@
     const parseUnits = (text) => { if(!text) return []; return text.split('\n').filter(l=>l.trim()!=='').map(l => { const p=l.split(','); return {name:p[0]?.trim()||'',hours:parseInt(p[1])||1}; }); };
     const formatUnits = (units) => { if(!units) return ''; return units.map(u=>`${u.name},${u.hours}`).join('\n'); };
 
+    // ── 年度の切り替え ──
+    // 前年度の行事を新年度へ写す。mode==='weekday' は52週（364日）後の同じ曜日へ、'date' は月日そのまま。
+    // 4/1付近で前年度側にはみ出す日は1週あとへ送る。同じ日に重なったら改行でつなぐ
+    const shiftYearlyEvents = (prevMap, prevY, y, mode) => {
+      const events = {}; const onHoliday = []; const dropped = [];
+      Object.keys(prevMap || {}).forEach(key => {
+        const text = String(prevMap[key] || '').trim(); if (!text) return;
+        const [m, d] = key.split('-').map(Number); if (!m || !d) return;
+        let nd;
+        if (mode === 'weekday') {
+          nd = new Date(prevY + (m < 4 ? 1 : 0), m - 1, d + 364);
+          if (getSchoolYearOf(formatDate(nd)) < y) nd.setDate(nd.getDate() + 7);
+        } else {
+          nd = new Date(y + (m < 4 ? 1 : 0), m - 1, d);
+          if (nd.getMonth() !== m - 1) { dropped.push(`${m}/${d}`); return; }
+        }
+        const nm = nd.getMonth() + 1, nday = nd.getDate(), nk = `${nm}-${nday}`;
+        events[nk] = events[nk] ? `${events[nk]}\n${text}` : text;
+        const hol = getHolidayName(nd.getFullYear(), nm, nday);
+        if (hol) onHoliday.push(`${nm}/${nday}（${hol.replace(/^🎌\s*/, '')}）${text.split('\n')[0]}`);
+      });
+      return { events, onHoliday, dropped };
+    };
+    const YEAR_SETUP_VACATION_NAMES = ['夏季休業', '冬季休業', '学年末休業'];
+    const vacationsOfYear = (vacs, y) => (vacs || []).filter(v => v.start && getSchoolYearOf(v.start) === y);
+    const shiftDateByYear = (ds, n) => { const [yy, m, d] = ds.split('-').map(Number); const dt = new Date(yy + n, m - 1, d); if (dt.getMonth() !== m - 1) dt.setDate(0); return formatDate(dt); };
+    // 新年度セットアップの長期休業欄の初期値。登録済みならそれを、なければ前年度の同じ名前の休業を1年ずらした推定値を出す
+    const suggestYearVacations = (vacs, y) => YEAR_SETUP_VACATION_NAMES.map(name => {
+      const cur = vacationsOfYear(vacs, y).find(v => v.name === name);
+      if (cur) return { name, start: cur.start, end: cur.end, existingId: cur.id };
+      const prev = vacationsOfYear(vacs, y - 1).find(v => v.name === name);
+      if (prev) return { name, start: shiftDateByYear(prev.start, 1), end: shiftDateByYear(prev.end, 1), guessed: true };
+      return { name, start: '', end: '' };
+    });
+
 
     // 内容に基づく色分け（授業/会議/特別活動/テスト等）
     const CONTENT_COLORS = {
@@ -1443,7 +1478,8 @@
       const [autoBackupCount, setAutoBackupCount] = useState(() => { try { return JSON.parse(localStorage.getItem('ep_auto_backups') || '[]').length; } catch(e) { return 0; } });
       const [showYearSetup, setShowYearSetup] = useState(false);
       const [yearSetupTarget, setYearSetupTarget] = useState(() => { const t = getJSTDate(); return (t.getMonth() + 1 < 4 ? t.getFullYear() - 1 : t.getFullYear()) + 1; });
-      const [yearSetupOpts, setYearSetupOpts] = useState({ backup: true, template: true, events: false, syllabus: true, todos: true });
+      const [yearSetupOpts, setYearSetupOpts] = useState({ backup: true, template: true, events: false, eventMode: 'weekday', syllabus: true, todos: true });
+      const [yearSetupNudgeOff, setYearSetupNudgeOff] = useState(() => { try { return localStorage.getItem('eduplanner_yearSetupNudgeOff') || ''; } catch (e) { return ''; } });
       const [yearSetupVacs, setYearSetupVacs] = useState([{ name: '夏季休業', start: '', end: '' }, { name: '冬季休業', start: '', end: '' }, { name: '学年末休業', start: '', end: '' }]);
       const [yearSetupResult, setYearSetupResult] = useState(null);
       const pendingCloudSavesRef = useRef({});
@@ -3390,20 +3426,59 @@
         reader.readAsText(file);
       };
 
-      // 年度が変わるときの準備をまとめて行う。過去の年度の週案・記録には手を触れない
+      // 年度ごとの準備の進み具合。セットアップ画面の表示と、二度目の実行で記録を消さないための判定に使う
+      const countYearEvents = (y) => Object.values(yearlyData[y] || {}).filter(t => t && String(t).trim()).length;
+      const getYearSetupStatus = (y) => ({
+        template: isYearKeyedMap(baseTemplate) && !!baseTemplate.years[String(y)],
+        events: countYearEvents(y),
+        prevEvents: countYearEvents(y - 1),
+        vacations: vacationsOfYear(vacations, y).length,
+        syllabusArchived: syllabusData.some(s => s.progressArchive?.[String(y - 1)]),
+      });
+      // 1〜3月は翌年度、4〜5月でまだ準備していなければ今年度を勧める
+      const suggestSetupYear = () => {
+        const sy = getSchoolYearOf(todayStr); const m = Number(todayStr.slice(5, 7));
+        return (m >= 4 && m <= 5 && !getYearSetupStatus(sy).template) ? sy : sy + 1;
+      };
+      const openYearSetup = (y = suggestSetupYear()) => {
+        const st = getYearSetupStatus(y);
+        setYearSetupResult(null);
+        setYearSetupTarget(y);
+        setYearSetupOpts(o => ({ ...o, events: st.events === 0 && st.prevEvents > 0, syllabus: !st.syllabusArchived }));
+        setYearSetupVacs(suggestYearVacations(vacations, y));
+        setShowYearSetup(true);
+      };
+      // 2〜3月は翌年度、4〜5月は今年度の準備が済んでいなければダッシュボードで声をかける
+      const yearSetupNudgeYear = (() => {
+        if (dataLoadStatus !== 'loaded' && dataLoadStatus !== 'local') return null;
+        const m = Number(todayStr.slice(5, 7)); if (m < 2 || m > 5) return null;
+        const y = getSchoolYearOf(todayStr) + (m <= 3 ? 1 : 0);
+        if (getYearSetupStatus(y).template || yearSetupNudgeOff === String(y)) return null;
+        return y;
+      })();
+      const dismissYearSetupNudge = (y) => { setYearSetupNudgeOff(String(y)); try { localStorage.setItem('eduplanner_yearSetupNudgeOff', String(y)); } catch (e) {} };
+
+      // 年度が変わるときの準備をまとめて行う。過去の年度の週案・記録には手を触れない。
+      // 何度実行しても、すでに済んでいる項目は二重に登録したり新年度の記録を消したりしない
       const runYearSetup = () => {
         const y = Number(yearSetupTarget);
         if (!Number.isFinite(y)) return;
-        if (!window.confirm(`${y}年度の準備を実行します。よろしいですか？`)) return;
-        const done = [];
+        const st = getYearSetupStatus(y);
+        const warn = [];
+        if (yearSetupOpts.syllabus && st.syllabusArchived) warn.push(`単元計画の進度は${y}年度向けにリセット済みです。もう一度リセットすると、${y}年度に進めた分が最初に戻ります。`);
+        if (!window.confirm([`${y}年度の準備を実行します。よろしいですか？`, ...warn].join('\n\n'))) return;
+        const done = []; const notes = [];
 
         if (yearSetupOpts.backup) { exportData(); done.push('データをダウンロードしました'); }
 
         if (yearSetupOpts.template) {
-          const nt = setYearMap(baseTemplate, y, { ...resolveYearMap(baseTemplate, y, {}) });
-          const ns = setYearMap(templateSettings, y, { ...resolveYearMap(templateSettings, y, DEFAULT_TEMPLATE_SETTINGS) });
-          saveAll(nt, ns, weeklyData, weeklySettings);
-          done.push(`${y}年度の基本時間割・日課を切り出しました（内容は前年度のまま）`);
+          if (st.template) done.push(`${y}年度の基本時間割・日課はすでに切り出してあるので、そのままにしました`);
+          else {
+            const nt = setYearMap(baseTemplate, y, { ...resolveYearMap(baseTemplate, y, {}) });
+            const ns = setYearMap(templateSettings, y, { ...resolveYearMap(templateSettings, y, DEFAULT_TEMPLATE_SETTINGS) });
+            saveAll(nt, ns, weeklyData, weeklySettings);
+            done.push(`${y}年度の基本時間割・日課を切り出しました（内容は前年度のまま）`);
+          }
         }
 
         if (yearSetupOpts.todos) {
@@ -3414,28 +3489,62 @@
 
         let nextYearly = yearlyData;
         if (yearSetupOpts.events) {
-          const prev = yearlyData[y - 1] || yearlyData[String(y - 1)];
-          if (prev) { nextYearly = { ...yearlyData, [y]: { ...prev, ...(yearlyData[y] || {}) } }; done.push(`${y - 1}年度の年間行事を${y}年度にコピーしました（曜日のずれは年間タブで直してください）`); }
-          else done.push(`${y - 1}年度の年間行事が見つかりませんでした`);
+          const prev = yearlyData[y - 1];
+          if (prev && st.prevEvents) {
+            const { events, onHoliday, dropped } = shiftYearlyEvents(prev, y - 1, y, yearSetupOpts.eventMode);
+            const cur = {}; Object.keys(yearlyData[y] || {}).forEach(k => { if (String(yearlyData[y][k] || '').trim()) cur[k] = yearlyData[y][k]; });
+            const kept = Object.keys(events).filter(k => cur[k]).length;
+            nextYearly = { ...yearlyData, [y]: { ...(yearlyData[y] || {}), ...events, ...cur } };
+            done.push(`${y - 1}年度の年間行事${Object.keys(events).length - kept}日分を${yearSetupOpts.eventMode === 'weekday' ? '同じ曜日に合わせて' : '月日そのままで'}コピーしました`);
+            if (kept) notes.push(`${kept}日はすでに${y}年度の予定が入っていたので、そちらを残しました`);
+            if (onHoliday.length) notes.push(`祝日と重なった行事があります。年間タブで日付を確かめてください：${onHoliday.slice(0, 8).join('、')}${onHoliday.length > 8 ? ` ほか${onHoliday.length - 8}件` : ''}`);
+            if (dropped.length) notes.push(`${dropped.join('、')}の行事は${y}年度に同じ日付がないためコピーしませんでした`);
+          } else done.push(`${y - 1}年度の年間行事が見つかりませんでした`);
         }
 
-        const addVacs = yearSetupVacs
-          .filter(v => v.start && v.end)
-          .map((v, i) => ({ id: `vac-${y}-${i}-${Date.now()}`, name: v.name, start: v.start, end: v.end }));
-        const nextVacations = addVacs.length ? [...vacations, ...addVacs] : vacations;
-        if (addVacs.length) done.push(`長期休業を${addVacs.length}件追加しました`);
+        let nextVacations = vacations; let added = 0, updated = 0;
+        yearSetupVacs.forEach((v, i) => {
+          if (!v.start || !v.end) return;
+          if (v.start > v.end) { notes.push(`${v.name}は終わりの日が始まりの日より前なので登録しませんでした`); return; }
+          if (getSchoolYearOf(v.start) !== y) notes.push(`${v.name}の始まり（${v.start}）が${y}年度の外になっています`);
+          const same = nextVacations.find(x => v.existingId && x.id === v.existingId) || vacationsOfYear(nextVacations, y).find(x => x.name === v.name);
+          if (same) {
+            if (same.start !== v.start || same.end !== v.end) { nextVacations = nextVacations.map(x => x === same ? { ...x, start: v.start, end: v.end } : x); updated++; }
+          } else { nextVacations = [...nextVacations, { id: `vac-${y}-${i}-${Date.now()}`, name: v.name, start: v.start, end: v.end }]; added++; }
+        });
+        if (added) done.push(`長期休業を${added}件追加しました`);
+        if (updated) done.push(`登録済みの長期休業${updated}件の日付を直しました`);
 
         if (nextYearly !== yearlyData || nextVacations !== vacations) saveExtraData(nextYearly, documents, nextVacations);
 
         if (yearSetupOpts.syllabus) {
-          const reset = syllabusData.map(sub => ({ ...sub, currentUnitIdx: 0, currentHour: 1, classProgress: {} }));
-          saveSyllabus(reset);
-          done.push(`単元計画${reset.length}件の進度をリセットしました`);
+          // 前年度末の進度は progressArchive に残してから最初に戻す（あとから「前年度の進度に戻す」で復元できる）
+          const key = String(y - 1);
+          let count = 0;
+          const reset = syllabusData.map(sub => {
+            if (sub.type !== 'auto') return sub;
+            count++;
+            const archived = sub.progressArchive?.[key] || { currentUnitIdx: sub.currentUnitIdx || 0, currentHour: sub.currentHour || 1, classProgress: sub.classProgress || {} };
+            return { ...sub, progressArchive: { ...(sub.progressArchive || {}), [key]: archived }, currentUnitIdx: 0, currentHour: 1, classProgress: {} };
+          });
+          if (count) { saveSyllabus(reset); done.push(`単元計画${count}件の進度をリセットしました（${y - 1}年度末の進度は保管してあります）`); }
+          else done.push('リセットする単元計画はありませんでした');
         }
 
-        setYearSetupResult({ year: y, done });
-        setYearSetupVacs(yearSetupVacs.map(v => ({ ...v, start: '', end: '' })));
+        setYearSetupResult({ year: y, done, notes });
         showToast(`🌸 ${y}年度の準備が完了しました`);
+      };
+
+      // 新年度セットアップでリセットした単元計画の進度を、保管しておいた前年度末の状態に戻す
+      const restoreSyllabusProgress = (y) => {
+        const key = String(y - 1);
+        if (!window.confirm(`単元計画の進度を${y - 1}年度末の状態に戻します。${y}年度に進めた分は失われます。よろしいですか？`)) return;
+        saveSyllabus(syllabusData.map(s => {
+          const a = s.progressArchive?.[key]; if (!a) return s;
+          const { [key]: _, ...restArchive } = s.progressArchive;
+          return { ...s, currentUnitIdx: a.currentUnitIdx || 0, currentHour: a.currentHour || 1, classProgress: a.classProgress || {}, progressArchive: restArchive };
+        }));
+        showToast(`📚 単元計画の進度を${y - 1}年度末の状態に戻しました`);
       };
 
       const isYearlyHoliday = (ds, yData) => isHolidayEventText(getYearlyEventText(yData, ds));
@@ -4016,7 +4125,9 @@
       // 今週以降・学年末まで全週を自動入力
       const handleAutoFillAllWeeks = () => {
         if (syllabusData.length === 0) { showToast('進度データがありません'); return; }
-        const endDate = new Date(schoolYear + 1, 2, 20); // 学年末休業開始日（3/20）
+        // 開いている週の年度の学年末休業の初日まで。登録がなければ3/20
+        const yearEndVac = vacationsOfYear(vacations, templateSchoolYear).find(v => v.name === '学年末休業');
+        const endDate = yearEndVac ? new Date(`${yearEndVac.start}T00:00:00`) : new Date(templateSchoolYear + 1, 2, 20);
         const weeksCount = Math.ceil((endDate - currentWeekStart) / (7 * 24 * 60 * 60 * 1000));
         if (!window.confirm(`今週から学年末まで（約${weeksCount}週分）の授業を自動入力します。\n既に入力済みのコマは上書きしません。\nよろしいですか？`)) return;
 
@@ -5102,6 +5213,16 @@
 
           <div className="flex-1 min-h-0 relative flex flex-col bg-[var(--paper)] dark:bg-slate-900">
 
+            {activeTab === 'dashboard' && yearSetupNudgeYear && (
+              <div className="mx-3 mt-3 sm:mx-6 sm:mt-4 flex items-center gap-2 bg-pink-50 dark:bg-pink-900/30 border border-pink-200 dark:border-pink-800 rounded-2xl px-4 py-3 shadow-sm">
+                <span className="text-lg shrink-0">🌸</span>
+                <div className="flex-1 min-w-0 text-xs font-bold text-pink-900 dark:text-pink-100 leading-relaxed">
+                  {yearSetupNudgeYear}年度の準備がまだです。時間割の切り出し・行事のコピー・長期休業の登録をまとめて行えます。
+                </div>
+                <button onClick={() => openYearSetup(yearSetupNudgeYear)} className="shrink-0 bg-pink-600 text-white px-3 py-1.5 rounded-xl text-xs font-black shadow-sm hover:bg-pink-700">準備する</button>
+                <button onClick={() => dismissYearSetupNudge(yearSetupNudgeYear)} className="shrink-0 text-pink-400 hover:text-pink-600 font-black px-1" aria-label="閉じる">×</button>
+              </div>
+            )}
             {activeTab === 'dashboard' && <Dashboard weeklyData={weeklyData} baseTemplate={baseTemplate} todos={todos} syllabusData={syllabusData} yearlyData={yearlyData} vacations={vacations} weeklySettings={weeklySettings} templateSettings={templateSettings} gcalEvents={gcalImported[todayStr] || []} onGoToWeekly={()=>setActiveTab('weekly')} onGoToDate={d=>setSelectedDateDetails({dateStr:formatDate(d),dateObj:d})} onDeleteTodo={(id)=>saveTodos(todos.filter(td=>td.id!==id))} onToggleTodo={(id)=>saveTodos(todos.map(td=>td.id===id?{...td,completed:!td.completed}:td))} />}
             {activeTab === 'field' && <FieldMode weeklyData={weeklyData} baseTemplate={baseTemplate} todos={todos} yearlyData={yearlyData} vacations={vacations} weeklySettings={weeklySettings} templateSettings={templateSettings} onGoToWeekly={()=>setActiveTab('weekly')} onToggleTodo={(id)=>saveTodos(todos.map(td=>td.id===id?{...td,completed:!td.completed}:td))} />}
             
@@ -6262,7 +6383,7 @@
                         <h3 className="text-lg font-black text-pink-900 mb-2 flex items-center gap-2">🌸 新年度セットアップ</h3>
                         <p className="text-xs text-slate-600 mb-4 font-bold">年度が変わるときの準備をまとめて行います。基本時間割の引き継ぎ、単元計画の進度リセット、長期休業の登録など。過去の年度の週案はそのまま残ります。</p>
                         <div className="mt-auto">
-                          <button onClick={() => { setYearSetupResult(null); setYearSetupTarget(getSchoolYearOf(todayStr) + 1); setShowYearSetup(true); }} className="w-full bg-pink-600 text-white py-2.5 rounded-xl font-black shadow-md hover:bg-pink-700 transition-colors">
+                          <button onClick={() => openYearSetup()} className="w-full bg-pink-600 text-white py-2.5 rounded-xl font-black shadow-md hover:bg-pink-700 transition-colors">
                             🌸 新年度の準備をする
                           </button>
                         </div>
@@ -7516,6 +7637,9 @@
                       {yearSetupResult.done.map((line, i) => (
                         <li key={i} className="text-xs font-bold text-slate-700 dark:text-slate-200 bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700 rounded-xl p-3 leading-relaxed">✅ {line}</li>
                       ))}
+                      {(yearSetupResult.notes || []).map((line, i) => (
+                        <li key={`n${i}`} className="text-xs font-bold text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700 rounded-xl p-3 leading-relaxed">⚠️ {line}</li>
+                      ))}
                     </ul>
                     <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 leading-relaxed">
                       このあと、基本タブで{yearSetupResult.year}年度の時間割を組み替え、年間タブで行事予定を入れてください。前年度までの週案はそのまま残っています。
@@ -7528,20 +7652,43 @@
                       <div className="flex items-center gap-3">
                         <span className="text-sm font-black text-slate-700 dark:text-slate-200">対象年度</span>
                         <div className="flex items-center bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-xl">
-                          <button onClick={() => setYearSetupTarget(y => Number(y) - 1)} className="px-3 py-1.5 font-black text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-l-xl">◀</button>
+                          <button onClick={() => openYearSetup(Number(yearSetupTarget) - 1)} className="px-3 py-1.5 font-black text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-l-xl">◀</button>
                           <span className="px-3 text-sm font-black text-slate-800 dark:text-slate-100">{yearSetupTarget}年度</span>
-                          <button onClick={() => setYearSetupTarget(y => Number(y) + 1)} className="px-3 py-1.5 font-black text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-r-xl">▶</button>
+                          <button onClick={() => openYearSetup(Number(yearSetupTarget) + 1)} className="px-3 py-1.5 font-black text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-r-xl">▶</button>
                         </div>
                       </div>
                       <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 leading-relaxed">
                         {yearSetupTarget}年4月〜{Number(yearSetupTarget) + 1}年3月の準備をします。前年度までの週案・記録は書き換わりません。
                       </p>
 
+                      {(() => {
+                        const y = Number(yearSetupTarget); const st = getYearSetupStatus(y);
+                        const rows = [
+                          [st.template, st.template ? '基本時間割・日課は切り出し済み' : '基本時間割・日課はまだ前年度と共通'],
+                          [st.events > 0, st.events > 0 ? `年間行事 ${st.events}日分が登録済み` : `年間行事はまだありません（${y - 1}年度は${st.prevEvents}日分）`],
+                          [st.vacations > 0, st.vacations > 0 ? `長期休業 ${st.vacations}件が登録済み` : '長期休業はまだ登録されていません'],
+                          [st.syllabusArchived, st.syllabusArchived ? '単元計画の進度はリセット済み（前年度末の進度を保管中）' : '単元計画の進度は前年度から続いたまま'],
+                        ];
+                        return (
+                          <div className="border border-slate-200 dark:border-slate-700 rounded-xl p-3 space-y-1.5">
+                            <div className="text-xs font-black text-slate-700 dark:text-slate-200">{y}年度の準備状況</div>
+                            {rows.map(([ok, label], i) => (
+                              <div key={i} className={`text-[11px] font-bold flex items-start gap-1.5 ${ok ? 'text-emerald-700 dark:text-emerald-300' : 'text-slate-500 dark:text-slate-400'}`}>
+                                <span className="shrink-0">{ok ? '✓' : '・'}</span><span>{label}</span>
+                              </div>
+                            ))}
+                            {st.syllabusArchived && (
+                              <button onClick={() => restoreSyllabusProgress(y)} className="mt-1 text-[11px] font-black text-blue-600 dark:text-blue-300 underline">単元計画の進度を{y - 1}年度末の状態に戻す</button>
+                            )}
+                          </div>
+                        );
+                      })()}
+
                       {[
                         ['backup', '今のデータをJSONでダウンロードして保存する'],
                         ['template', `基本時間割と曜日ごとの日課を${yearSetupTarget}年度用に切り出す（中身は前年度のまま。あとから組み替えても前年度に影響しません）`],
-                        ['events', `${Number(yearSetupTarget) - 1}年度の年間行事を月日そのままコピーする（曜日のずれは後で直す）`],
-                        ['syllabus', '単元計画の進度をリセットする（教科・単元・クラスはそのまま残ります）'],
+                        ['events', `${Number(yearSetupTarget) - 1}年度の年間行事をコピーする（${Number(yearSetupTarget)}年度に入っている予定は上書きしません）`],
+                        ['syllabus', `単元計画の進度をリセットする（教科・単元・クラスはそのまま。${Number(yearSetupTarget) - 1}年度末の進度は保管され、あとで戻せます）`],
                         ['todos', '完了済みのTODOを削除する'],
                       ].map(([key, label]) => (
                         <label key={key} className="flex items-start gap-3 bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700 rounded-xl p-3 cursor-pointer">
@@ -7550,14 +7697,32 @@
                         </label>
                       ))}
 
+                      {yearSetupOpts.events && (
+                        <div className="border border-slate-200 dark:border-slate-700 rounded-xl p-3 space-y-2">
+                          <div className="text-xs font-black text-slate-700 dark:text-slate-200">行事のコピーのしかた</div>
+                          {[
+                            ['weekday', '曜日に合わせる（おすすめ）', '前年の同じ週の同じ曜日へずらします。例：火曜の始業式は翌年も火曜に入ります'],
+                            ['date', '月日そのまま', '4/7の行事は4/7へ。曜日がずれるので年間タブで直します'],
+                          ].map(([mode, title, desc]) => (
+                            <label key={mode} className="flex items-start gap-2 cursor-pointer">
+                              <input type="radio" name="yearSetupEventMode" checked={yearSetupOpts.eventMode === mode} onChange={() => setYearSetupOpts(o => ({ ...o, eventMode: mode }))} className="mt-0.5 accent-blue-600 shrink-0" />
+                              <span className="text-[11px] font-bold text-slate-700 dark:text-slate-200 leading-relaxed"><span className="font-black">{title}</span>：{desc}</span>
+                            </label>
+                          ))}
+                        </div>
+                      )}
+
                       <div className="border border-slate-200 dark:border-slate-700 rounded-xl p-3 space-y-2">
-                        <div className="text-xs font-black text-slate-700 dark:text-slate-200">長期休業（日付を入れた分だけ追加します）</div>
+                        <div className="text-xs font-black text-slate-700 dark:text-slate-200">長期休業（日付を入れた分だけ登録します。同じ名前の休業が{yearSetupTarget}年度にあれば日付を直します）</div>
+                        {yearSetupVacs.some(v => v.guessed) && (
+                          <div className="text-[10px] font-bold text-amber-700 dark:text-amber-300 leading-relaxed">「推定」は前年度の日付を1年ずらしたものです。学校の年間計画と照らし合わせてください。</div>
+                        )}
                         {yearSetupVacs.map((v, i) => (
                           <div key={v.name} className="flex items-center gap-1.5">
-                            <span className="text-[11px] font-black text-slate-600 dark:text-slate-300 w-16 shrink-0">{v.name}</span>
-                            <input type="date" value={v.start} onChange={e => setYearSetupVacs(list => list.map((x, ix) => ix === i ? { ...x, start: e.target.value } : x))} className="flex-1 min-w-0 text-[11px] font-bold border border-slate-300 dark:border-slate-600 rounded-lg p-1.5 bg-white dark:bg-slate-900 dark:text-slate-100 outline-none focus:border-blue-400" />
+                            <span className="text-[11px] font-black text-slate-600 dark:text-slate-300 w-16 shrink-0 leading-tight">{v.name}{v.guessed && <span className="block text-[9px] text-amber-600 dark:text-amber-300">推定</span>}{v.existingId && <span className="block text-[9px] text-emerald-600 dark:text-emerald-300">登録済み</span>}</span>
+                            <input type="date" value={v.start} onChange={e => setYearSetupVacs(list => list.map((x, ix) => ix === i ? { ...x, start: e.target.value, guessed: false } : x))} className="flex-1 min-w-0 text-[11px] font-bold border border-slate-300 dark:border-slate-600 rounded-lg p-1.5 bg-white dark:bg-slate-900 dark:text-slate-100 outline-none focus:border-blue-400" />
                             <span className="text-[11px] font-bold text-slate-400">〜</span>
-                            <input type="date" value={v.end} onChange={e => setYearSetupVacs(list => list.map((x, ix) => ix === i ? { ...x, end: e.target.value } : x))} className="flex-1 min-w-0 text-[11px] font-bold border border-slate-300 dark:border-slate-600 rounded-lg p-1.5 bg-white dark:bg-slate-900 dark:text-slate-100 outline-none focus:border-blue-400" />
+                            <input type="date" value={v.end} onChange={e => setYearSetupVacs(list => list.map((x, ix) => ix === i ? { ...x, end: e.target.value, guessed: false } : x))} className="flex-1 min-w-0 text-[11px] font-bold border border-slate-300 dark:border-slate-600 rounded-lg p-1.5 bg-white dark:bg-slate-900 dark:text-slate-100 outline-none focus:border-blue-400" />
                           </div>
                         ))}
                       </div>
