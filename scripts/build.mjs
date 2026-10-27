@@ -43,6 +43,14 @@ const appName = `app.${hash(code)}.js`;
 writeFileSync(join(assets, appName), code);
 html = html.slice(0, start) + `<script src="/assets/${appName}"></script>` + html.slice(end + '</script>'.length);
 
+// 1b) src/ の素の JS（JSX なし）はそのまま /assets/ にハッシュ付きで置く
+for (const name of ['calendar', 'sanitize']) {
+  const buf = readFileSync(join(root, 'src', `${name}.js`));
+  const out = `${name}.${hash(buf)}.js`;
+  writeFileSync(join(assets, out), buf);
+  html = replaceOnce(html, `<script src="src/${name}.js"></script>`, `<script src="/assets/${out}"></script>`, `src/${name}.js`);
+}
+
 // 2) Tailwind: 使っているクラスだけのCSSを作る
 const twIn = join(dist, '.tw-input.css');
 const twOut = join(dist, '.tw-output.css');
