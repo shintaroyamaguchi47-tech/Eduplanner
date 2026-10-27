@@ -1,0 +1,13 @@
+rules_version = '2';
+
+// EduPlanner のデータはすべて users/{uid}/teacherPlanner/{template|weekly|weekly_YYYY|weeklyIndex|todos|notes|syllabus|quickMemos|extra}
+// に置く。ログインした本人だけが自分の uid の下を読み書きでき、ほかの場所は誰も触れない。
+// 反映: Firebase コンソール > Firestore Database > ルール にこの内容を貼って「公開」
+//       （または firebase-tools で `firebase deploy --only firestore:rules`）
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{uid}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+  }
+}
