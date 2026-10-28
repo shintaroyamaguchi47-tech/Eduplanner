@@ -1335,6 +1335,9 @@
     // ============================
     function TeacherPlanner() {
       const [isMobile, setIsMobile] = useState(getIsMobileLayout);
+      const [mobileDayIdx, setMobileDayIdx] = useState(null); // スマホ週案の1日表示で選んでいる曜日（null=自動：今週なら今日、それ以外は月曜）
+      const dayTouchRef = useRef(null); // スマホ週案1日表示の左右スワイプ判定用
+      const daySwipeRef = useRef(0); // スワイプ直後の誤タップ（セルが開く）防止用
       const [authLoading, setAuthLoading] = useState(true);
       const [isAutoLoggingIn, setIsAutoLoggingIn] = useState(false);
       const [dataLoadStatus, setDataLoadStatus] = useState('idle');
@@ -5125,6 +5128,15 @@
         </div>
       );
 
+      // スマホの週案は1日表示にする（7日を押し込むと1日あたり約48pxになり読めないため）。
+      // デスクトップと基本タブは従来どおり全曜日を表示する。
+      const mobileDayOnly = isMobile && activeTab === 'weekly';
+      const autoMobileDayIdx = (() => { const monday = new Date(currentWeekStart); monday.setHours(0,0,0,0); const today = getJSTDate(); today.setHours(0,0,0,0); const diff = Math.round((today - monday) / 86400000); return (diff >= 0 && diff <= 6) ? diff : 0; })();
+      const effMobileDayIdx = (mobileDayIdx !== null && mobileDayIdx >= 0 && mobileDayIdx <= 6) ? mobileDayIdx : autoMobileDayIdx;
+      const visibleDayIdxs = mobileDayOnly ? [effMobileDayIdx] : DAYS.map((_, ix) => ix);
+      const weekGridCols = mobileDayOnly ? '1fr' : 'repeat(19, minmax(0, 1fr))';
+      const dayColSpan = (i) => mobileDayOnly ? '' : (i >= 5 ? 'col-span-2' : 'col-span-3');
+
       const renderRow = (row) => {
         let rh=''; let fc=''; let rb='';
         let customStyle = {};
@@ -5165,11 +5177,12 @@
               <div className={`leading-none ${isShortRow ? 'text-[11px] sm:text-sm' : 'text-sm sm:text-xl'}`}>{row.id.startsWith('p')?<span className="text-[11px] sm:text-base text-slate-600 dark:text-slate-300 font-black">{row.id.replace('p','')}</span>:row.icon}</div>
               <div className="text-[8px] sm:text-[10px] font-black text-slate-600 dark:text-slate-300 leading-none whitespace-nowrap">{row.name}</div>
             </div>
-            <div className="flex-1 grid min-w-0" style={{ gridTemplateColumns: 'repeat(19, minmax(0, 1fr))' }}>
-              {DAYS.map((day,i)=>{
+            <div className="flex-1 grid min-w-0" style={{ gridTemplateColumns: weekGridCols }}>
+              {visibleDayIdxs.map((i)=>{
+                const day=DAYS[i];
                 const cd=new Date(currentWeekStart); cd.setDate(cd.getDate()+i); const ds=formatDate(cd);
                 const data=getCellData(ds,row.id,i); const set=getDaySetting(ds,i); const isH=isNoClassType(set.type);
-                const cf=i>=5?'col-span-2':'col-span-3'; const isT=ds===todayStr;
+                const cf=dayColSpan(i); const isT=ds===todayStr;
 
                 const cellBg = (activeTab==='weekly' && isH) ? 'bg-rose-50/60 dark:bg-rose-900/10' : 'bg-transparent';
                 const overflowClass = 'overflow-hidden';
@@ -5229,7 +5242,7 @@
                   onDrop: (e) => { const raw = e.dataTransfer.getData('application/x-ep-cell'); if (!raw) return; e.preventDefault(); try { executeSwapCells(JSON.parse(raw), cellRef); } catch (err) {} setSwapSource(null); },
                 } : {};
 
-                const fontSizeClass = row.id === 'event' ? getEventFontSize(data.subject, isMobile, true) : (row.id === 'lunch' || row.id === 'morning') ? getEventFontSize(data.subject, isMobile) : getDynamicFontSize(data.subject, isMobile, activeTab === 'weekly');
+                const fontSizeClass = mobileDayOnly ? 'text-sm leading-snug' : (row.id === 'event' ? getEventFontSize(data.subject, isMobile, true) : (row.id === 'lunch' || row.id === 'morning') ? getEventFontSize(data.subject, isMobile) : getDynamicFontSize(data.subject, isMobile, activeTab === 'weekly'));
 
                 return (
                   <div key={i} {...dragProps} onClick={()=>{if(swapMode && isSwappable){handleSwapCellClick(cellRef);return;} if(isMobile && activeTab==='weekly' && hasData) openViewModal(data,ds,row,i,day,isH); else openEditModal(data,ds,row,i,day,isH,null);}} className={`min-w-0 ${cf} border-r border-slate-200/60 dark:border-slate-800 last:border-r-0 p-0.5 sm:p-1 cursor-pointer flex flex-col justify-start relative ${overflowClass} ${activeTab==='weekly'&&isT?'today-column':''} ${cellBg} ${swapMode && isSwappable ? 'hover:bg-amber-50 dark:hover:bg-amber-500/10' : 'hover:bg-slate-100/80 dark:hover:bg-slate-700/30'} ${isSwapSrc ? 'outline outline-2 outline-amber-500 -outline-offset-2 bg-amber-50/70 dark:bg-amber-500/10' : ''} transition-colors h-full`}>
@@ -5285,7 +5298,7 @@
                               // 単元計画に入力した「学習活動・内容」をコマにも出す
                               const lesson = sm ? getCellLessonInfo(data.subject) : null;
                               const lessonText = lesson?.content || '';
-                              if (isMobile && activeTab === 'weekly' && row.id.startsWith('p')) {
+                              if (isMobile && activeTab === 'weekly' && !mobileDayOnly && row.id.startsWith('p')) {
                                 const label = sm ? sm[1] : data.subject.split('\n')[0];
                                 return <div className={`text-[10px] font-extrabold ${blockText} line-clamp-2 break-words leading-tight`} title={lessonText ? `${data.subject}\n${lessonText}` : data.subject}>{label}</div>;
                               }
@@ -5303,7 +5316,7 @@
                               );
                               return <div className={`${fontSizeClass} font-bold break-words ${row.id === 'lunch' || row.id === 'morning' ? 'leading-[1.1]' : ''} ${activeTab === 'weekly' && row.id !== 'event' ? 'whitespace-pre-wrap line-clamp-3 overflow-hidden' : ''} ${blockText}`} title={data.subject}>{data.subject}</div>;
                             })()}
-                            {data.memo && row.id !== 'lunch' && <div className={`text-[8px] sm:text-[9px] font-medium mt-0.5 opacity-80 break-words leading-tight ${activeTab === 'weekly' && row.id !== 'event' ? 'line-clamp-2 overflow-hidden' : 'line-clamp-1'} ${blockText}`}>{data.memo}</div>}
+                            {data.memo && row.id !== 'lunch' && <div className={`${mobileDayOnly ? 'text-[11px]' : 'text-[8px] sm:text-[9px]'} font-medium mt-0.5 opacity-80 break-words leading-tight ${mobileDayOnly ? 'line-clamp-3 overflow-hidden' : (activeTab === 'weekly' && row.id !== 'event' ? 'line-clamp-2 overflow-hidden' : 'line-clamp-1')} ${blockText}`}>{data.memo}</div>}
                           </div>
                         )}
                       </div>
@@ -5320,6 +5333,7 @@
       const renderSpanOverlays = () => {
         const overlays = [];
         DAYS.forEach((day, i) => {
+          if (mobileDayOnly && i !== effMobileDayIdx) return;
           const d = new Date(currentWeekStart); d.setDate(d.getDate() + i);
           const dateStr = formatDate(d);
           if (isNoClassType(getDaySetting(dateStr, i).type)) return;
@@ -5335,9 +5349,9 @@
             overlays.push(
               <div key={`span-${i}-${pid}`} className="absolute left-0 right-0 z-10 pointer-events-none flex" style={{ top: r1.top, height: r2.top + r2.height - r1.top }}>
                 <div className="w-10 sm:w-16 lg:w-20 shrink-0"></div>
-                <div className="flex-1 grid min-w-0" style={{ gridTemplateColumns: 'repeat(19, minmax(0, 1fr))' }}>
-                  {DAYS.map((_, j) => {
-                    const cf = j >= 5 ? 'col-span-2' : 'col-span-3';
+                <div className="flex-1 grid min-w-0" style={{ gridTemplateColumns: weekGridCols }}>
+                  {visibleDayIdxs.map((j) => {
+                    const cf = dayColSpan(j);
                     if (j !== i) return <div key={j} className={`min-w-0 ${cf}`}></div>;
                     return (
                       <div key={j} className={`min-w-0 ${cf} p-0.5 sm:p-1 pointer-events-auto cursor-pointer`}
@@ -5348,7 +5362,7 @@
                         }}>
                         <div className={`cell-card w-full h-full rounded-md sm:rounded-lg border-l-[3px] sm:border-l-[4px] px-0.5 py-0.5 sm:px-1 sm:py-1 flex flex-col items-center justify-center text-center overflow-hidden ${cc.bg} ${cc.border}`} style={{ boxShadow: '0 1px 2px rgba(15,23,42,0.06)' }}>
                           <span className={`text-[8px] sm:text-[9px] font-mono font-semibold ${cc.text} opacity-75 bg-white/60 dark:bg-black/20 px-1 rounded mb-0.5`}>🚩 {label}</span>
-                          <div className={`${isMobile ? 'text-[11px]' : 'text-xs sm:text-sm lg:text-base'} font-extrabold ${cc.text} break-words leading-tight whitespace-pre-wrap`} title={data.subject}>{data.subject}</div>
+                          <div className={`${mobileDayOnly ? 'text-base' : (isMobile ? 'text-[11px]' : 'text-xs sm:text-sm lg:text-base')} font-extrabold ${cc.text} break-words leading-tight whitespace-pre-wrap`} title={data.subject}>{data.subject}</div>
                           {data.memo && <div className={`text-[8px] sm:text-[10px] font-medium mt-1 opacity-80 break-words leading-tight line-clamp-4 ${cc.text}`}>{data.memo}</div>}
                         </div>
                       </div>
@@ -5365,6 +5379,7 @@
       const renderHolidayOverlays = () => {
         const overlays = [];
         DAYS.forEach((day, i) => {
+          if (mobileDayOnly && i !== effMobileDayIdx) return;
           const d = new Date(currentWeekStart); d.setDate(d.getDate() + i);
           const dateStr = formatDate(d);
           const setting = getDaySetting(dateStr, i);
@@ -5400,9 +5415,9 @@
           overlays.push(
             <div key={`hol-overlay-${i}`} className="absolute inset-y-0 left-0 right-0 z-30 pointer-events-none flex">
               <div className="w-10 sm:w-16 lg:w-20 shrink-0 bg-transparent border-r border-transparent"></div>
-              <div className="flex-1 grid" style={{ gridTemplateColumns: 'repeat(19, minmax(0, 1fr))' }}>
-                {DAYS.map((_, j) => {
-                  const cf = j >= 5 ? 'col-span-2' : 'col-span-3';
+              <div className="flex-1 grid" style={{ gridTemplateColumns: weekGridCols }}>
+                {visibleDayIdxs.map((j) => {
+                  const cf = dayColSpan(j);
                   if (j !== i) return <div key={j} className={`min-w-0 ${cf}`}></div>;
                   return (
                     <div key={j}
@@ -5446,7 +5461,7 @@
                                className="absolute left-1 right-1 sm:left-1.5 sm:right-1.5 rounded shadow-md cursor-pointer hover:shadow-lg z-40 hover:z-50 overflow-y-auto overflow-x-hidden hide-scrollbar overscroll-contain flex flex-col px-1 py-0.5 sm:px-1.5 sm:py-1 transition-all bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 touch-pan-y"
                                style={{ top: `${topPct}%`, height: `${heightPct}%`, minHeight:'34px', borderLeft: `4px solid ${color}` }}>
                             {e.start && <div className="text-[7px] sm:text-[9px] font-mono font-bold leading-none mb-0.5 opacity-90 shrink-0" style={{color}}>{e.start}{e.end?`-${e.end}`:''}</div>}
-                            <div className={`${getDynamicFontSize(e.subject, isMobile)} font-black leading-[1.05] text-slate-800 dark:text-slate-200 break-words whitespace-pre-wrap shrink-0`}>{e.subject}</div>
+                            <div className={`${getDynamicFontSize(e.subject, isMobile && !mobileDayOnly)} font-black leading-[1.05] text-slate-800 dark:text-slate-200 break-words whitespace-pre-wrap shrink-0`}>{e.subject}</div>
                           </div>
                         )
                       })}
@@ -5688,7 +5703,7 @@
                           <span className="px-2 sm:px-3 text-xs sm:text-sm font-black text-blue-700 dark:text-blue-300 min-w-[72px] text-center whitespace-nowrap border-x border-slate-200 dark:border-slate-600">{currentWeekStart.getMonth()+1}月{currentWeekStart.getDate()}日〜</span>
                           <button onClick={() => changeWeek(1)} className="px-2 sm:px-2.5 py-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-r-lg transition-colors font-bold text-xs">▶</button>
                         </div>
-                        <button onClick={() => { setCurrentWeekStart(getMonday(getJSTDate())); }} className="text-[10px] sm:text-xs font-black text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 px-2.5 py-1.5 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors shrink-0 whitespace-nowrap">今週</button>
+                        <button onClick={() => { setCurrentWeekStart(getMonday(getJSTDate())); setMobileDayIdx(null); }} className="text-[10px] sm:text-xs font-black text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 px-2.5 py-1.5 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors shrink-0 whitespace-nowrap">今週</button>
 
                         {!isMobile && (
                           <div className="flex gap-1.5 ml-auto no-print">
@@ -5772,14 +5787,32 @@
                     </div>
                   )}
 
-                  <div className={`flex-1 flex flex-col relative min-h-0 hide-scrollbar overflow-y-auto`}>
+                  {mobileDayOnly && (
+                    <div className="flex items-stretch gap-1 px-1.5 py-1.5 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shrink-0 no-print">
+                      {DAYS.map((d, i) => {
+                        const cd = new Date(currentWeekStart); cd.setDate(cd.getDate() + i); const ds = formatDate(cd); const isT = ds === todayStr; const sel = i === effMobileDayIdx;
+                        return (
+                          <button key={d} type="button" onClick={() => setMobileDayIdx(i)} aria-label={`${cd.getMonth()+1}月${cd.getDate()}日（${d}曜日）を表示`} className={`flex-1 min-h-[44px] rounded-xl flex flex-col items-center justify-center border transition-colors ${sel ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : `bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 ${i===5?'text-blue-600 dark:text-blue-400':i===6?'text-rose-600 dark:text-rose-400':'text-slate-600 dark:text-slate-300'}`}`}>
+                            <span className="text-[11px] font-black leading-none">{d}</span>
+                            <span className="text-sm font-black leading-none mt-1">{cd.getDate()}{isT ? ' ・' : ''}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  <div className={`flex-1 flex flex-col relative min-h-0 hide-scrollbar overflow-y-auto`}
+                    onTouchStart={mobileDayOnly ? (e) => { dayTouchRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }; } : undefined}
+                    onTouchEnd={mobileDayOnly ? (e) => { const s = dayTouchRef.current; dayTouchRef.current = null; if (!s) return; const dx = e.changedTouches[0].clientX - s.x; const dy = e.changedTouches[0].clientY - s.y; if (Math.abs(dx) >= 56 && Math.abs(dx) > Math.abs(dy) * 1.6) { daySwipeRef.current = Date.now(); setMobileDayIdx(dx < 0 ? Math.min(6, effMobileDayIdx + 1) : Math.max(0, effMobileDayIdx - 1)); } } : undefined}
+                    onClickCapture={mobileDayOnly ? (e) => { if (daySwipeRef.current && Date.now() - daySwipeRef.current < 400) { e.stopPropagation(); e.preventDefault(); daySwipeRef.current = 0; } } : undefined}>
                     <div className={`flex bg-slate-100 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-30 shrink-0 ${isMobile && activeTab === 'weekly' ? 'min-h-0 py-0.5' : 'min-h-[3rem]'}`} style={{boxShadow:'0 2px 6px rgba(0,0,0,0.06)'}}>
                       <div className="w-10 sm:w-16 lg:w-20 border-r border-slate-200 dark:border-slate-700 shrink-0 bg-slate-100 dark:bg-slate-900 sticky left-0 z-40 flex flex-col items-center justify-center gap-0.5">
                         <span className="text-[9px] sm:text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wide">時間</span>
                       </div>
-                      <div className="flex-1 grid min-w-0" style={{ gridTemplateColumns: 'repeat(19, minmax(0, 1fr))' }}>
-                        {DAYS.map((d,i)=>{
-                          const cf = i>=5 ? 'col-span-2' : 'col-span-3';
+                      <div className="flex-1 grid min-w-0" style={{ gridTemplateColumns: weekGridCols }}>
+                        {visibleDayIdxs.map((i)=>{
+                          const d = DAYS[i];
+                          const cf = dayColSpan(i);
                           const cd=new Date(currentWeekStart); cd.setDate(cd.getDate()+i); const ds=formatDate(cd);
                           const isT=ds===todayStr;
                           const setting=getDaySetting(ds,i); const style=SCHEDULE_TYPES[setting.type];
@@ -5791,10 +5824,10 @@
                             <div key={d} className={`min-w-0 ${cf} flex flex-col justify-center text-center border-r border-slate-200 dark:border-slate-700 last:border-0 ${headerBg} ${isMobile && activeTab === 'weekly' ? 'py-0.5 px-0.5' : 'py-1.5 px-1'}`}>
 
                               <div className={`flex justify-center items-center gap-0.5 sm:gap-1 ${isMobile && activeTab === 'weekly' ? 'mb-0.5' : 'mb-1'}`}>
-                                <span className={`text-[11px] sm:text-sm font-black ${activeTab==='weekly'&&isT?'text-blue-700 dark:text-blue-300':i===5?'text-blue-600 dark:text-blue-400':i===6||isHoliday?'text-rose-600 dark:text-rose-400':'text-slate-700 dark:text-slate-200'}`}>{d}</span>
+                                <span className={`${mobileDayOnly ? 'text-base' : 'text-[11px] sm:text-sm'} font-black ${activeTab==='weekly'&&isT?'text-blue-700 dark:text-blue-300':i===5?'text-blue-600 dark:text-blue-400':i===6||isHoliday?'text-rose-600 dark:text-rose-400':'text-slate-700 dark:text-slate-200'}`}>{d}</span>
                                 {activeTab==='weekly' && (
-                                  <button type="button" onClick={() => setSelectedDateDetails({ dateStr: ds, dateObj: cd })} className={`text-[9px] sm:text-[10px] lg:text-[11px] font-black px-1 sm:px-1.5 py-0.5 rounded-md hover:scale-105 transition-transform cursor-pointer truncate ${isT?'bg-blue-600 text-white shadow hover:bg-blue-700':'text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-600'}`} title="タイムライン表示">
-                                    {cd.getDate()}{isT&&<span className="hidden sm:inline"> 今日</span>}
+                                  <button type="button" onClick={() => setSelectedDateDetails({ dateStr: ds, dateObj: cd })} className={`${mobileDayOnly ? 'text-sm px-2.5 py-1' : 'text-[9px] sm:text-[10px] lg:text-[11px] px-1 sm:px-1.5 py-0.5'} font-black rounded-md hover:scale-105 transition-transform cursor-pointer truncate ${isT?'bg-blue-600 text-white shadow hover:bg-blue-700':'text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-600'}`} title="タイムライン表示">
+                                    {mobileDayOnly ? `${cd.getMonth()+1}月${cd.getDate()}日` : cd.getDate()}{isT&&<span className={mobileDayOnly ? '' : 'hidden sm:inline'}> 今日</span>}
                                   </button>
                                 )}
                                 {activeTab==='weekly' && (gcalImported[ds]||[]).length > 0 && (
@@ -5828,14 +5861,14 @@
                                 </div>
                               )}
                               {activeTab==='weekly' && isMobile && (
-                                <div className={`text-[7px] font-black rounded px-0.5 py-px border ${style.color} bg-white`}>
+                                <div className={`${mobileDayOnly ? 'text-xs rounded-lg px-2 py-1 mt-0.5' : 'text-[7px] rounded px-0.5 py-px'} font-black border ${style.color} bg-white`}>
                                   <select value={setting.type} onChange={(e) => handleSettingChange(ds,i,{...setting,type:e.target.value})} className="bg-transparent font-black w-full text-center outline-none appearance-none cursor-pointer">
                                     {Object.values(SCHEDULE_TYPES).map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
                                   </select>
                                 </div>
                               )}
                               {activeTab==='weekly' && isMobile && !isHoliday && (setting.leaves||[]).length>0 && (
-                                <button type="button" onClick={()=>openLeaveModal(ds,i)} title={(setting.leaves||[]).map(l=>`${l.label} ${l.start}〜${l.end}`).join('\n')+'（タップで編集）'} className="mt-0.5 w-full px-0.5 py-px rounded bg-orange-100 dark:bg-orange-900/40 border border-orange-300 dark:border-orange-700 text-orange-700 dark:text-orange-300 text-[6px] font-black truncate leading-tight">🏖{setting.leaves[0].label}{setting.leaves.length>1?` +${setting.leaves.length-1}`:''}</button>
+                                <button type="button" onClick={()=>openLeaveModal(ds,i)} title={(setting.leaves||[]).map(l=>`${l.label} ${l.start}〜${l.end}`).join('\n')+'（タップで編集）'} className={`mt-0.5 w-full px-0.5 rounded bg-orange-100 dark:bg-orange-900/40 border border-orange-300 dark:border-orange-700 text-orange-700 dark:text-orange-300 font-black truncate leading-tight ${mobileDayOnly ? 'text-[11px] py-0.5' : 'text-[6px] py-px'}`}>🏖{setting.leaves[0].label}{setting.leaves.length>1?` +${setting.leaves.length-1}`:''}</button>
                               )}
 
                             </div>
