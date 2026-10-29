@@ -3531,6 +3531,7 @@
           const dt = new Date(y, m - 1, d);
           setCurrentWeekStart(getMonday(dt));
           setCurrentMonth(new Date(y, m - 1, 1));
+          { const sdi = dt.getDay() - 1; setMobileDayIdx(sdi === -1 ? 6 : sdi); }
           setActiveTab('weekly');
         } else if (r.kind === 'todo') {
           setShowTodo(true);
@@ -5658,7 +5659,7 @@
                           if (isMobile) { setMonthDayPopup({ dateStr: ds, dateObj: new Date(day.date.getTime()), dayIndex: di }); }
                           else { openEditModal(getCellData(ds,'event',di), ds, eventRow, di, DAYS[di], isNoClassType(setting.type), null); }
                         }} className={`flex flex-col overflow-hidden cursor-pointer hover:brightness-95 dark:hover:brightness-110 relative transition-all min-h-0 min-w-0 ${bg} ${isMobile ? 'p-0.5' : 'p-1 sm:p-1.5'}`}>
-                          <span onClick={(e)=>{ e.stopPropagation(); setCurrentWeekStart(getMonday(day.date)); setActiveTab('weekly'); }} className={`cursor-pointer hover:scale-125 hover:z-20 font-black flex items-center justify-center rounded-full shrink-0 z-10 relative ${isMobile ? 'w-5 h-5 text-[9px] mb-px' : 'text-[10px] sm:text-xs w-5 h-5 sm:w-6 sm:h-6 mb-0.5'} ${isT?'bg-blue-600 text-white shadow-md today-ring':isCM?(di===6?'text-rose-700 dark:text-rose-300':di===5?'text-blue-700 dark:text-blue-300':'text-slate-800 dark:text-slate-100'):'text-slate-400 dark:text-slate-500'}`} title="週案へ移動">{day.date.getDate()}</span>
+                          <span onClick={(e)=>{ e.stopPropagation(); setCurrentWeekStart(getMonday(day.date)); setMobileDayIdx(di); setActiveTab('weekly'); }} className={`cursor-pointer hover:scale-125 hover:z-20 font-black flex items-center justify-center rounded-full shrink-0 z-10 relative ${isMobile ? 'w-5 h-5 text-[9px] mb-px' : 'text-[10px] sm:text-xs w-5 h-5 sm:w-6 sm:h-6 mb-0.5'} ${isT?'bg-blue-600 text-white shadow-md today-ring':isCM?(di===6?'text-rose-700 dark:text-rose-300':di===5?'text-blue-700 dark:text-blue-300':'text-slate-800 dark:text-slate-100'):'text-slate-400 dark:text-slate-500'}`} title="週案へ移動">{day.date.getDate()}</span>
                           <div className={`flex-1 space-y-0.5 overflow-hidden min-h-0 min-w-0 w-full pointer-events-none ${isMobile ? 'px-0.5 pb-0.5' : ''}`}>
                             {evs.slice(0, shownMax).map((e,idx)=>{
                               const sizeCls = isMobile ? 'text-[7px]' : 'text-[10px] sm:text-[11px] lg:text-xs';
@@ -6339,7 +6340,7 @@
                           return <td key={m} className={`border-r border-slate-300 p-1 sm:p-1.5 align-top overflow-hidden relative ${!iv?'bg-stone-100/50':dt.getDay()===0||hol?'bg-rose-50/60':dt.getDay()===6?'bg-blue-50/30':''} ${iv&&ds===todayStr?'outline outline-2 -outline-offset-2 outline-blue-500':''}`}>
                             {iv&&<div className="flex flex-col h-full w-full">
                               <div
-                                onClick={()=>{setCurrentWeekStart(getMonday(dt));setActiveTab('weekly');}}
+                                onClick={()=>{const diY=dt.getDay()-1; setCurrentWeekStart(getMonday(dt)); setMobileDayIdx(diY===-1?6:diY); setActiveTab('weekly');}}
                                 className="cursor-pointer hover:bg-slate-200/60 transition-colors rounded -mx-0.5 px-0.5 flex flex-col"
                                 title="この日の週案を開く"
                               >
@@ -7341,6 +7342,7 @@
                 const d = monthDayPopup.dateObj;
                 setMonthDayPopup(null);
                 setCurrentWeekStart(getMonday(d));
+                setMobileDayIdx(monthDayPopup.dayIndex);
                 setActiveTab('weekly');
               }}
               onOpenTimeline={() => {
@@ -7394,6 +7396,7 @@
               onGoToWeekly={() => {
                 setSelectedDateDetails(null);
                 setCurrentWeekStart(getMonday(selectedDateDetails.dateObj));
+                setMobileDayIdx(dayIndexOf(selectedDateDetails.dateStr));
                 setActiveTab('weekly');
               }}
             />
