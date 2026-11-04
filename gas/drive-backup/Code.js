@@ -15,6 +15,10 @@ const CONFIG = {
   // 自分のユーザーID（Firebase コンソール → Authentication → ユーザー の「ユーザー UID」）。
   // 空のままなら、データのあるユーザーが1人だけのときに自動で選ぶ
   UID: '',
+  // 保存先フォルダ（Google ドライブのマイドライブ直下「EduPlanner バックアップ」）の ID。
+  // フォルダの URL の https://drive.google.com/drive/folders/〇〇〇 の〇〇〇の部分。
+  // 空にすると、FOLDER_NAME の名前のフォルダを探す（無ければ作る）
+  FOLDER_ID: '1i1cTZF7OVhm3nDUYNABhIsk_LjA_R9o1',
   FOLDER_NAME: 'EduPlanner バックアップ',
   // 毎日のファイルを残す日数。これより古いものは、各月のいちばん古い1つ（月ごとの控え）を除いてゴミ箱へ移す
   KEEP_DAYS: 30,
@@ -174,6 +178,11 @@ function buildBackup_(docs, meta) {
 
 // ===== 古いファイルの整理 =====
 function getBackupFolder_() {
+  if (CONFIG.FOLDER_ID) {
+    const f = DriveApp.getFolderById(CONFIG.FOLDER_ID);
+    if (f.isTrashed()) throw new Error(`保存先フォルダ（${CONFIG.FOLDER_ID}）がゴミ箱に入っています。ゴミ箱から戻すか、CONFIG.FOLDER_ID を空にしてください。`);
+    return f;
+  }
   const props = PropertiesService.getScriptProperties();
   const id = props.getProperty('FOLDER_ID');
   if (id) {
