@@ -28,6 +28,7 @@ src/sanitize.js       ノート・メモの HTML を画面に戻す前の無害�
 scripts/build.mjs     公開用ビルド（dist/ を作る）
 tests/                src/ の単体テスト（node:test）
 firestore.rules       Firestore のセキュリティルール
+gas/drive-backup/     毎朝 Google ドライブへ自動バックアップする Google Apps Script
 vercel.json           Vercel のビルド設定とキャッシュ設定
 ```
 
@@ -36,6 +37,7 @@ vercel.json           Vercel のビルド設定とキャッシュ設定
 - JSX を事前に変換して `/assets/app.<hash>.js` にする（Babel standalone は不要になる）
 - 使っている Tailwind クラスだけの CSS を作る
 - React / ReactDOM と `src/*.js` を同じサーバーから配る
+- Firebase SDK（`firebase-app` / `firebase-auth` / `firebase-firestore`）を www.gstatic.com ではなく `/assets/` から配る。`index.html` に書いた版と `package.json` の `firebase` の版がそろっていないとビルドを止める（Firebase を上げるときは両方を同じ版にする）
 
 `src/*.js` は通常の `<script>` で読み込んでおり、そのトップレベルの `const`（`getHolidayName`・`sanitizeHtml` など）はアプリ本体からそのまま使えます。
 
@@ -76,3 +78,6 @@ Vercel にこのリポジトリをつなぐと、`vercel.json` の設定どお�
 - 変更は Firestore に保存され、同じアカウントでログインした端末どうしで同期されます
 - 端末内にも控えを持ち、クラウドの読み込みが終わらないときはその控えを表示します
 - 設定タブから全データを JSON で書き出し・復元できます。復元したノートやメモの HTML は、表示前に `sanitizeHtml` でスクリプトなどを取り除きます
+- 書き出しから一定日数（既定 14 日、設定タブで 7/14/30 日・しない を選べる。端末ごとの設定）たつと、画面上部で書き出しを促します
+- ログインできないとき（Firebase に届かない、学校のフィルタなど）は、ログイン画面の「この端末のデータを見る」から端末内の控えを読み取り専用で表示できます。このモードでは端末にもクラウドにも書き込みません（古い控えでクラウドの新しいデータを上書きしないため）。設定タブからの書き出しはできます
+- 毎朝 Google ドライブへ全データを自動保存する Google Apps Script を `gas/drive-backup/` に用意しています（設定手順は [`gas/drive-backup/README.md`](gas/drive-backup/README.md)）
