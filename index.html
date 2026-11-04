@@ -686,7 +686,7 @@
     // ============================
     // 接続チェック（学校のフィルタで何が止められているかを調べる）
     // ============================
-    // ビルド済みの公開版（window.__EP_BUILD あり）は React と見た目のCSSをアプリと同じ場所から配るので、unpkg / Tailwind CDN は使わない
+    // ビルド済みの公開版（window.__EP_BUILD あり）は React・見た目のCSS・Firebase SDK をアプリと同じ場所から配るので、unpkg / Tailwind CDN / gstatic は使わない
     const CONNECTION_TARGETS_ALL = [
       { key:'app',        label:'アプリ本体',              need:'required', host:() => location.host,            url:() => `${location.origin}/?connCheck=${Date.now()}`,                                                              note:'ここが×だと、アプリそのものが開けません。' },
       { key:'unpkg',      label:'React（画面の土台）',      need:'required', host:'unpkg.com',                    url:'https://unpkg.com/react@18.3.1/umd/react.production.min.js',                                                     note:'×だと画面が真っ白のままになります。' },
@@ -701,7 +701,7 @@
       { key:'gtasks',     label:'Google ToDo同期',          need:'optional', host:'tasks.googleapis.com',         url:'https://tasks.googleapis.com/$discovery/rest?version=v1',                                                        note:'×だとToDoの同期ができません。' },
       { key:'gcalweb',    label:'「カレンダーに追加」ボタン', need:'optional', host:'calendar.google.com',          url:'https://calendar.google.com/calendar/render',                                                                    note:'×だと、このボタンを押したときに新しいタブでブロック画面が出ます。' },
     ];
-    const CONNECTION_TARGETS = window.__EP_BUILD ? CONNECTION_TARGETS_ALL.filter(t => t.key !== 'unpkg' && t.key !== 'tailwind') : CONNECTION_TARGETS_ALL;
+    const CONNECTION_TARGETS = window.__EP_BUILD ? CONNECTION_TARGETS_ALL.filter(t => t.key !== 'unpkg' && t.key !== 'tailwind' && t.key !== 'gstatic') : CONNECTION_TARGETS_ALL;
 
     const probeUrl = async (url, timeoutMs = 7000) => {
       const controller = new AbortController();
@@ -1459,6 +1459,13 @@
       const [authLoading, setAuthLoading] = useState(true);
       const [isAutoLoggingIn, setIsAutoLoggingIn] = useState(false);
       const [dataLoadStatus, setDataLoadStatus] = useState('idle');
+      // ログインできないとき（Firebase に届かない・学校のフィルタ等）に、この端末に残っているデータを読み取り専用で見るモード。
+      // このモードでは端末にもクラウドにも書き込まない（古いデータでクラウドの新しいデータを上書きしないため）
+      const [localViewMode, setLocalViewMode] = useState(false);
+      const localViewRef = useRef(false);
+      const readOnlyToastAtRef = useRef(0);
+      const [sdkLoadFailed, setSdkLoadFailed] = useState(false);
+      const [hasLocalSnapshot] = useState(() => { try { const v = localStorage.getItem('ep_local_data'); return !!v && v !== '{}'; } catch (e) { return false; } });
       const [rememberMe, setRememberMe] = useState(true);
       const [cloudUser, setCloudUser] = useState(null);
       const [authEmail, setAuthEmail] = useState('');
@@ -1621,6 +1628,15 @@
       const [isOnline, setIsOnline] = useState(navigator.onLine);
       const [saveStatus, setSaveStatus] = useState(navigator.onLine ? 'saved' : 'offline');
       const [lastSavedAt, setLastSavedAt] = useState(null);
+      // バックアップ（JSON）の書き出しを定期的に促す。端末ごとの設定。0 はお知らせしない
+      const readLsNum = (k, def) => { try { const v = localStorage.getItem(k); return v === null ? def : (Number(v) || 0); } catch (e) { return def; } };
+      const writeLs = (k, v) => { try { localStorage.setItem(k, String(v)); } catch (e) {} };
+      const [exportReminderDays, setExportReminderDaysState] = useState(() => readLsNum('ep_export_reminder_days', 14));
+      const [lastExportAt, setLastExportAt] = useState(() => readLsNum('ep_last_export_at', 0));
+      const [exportSnoozeUntil, setExportSnoozeUntil] = useState(() => readLsNum('ep_export_snooze_until', 0));
+      // 一度も書き出していない場合は、この機能を初めて使った日から数える（入れてすぐに催促しない）
+      const [exportReminderSince] = useState(() => { const v = readLsNum('ep_export_reminder_since', 0); if (v) return v; const now = Date.now(); writeLs('ep_export_reminder_since', now); return now; });
+      const setExportReminderDays = (d) => { setExportReminderDaysState(d); writeLs('ep_export_reminder_days', d); };
       const [autoBackupCount, setAutoBackupCount] = useState(() => { try { return JSON.parse(localStorage.getItem('ep_auto_backups') || '[]').length; } catch(e) { return 0; } });
       const [showYearSetup, setShowYearSetup] = useState(false);
       const [yearSetupTarget, setYearSetupTarget] = useState(() => { const t = getJSTDate(); return (t.getMonth() + 1 < 4 ? t.getFullYear() - 1 : t.getFullYear()) + 1; });
@@ -2518,6 +2534,7 @@
 
       // todosOnly: TODOの変更だけを反映する軽い同期（週案・年間予定には触れない）
       const runGoogleCalendarSync = async ({ silent = false, tasksEnabled, yearlyEnabled, importEnabled, writeBackEnabled, adoptEnabled, todosOnly = false } = {}) => {
+        if (localViewRef.current) { if (!silent) notifyReadOnly(); return; }
         if (googleDeviceOffRef.current) {
           if (!silent) showToast('この端末ではGoogle連携を使わない設定になっています。設定画面から解除できます');
           return false;
@@ -3100,9 +3117,11 @@
                 } 
               } 
             });
-          } catch(e) { if(isM) setAuthLoading(false); }
+          } catch(e) { if(isM) { setSdkLoadFailed(true); setAuthLoading(false); } }
         };
-        init(); return () => { isM = false; };
+        // フィルタで通信が止められると読み込みが終わらないことがあるので、待ちすぎたらログイン画面（閲覧モードの入口）を出す
+        const slowTimer = setTimeout(() => { if (isM) { setAuthLoading(cur => { if (cur) setSdkLoadFailed(true); return false; }); } }, 15000);
+        init().finally(() => clearTimeout(slowTimer)); return () => { isM = false; clearTimeout(slowTimer); };
       }, []);
 
       const applyLocalData = (d) => {
@@ -3301,7 +3320,15 @@
 
       const cleanData = (obj) => { if(obj===undefined) return null; if(obj===null||typeof obj!=='object') return obj; const n=Array.isArray(obj)?[]:{}; for(const k in obj) n[k]=cleanData(obj[k]); return n; };
 
+      const notifyReadOnly = () => {
+        const now = Date.now();
+        if (now - readOnlyToastAtRef.current < 4000) return;
+        readOnlyToastAtRef.current = now;
+        showToast('🔒 閲覧モードのため、変更は保存されません');
+      };
+
       const saveToLocal = (updates) => {
+        if (localViewRef.current) { notifyReadOnly(); return; }
         try {
           const cur = JSON.parse(localStorage.getItem('ep_local_data') || '{}');
           Object.assign(cur, updates);
@@ -3321,6 +3348,7 @@
       };
 
       const restoreLatestAutoBackup = () => {
+        if (localViewRef.current) { notifyReadOnly(); return; }
         try {
           const backups = JSON.parse(localStorage.getItem('ep_auto_backups') || '[]');
           if (!backups.length) { showToast('自動バックアップはまだありません'); return; }
@@ -3342,6 +3370,7 @@
       };
 
       const saveToFirestore = async (name, data) => {
+        if (localViewRef.current) { notifyReadOnly(); return false; }
         // ローカル保存は呼び出し側ですでに完了しているため、クラウド未準備時は再送用に保持する。
         if(!cloudDataLoaded.current || !navigator.onLine){
           pendingCloudSavesRef.current[name] = data;
@@ -3697,7 +3726,28 @@
         } catch(err) { setAuthError(err.message); } 
       };
       
+      const enterLocalView = () => {
+        const d = loadFromLocal();
+        if (!d) { showToast('この端末に保存されたデータがありません'); return; }
+        localViewRef.current = true;
+        setLocalViewMode(true);
+        applyLocalData(d);
+        setDataLoadStatus('localView');
+      };
+      // 閲覧モードを抜けるときは読み込み直す（画面に残った未保存の変更を確実に捨てるため）
+      const exitLocalView = () => { window.location.reload(); };
+      // 閲覧中に裏でログインが済んだら、通常の画面（クラウドから読み込み）に切り替える
+      useEffect(() => {
+        if (cloudUser && localViewRef.current) { localViewRef.current = false; setLocalViewMode(false); }
+      }, [cloudUser]);
+
+      const snoozeExportReminder = () => { const until = Date.now() + 3 * 864e5; setExportSnoozeUntil(until); writeLs('ep_export_snooze_until', until); };
+      const daysSinceExport = Math.floor((Date.now() - (lastExportAt || exportReminderSince)) / 864e5);
+      const showExportReminder = !localViewMode && dataLoadStatus === 'loaded' && exportReminderDays > 0
+        && daysSinceExport >= exportReminderDays && Date.now() >= exportSnoozeUntil;
+
       const handleLogout = async () => {
+        if (localViewRef.current) { exitLocalView(); return; }
         try {
           localStorage.removeItem('ep_mail');
           await window.__firebaseSignOut(window.__firebaseAuth);
@@ -3740,10 +3790,14 @@
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
+        const now = Date.now();
+        setLastExportAt(now); writeLs('ep_last_export_at', now);
+        setExportSnoozeUntil(0); writeLs('ep_export_snooze_until', 0);
         showToast('バックアップをダウンロードしました');
       };
 
       const importData = (e) => {
+        if (localViewRef.current) { notifyReadOnly(); e.target.value = ''; return; }
         const file = e.target.files[0];
         if (!file) return;
         const reader = new FileReader();
@@ -5597,11 +5651,12 @@
       };
 
       if (authLoading) return <div className="flex h-[100dvh] items-center justify-center bg-[var(--paper)] text-blue-500 font-bold">読み込み中...</div>;
-      if (!cloudUser) return (
+      if (!cloudUser && !localViewMode) return (
         <div className="flex h-[100dvh] items-center justify-center p-4 bg-slate-50">
           <div className="bg-white p-8 rounded-3xl shadow-lg max-w-sm w-full border border-slate-400">
             <h1 className="text-2xl font-black text-center mb-6 text-blue-600 flex justify-center items-center gap-2"><LogoIcon/> EduPlanner</h1>
             {authError && <div className="bg-rose-50 text-rose-600 text-xs p-3 rounded-lg mb-4 border border-rose-200">{authError}</div>}
+            {sdkLoadFailed && <div className="bg-amber-50 text-amber-800 text-xs p-3 rounded-lg mb-4 border border-amber-300 font-bold leading-relaxed">ログインの仕組みを読み込めませんでした。通信の障害か、学校のフィルタで止められている可能性があります。{hasLocalSnapshot ? '下の「この端末のデータを見る」から、保存済みの内容を確認できます。' : ''}</div>}
             {isAutoLoggingIn && !authError ? (
               <div className="text-center py-4 flex flex-col items-center gap-3">
                 <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
@@ -5622,6 +5677,12 @@
                 </form>
                 <div className="mt-4 text-center"><button onClick={()=>setIsRegistering(!isRegistering)} className="text-xs text-blue-600 font-bold hover:underline">{isRegistering?'ログインへ':'新規登録へ'}</button></div>
               </>
+            )}
+            {hasLocalSnapshot && (
+              <div className="mt-5">
+                <button type="button" onClick={enterLocalView} className="w-full bg-white text-slate-700 border border-slate-400 p-3 rounded-xl font-bold hover:bg-slate-50 transition-colors">この端末のデータを見る（ログインなし・閲覧のみ）</button>
+                <p className="mt-1.5 text-[10px] text-slate-500 leading-relaxed">最後にこの端末で開いたときの内容です。変更は保存されません。設定からバックアップの書き出しはできます。</p>
+              </div>
             )}
             <div className="mt-6 pt-4 border-t border-slate-200 text-center">
               <button onClick={()=>setShowConnCheck(true)} className="text-[11px] text-slate-500 font-bold hover:underline">学校の端末でブロックされる・開けないときは → 接続チェック</button>
@@ -5669,6 +5730,18 @@
           })()}
           {toastMessage && <div className="no-print fixed top-[calc(4rem+env(safe-area-inset-top))] left-1/2 -translate-x-1/2 bg-slate-800 text-white px-4 py-2 rounded-full z-[300] shadow-lg anim-scale-in font-bold text-sm">{toastMessage}</div>}
           {showConnCheck && <ConnectionCheck onClose={()=>setShowConnCheck(false)} />}
+          {showExportReminder && (
+            <div className="no-print fixed top-[calc(4rem+env(safe-area-inset-top))] left-1/2 -translate-x-1/2 z-[190] max-w-md w-[90%]">
+              <div className="px-4 py-3 rounded-xl shadow-lg border text-xs font-bold bg-white dark:bg-slate-800 border-blue-300 dark:border-blue-700 text-slate-700 dark:text-slate-200">
+                <div className="mb-1">💾 {lastExportAt ? `最後にデータを書き出してから${daysSinceExport}日たちました。` : 'まだデータを書き出していません。'}</div>
+                <div className="text-[10px] text-slate-500 dark:text-slate-400 font-bold mb-2 leading-relaxed">万一ログインできなくなったときに備えて、書き出したファイルをパソコンやGoogleドライブなど別の場所に保存しておきましょう。</div>
+                <div className="flex gap-2 justify-end">
+                  <button onClick={snoozeExportReminder} className="px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700">3日後にまた知らせる</button>
+                  <button onClick={exportData} className="px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700">今すぐ書き出す</button>
+                </div>
+              </div>
+            </div>
+          )}
           {(dataLoadStatus === 'loading' || dataLoadStatus === 'timeout' || dataLoadStatus === 'empty' || dataLoadStatus === 'local') && (
             <div className="fixed top-[calc(4rem+env(safe-area-inset-top))] left-1/2 -translate-x-1/2 z-[200] max-w-md w-[90%]">
               <div className={`px-4 py-3 rounded-xl shadow-lg border text-xs font-bold text-center ${dataLoadStatus === 'loading' ? 'bg-blue-50 border-blue-200 text-blue-700' : dataLoadStatus === 'local' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>
@@ -5707,10 +5780,14 @@
                   <span className="text-sm leading-none">📝</span><span className="hidden lg:inline">TODO</span>
                   {todos.filter(t=>!t.completed).length > 0 && <span className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center shadow border-2 border-white dark:border-slate-800">{todos.filter(t=>!t.completed).length}</span>}
                 </button>
+                {localViewMode ? (
+                  <span className="h-7 px-2 rounded-md border text-[9px] sm:text-[10px] font-black flex items-center gap-1 whitespace-nowrap bg-amber-50 text-amber-700 border-amber-300" title="閲覧モード：変更は保存されません"><span>🔒</span><span className="hidden xl:inline">閲覧のみ</span></span>
+                ) : (
                 <button onClick={saveStatus==='error'||saveStatus==='offline' ? retryPendingCloudSaves : undefined} className={`h-7 px-2 rounded-md border text-[9px] sm:text-[10px] font-black flex items-center gap-1 whitespace-nowrap transition-colors ${saveStatus==='saving'?'bg-blue-50 text-blue-700 border-blue-200':saveStatus==='error'?'bg-rose-50 text-rose-700 border-rose-300 hover:bg-rose-100':saveStatus==='offline'?'bg-amber-50 text-amber-700 border-amber-300 hover:bg-amber-100':'bg-emerald-50 text-emerald-700 border-emerald-200'}`} title={lastSavedAt ? `最終保存 ${lastSavedAt.toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'})}` : '保存状態'}>
                   <span>{saveStatus==='saving'?'↻':saveStatus==='error'?'!':saveStatus==='offline'?'○':'✓'}</span>
                   <span className="hidden xl:inline">{saveStatus==='saving'?'保存中':saveStatus==='error'?'再試行':saveStatus==='offline'?'端末に保存':'保存済み'}</span>
                 </button>
+                )}
               </div>
             </div>
 
@@ -5729,6 +5806,12 @@
               </button>
             </div>
           </header>
+          {localViewMode && (
+            <div className="no-print shrink-0 bg-amber-100 dark:bg-amber-900/60 text-amber-900 dark:text-amber-100 border-b border-amber-300 dark:border-amber-700 px-3 py-1.5 text-[11px] font-bold flex items-center justify-center gap-2 flex-wrap text-center">
+              <span>🔒 閲覧モード：ログインせずに、この端末に残っているデータを表示しています。変更は保存されません。</span>
+              <button onClick={exitLocalView} className="underline whitespace-nowrap">ログインし直す</button>
+            </div>
+          )}
 
           {(activeTab==='monthly'||activeTab==='weekly'||activeTab==='template') && renderMonthTabs("shrink-0 dark:bg-slate-900 dark:border-slate-700", isMobile && (activeTab==='monthly' || activeTab==='weekly' || activeTab==='template'))}
 
@@ -6969,6 +7052,21 @@
                               <div className="text-[10px] font-bold text-slate-500">6時間ごと・最大4世代</div>
                             </div>
                             <span className="text-sm font-black text-blue-700">{autoBackupCount}件</span>
+                          </div>
+                          <div className="rounded-xl bg-white border border-blue-200 px-3 py-2">
+                            <div className="flex items-center justify-between gap-2">
+                              <div>
+                                <div className="text-xs font-black text-slate-700">書き出しのお知らせ</div>
+                                <div className="text-[10px] font-bold text-slate-500">最後の書き出し：{lastExportAt ? new Date(lastExportAt).toLocaleDateString('ja-JP') : 'まだありません'}</div>
+                              </div>
+                              <select value={exportReminderDays} onChange={e => setExportReminderDays(Number(e.target.value))} className="text-xs font-black text-blue-700 bg-white border border-blue-300 rounded-lg px-2 py-1">
+                                <option value={0}>知らせない</option>
+                                <option value={7}>7日ごと</option>
+                                <option value={14}>14日ごと</option>
+                                <option value={30}>30日ごと</option>
+                              </select>
+                            </div>
+                            <div className="text-[10px] font-bold text-slate-500 mt-1 leading-relaxed">自動バックアップはこの端末の中だけにあります。端末の故障やログインできないときに備えて、書き出したファイルを別の場所にも保存してください。</div>
                           </div>
                           {dataSizeInfo && (
                             <div className="rounded-xl bg-white border border-blue-200 px-3 py-2">
