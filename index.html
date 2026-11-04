@@ -440,6 +440,67 @@
       return { title, startTime, endTime };
     };
 
+    // 時刻の文字列（"8:40"、"840"、"0840"、全角も可）を "HH:MM" に整える。解釈できなければ null、空なら ''
+    const parseTimeText = (text) => {
+      const t = String(text ?? '').replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)).replace(/：/g, ':').replace(/\s/g, '');
+      if (!t) return '';
+      let h, m;
+      const colon = t.match(/^(\d{1,2}):(\d{1,2})$/);
+      if (colon) { h = Number(colon[1]); m = Number(colon[2]); }
+      else if (/^\d{3,4}$/.test(t)) { const s = t.padStart(4, '0'); h = Number(s.slice(0, 2)); m = Number(s.slice(2, 4)); }
+      else return null;
+      if (h > 23 || m > 59) return null;
+      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    };
+    // 時刻を5分刻みの境界へずらす（▲▼ボタン・上下キー用）。空のときは 8:00 を起点にする
+    const shiftTimeText = (value, delta) => {
+      const p = parseTimeText(value);
+      const base = p ? Number(p.slice(0, 2)) * 60 + Number(p.slice(3, 5)) : 8 * 60;
+      const stepped = delta > 0 ? (Math.floor(base / 5) + 1) * 5 : (Math.ceil(base / 5) - 1) * 5;
+      const next = Math.max(0, Math.min(23 * 60 + 55, stepped));
+      return `${String(Math.floor(next / 60)).padStart(2, '0')}:${String(next % 60).padStart(2, '0')}`;
+    };
+    // 時刻入力欄。標準の時刻ピッカーは1分ずつしか動かせず面倒なため、直接タイプ入力
+    // （"840" と打ってもよい）＋ ▲▼ボタンと上下キーで5分刻みに動かせる入力欄にする。
+    // 値は "HH:MM"、未設定は ''。入力中は、確定（フォーカスを外す・Enter）まで親の値を上書きしない
+    const TimeInput = ({ value, onChange, disabled = false, className = '', title, wrapClassName = '' }) => {
+      const [text, setText] = useState(value || '');
+      const [focused, setFocused] = useState(false);
+      useEffect(() => { if (!focused) setText(value || ''); }, [value, focused]);
+      const commit = (raw) => {
+        const p = parseTimeText(raw);
+        if (p === null) { setText(value || ''); return; }
+        setText(p);
+        if (p !== (value || '')) onChange(p);
+      };
+      const step = (delta) => {
+        if (disabled) return;
+        const next = shiftTimeText(text || value, delta);
+        setText(next);
+        if (next !== (value || '')) onChange(next);
+      };
+      return (
+        <span className={`inline-flex items-stretch ${wrapClassName}`}>
+          <input type="text" inputMode="numeric" autoComplete="off" placeholder="8:40" title={title}
+            value={text} disabled={disabled}
+            onChange={e => setText(e.target.value)}
+            onFocus={() => setFocused(true)}
+            onBlur={e => { setFocused(false); commit(e.target.value); }}
+            onKeyDown={e => {
+              if (e.key === 'Enter') { e.preventDefault(); commit(e.currentTarget.value); e.currentTarget.blur(); }
+              else if (e.key === 'ArrowUp') { e.preventDefault(); step(5); }
+              else if (e.key === 'ArrowDown') { e.preventDefault(); step(-5); }
+              else if (e.key === 'Escape') { setText(value || ''); }
+            }}
+            className={className} />
+          <span className="flex flex-col ml-1 shrink-0">
+            <button type="button" tabIndex={-1} disabled={disabled} onClick={() => step(5)} aria-label="5分進める" className="flex-1 px-1 text-[9px] leading-none font-black text-slate-500 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-t-md hover:bg-slate-200 dark:hover:bg-slate-600 active:scale-95 disabled:opacity-40 transition-all">▲</button>
+            <button type="button" tabIndex={-1} disabled={disabled} onClick={() => step(-5)} aria-label="5分戻す" className="flex-1 px-1 text-[9px] leading-none font-black text-slate-500 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 border-t-0 rounded-b-md hover:bg-slate-200 dark:hover:bg-slate-600 active:scale-95 disabled:opacity-40 transition-all">▼</button>
+          </span>
+        </span>
+      );
+    };
+
     // 行事テキストから休日判定。「休業前」「休業(日)明け」は授業日・出勤日なので除外
     const isHolidayEventText = (text) => (text || '').split('\n').some(line =>
       /休業|休校|振替休|代休|休日|お休み/.test(line) && !/休業前|休業日?明け/.test(line)
@@ -7423,9 +7484,9 @@
                         ))}
                       </div>
                       <div className="flex items-center gap-2">
-                        <input type="time" value={lv.start} onChange={e=>setTempLeaves(ls=>ls.map((l,i)=>i===idx?{...l,start:e.target.value}:l))} className="flex-1 p-2 border border-slate-300 dark:border-slate-600 rounded-lg text-sm font-bold bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 outline-none focus:border-orange-400" />
+                        <TimeInput value={lv.start} onChange={v=>setTempLeaves(ls=>ls.map((l,i)=>i===idx?{...l,start:v}:l))} wrapClassName="flex-1" className="flex-1 min-w-0 p-2 border border-slate-300 dark:border-slate-600 rounded-lg text-sm font-bold bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 outline-none focus:border-orange-400" />
                         <span className="font-bold text-slate-400">〜</span>
-                        <input type="time" value={lv.end} onChange={e=>setTempLeaves(ls=>ls.map((l,i)=>i===idx?{...l,end:e.target.value}:l))} className="flex-1 p-2 border border-slate-300 dark:border-slate-600 rounded-lg text-sm font-bold bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 outline-none focus:border-orange-400" />
+                        <TimeInput value={lv.end} onChange={v=>setTempLeaves(ls=>ls.map((l,i)=>i===idx?{...l,end:v}:l))} wrapClassName="flex-1" className="flex-1 min-w-0 p-2 border border-slate-300 dark:border-slate-600 rounded-lg text-sm font-bold bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 outline-none focus:border-orange-400" />
                       </div>
                     </div>
                   ))}
@@ -7473,9 +7534,9 @@
                     {tempEvents.map((ev,idx) => (
                       <div key={idx} className="bg-white p-4 rounded-xl border border-slate-400 shadow-sm focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
                         <div className="flex gap-2 items-center mb-3">
-                          <input type="time" value={ev.startTime} onChange={e=>updateTempEvent(idx,'startTime',e.target.value)} className="w-28 bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono font-bold outline-none focus:border-blue-500" />
+                          <TimeInput value={ev.startTime} onChange={v=>updateTempEvent(idx,'startTime',v)} className="w-28 bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono font-bold outline-none focus:border-blue-500" />
                           <span className="text-slate-400 font-bold">〜</span>
-                          <input type="time" value={ev.endTime} onChange={e=>updateTempEvent(idx,'endTime',e.target.value)} className="w-28 bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono font-bold outline-none focus:border-blue-500" />
+                          <TimeInput value={ev.endTime} onChange={v=>updateTempEvent(idx,'endTime',v)} className="w-28 bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono font-bold outline-none focus:border-blue-500" />
                         </div>
                         <input type="text" placeholder="予定・活動" value={ev.subject} onChange={e=>updateTempEvent(idx,'subject',e.target.value)} className="w-full font-black text-lg border-b-[3px] border-slate-200 focus:border-blue-500 outline-none py-2 bg-transparent text-slate-800 placeholder-slate-400 transition-colors" />
                       </div>
@@ -7655,9 +7716,9 @@
                           {/* 時刻 */}
                           <div className="flex gap-2 items-center">
                             <span className="text-[11px] font-black text-slate-400 shrink-0">時刻</span>
-                            <input type="time" value={tempStartTime} onChange={e=>setTempStartTime(e.target.value)} className="w-28 bg-white border border-slate-400 rounded-lg px-3 py-2 text-sm font-mono font-bold outline-none focus:border-blue-500 shadow-sm" />
+                            <TimeInput value={tempStartTime} onChange={v=>setTempStartTime(v)} className="w-28 bg-white border border-slate-400 rounded-lg px-3 py-2 text-sm font-mono font-bold outline-none focus:border-blue-500 shadow-sm" />
                             <span className="text-slate-400 font-bold">〜</span>
-                            <input type="time" value={tempEndTime} onChange={e=>setTempEndTime(e.target.value)} className="w-28 bg-white border border-slate-400 rounded-lg px-3 py-2 text-sm font-mono font-bold outline-none focus:border-blue-500 shadow-sm" />
+                            <TimeInput value={tempEndTime} onChange={v=>setTempEndTime(v)} className="w-28 bg-white border border-slate-400 rounded-lg px-3 py-2 text-sm font-mono font-bold outline-none focus:border-blue-500 shadow-sm" />
                           </div>
                           {/* 今週を自動入力 */}
                           {!editingCell.isTemplate && syllabusData.length > 0 && (
@@ -7725,9 +7786,9 @@
                   <div className="space-y-5">
                     {editingCell.periodId!=='event'&&editingCell.periodId!=='diary'&&(
                       <div className="flex gap-2 items-center">
-                        <input type="time" value={tempStartTime} onChange={e=>setTempStartTime(e.target.value)} className="w-28 bg-white border border-slate-400 rounded-lg px-3 py-2 text-sm font-mono font-bold outline-none focus:border-blue-500 shadow-sm" />
+                        <TimeInput value={tempStartTime} onChange={v=>setTempStartTime(v)} className="w-28 bg-white border border-slate-400 rounded-lg px-3 py-2 text-sm font-mono font-bold outline-none focus:border-blue-500 shadow-sm" />
                         <span className="text-slate-400 font-bold">〜</span>
-                        <input type="time" value={tempEndTime} onChange={e=>setTempEndTime(e.target.value)} className="w-28 bg-white border border-slate-400 rounded-lg px-3 py-2 text-sm font-mono font-bold outline-none focus:border-blue-500 shadow-sm" />
+                        <TimeInput value={tempEndTime} onChange={v=>setTempEndTime(v)} className="w-28 bg-white border border-slate-400 rounded-lg px-3 py-2 text-sm font-mono font-bold outline-none focus:border-blue-500 shadow-sm" />
                       </div>
                     )}
                     {editingCell.periodId === 'event' ? (
@@ -7770,9 +7831,9 @@
                               <input value={row.title} onChange={e=>updateEventRow(i,{title:e.target.value})} className="w-full text-xl font-black pb-2 border-b-[3px] border-slate-200 outline-none focus:border-blue-600 bg-transparent text-slate-800 placeholder-slate-400 transition-colors" placeholder={`行事 ${i+1}`} autoFocus={i===0} />
                               <div className="flex items-center gap-1.5 mt-2 flex-wrap">
                                 <span className="text-[11px] font-black text-slate-500 shrink-0">🕘 時間帯</span>
-                                <input type="time" value={row.startTime} onChange={e=>updateEventRow(i, e.target.value ? {startTime:e.target.value} : {startTime:'',endTime:''})} className="w-[7.5rem] bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-sm font-mono font-bold outline-none focus:border-blue-500" />
+                                <TimeInput value={row.startTime} onChange={v=>updateEventRow(i, v ? {startTime:v} : {startTime:'',endTime:''})} className="w-[7.5rem] bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-sm font-mono font-bold outline-none focus:border-blue-500" />
                                 <span className="text-slate-400 font-bold text-xs">〜</span>
-                                <input type="time" value={row.endTime} disabled={!row.startTime} onChange={e=>updateEventRow(i,{endTime:e.target.value})} title={row.startTime ? '' : '先に開始時刻を入れてください'} className="w-[7.5rem] bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-sm font-mono font-bold outline-none focus:border-blue-500 disabled:bg-slate-100 disabled:text-slate-400" />
+                                <TimeInput value={row.endTime} disabled={!row.startTime} onChange={v=>updateEventRow(i,{endTime:v})} title={row.startTime ? '' : '先に開始時刻を入れてください'} className="w-[7.5rem] bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-sm font-mono font-bold outline-none focus:border-blue-500 disabled:bg-slate-100 disabled:text-slate-400" />
                                 {(row.startTime || row.endTime) && (
                                   <button type="button" onClick={()=>updateEventRow(i,{startTime:'',endTime:''})} className="shrink-0 text-[10px] font-bold text-slate-600 bg-slate-100 border border-slate-300 rounded-lg px-2 py-1 hover:bg-slate-200 active:scale-95 transition-all">終日に戻す</button>
                                 )}
