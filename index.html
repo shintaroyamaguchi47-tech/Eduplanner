@@ -460,12 +460,42 @@
       const next = Math.max(0, Math.min(23 * 60 + 55, stepped));
       return `${String(Math.floor(next / 60)).padStart(2, '0')}:${String(next % 60).padStart(2, '0')}`;
     };
+    // 回転ホイールの1列分（時刻ピッカー用）。上下に回して、中央に来た項目が選ばれる
+    const WHEEL_ITEM_H = 36;
+    const TimeWheelColumn = ({ items, selected, onSelect, suffix }) => {
+      const ref = useRef(null);
+      // 開いたときだけ、選択中の項目が中央に来るようスクロールする（以後はスクロールに任せる）
+      useEffect(() => { const el = ref.current; if (el) el.scrollTop = selected * WHEEL_ITEM_H; }, []);
+      const handleScroll = () => {
+        const el = ref.current; if (!el) return;
+        const idx = Math.max(0, Math.min(items.length - 1, Math.round(el.scrollTop / WHEEL_ITEM_H)));
+        if (idx !== selected) onSelect(idx);
+      };
+      return (
+        <div className="relative flex-1">
+          <div ref={ref} onScroll={handleScroll} className="h-[180px] overflow-y-auto hide-scrollbar snap-y snap-mandatory" style={{ paddingTop: WHEEL_ITEM_H * 2, paddingBottom: WHEEL_ITEM_H * 2 }}>
+            {items.map((label, i) => (
+              <button key={label} type="button" onClick={() => { onSelect(i); ref.current?.scrollTo({ top: i * WHEEL_ITEM_H, behavior: 'smooth' }); }}
+                className={`w-full h-9 snap-center flex items-center justify-center font-black transition-all ${i === selected ? 'text-2xl text-blue-600 dark:text-blue-400' : 'text-base text-slate-400 dark:text-slate-500'}`}>
+                {label}{i === selected && suffix ? <span className="text-xs ml-0.5">{suffix}</span> : null}
+              </button>
+            ))}
+          </div>
+          <div className="pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2 h-9 rounded-lg border-2 border-blue-200 dark:border-blue-800 bg-blue-50/40 dark:bg-blue-900/20"></div>
+        </div>
+      );
+    };
+    const HOUR_ITEMS = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
+    const MINUTE_ITEMS = Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, '0'));
     // 時刻入力欄。標準の時刻ピッカーは1分ずつしか動かせず面倒なため、直接タイプ入力
-    // （"840" と打ってもよい）＋ ▲▼ボタンと上下キーで5分刻みに動かせる入力欄にする。
+    // （"840" と打ってもよい）に加え、時計ボタンから回転ホイール（分は5分刻み）で選べるようにする。
     // 値は "HH:MM"、未設定は ''。入力中は、確定（フォーカスを外す・Enter）まで親の値を上書きしない
     const TimeInput = ({ value, onChange, disabled = false, className = '', title, wrapClassName = '' }) => {
       const [text, setText] = useState(value || '');
       const [focused, setFocused] = useState(false);
+      const [wheelOpen, setWheelOpen] = useState(false);
+      const [wheelH, setWheelH] = useState(8);
+      const [wheelM, setWheelM] = useState(0);
       useEffect(() => { if (!focused) setText(value || ''); }, [value, focused]);
       const commit = (raw) => {
         const p = parseTimeText(raw);
@@ -478,6 +508,19 @@
         const next = shiftTimeText(text || value, delta);
         setText(next);
         if (next !== (value || '')) onChange(next);
+      };
+      const openWheel = () => {
+        if (disabled) return;
+        const p = parseTimeText(text || value);
+        if (p) { setWheelH(Number(p.slice(0, 2))); setWheelM(Math.round(Number(p.slice(3, 5)) / 5) % 12); }
+        else { setWheelH(8); setWheelM(0); }
+        setWheelOpen(true);
+      };
+      const applyWheel = () => {
+        const next = `${HOUR_ITEMS[wheelH]}:${MINUTE_ITEMS[wheelM]}`;
+        setText(next);
+        if (next !== (value || '')) onChange(next);
+        setWheelOpen(false);
       };
       return (
         <span className={`inline-flex items-stretch ${wrapClassName}`}>
@@ -493,10 +536,23 @@
               else if (e.key === 'Escape') { setText(value || ''); }
             }}
             className={className} />
-          <span className="flex flex-col ml-1 shrink-0">
-            <button type="button" tabIndex={-1} disabled={disabled} onClick={() => step(5)} aria-label="5分進める" className="flex-1 px-1 text-[9px] leading-none font-black text-slate-500 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-t-md hover:bg-slate-200 dark:hover:bg-slate-600 active:scale-95 disabled:opacity-40 transition-all">▲</button>
-            <button type="button" tabIndex={-1} disabled={disabled} onClick={() => step(-5)} aria-label="5分戻す" className="flex-1 px-1 text-[9px] leading-none font-black text-slate-500 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 border-t-0 rounded-b-md hover:bg-slate-200 dark:hover:bg-slate-600 active:scale-95 disabled:opacity-40 transition-all">▼</button>
-          </span>
+          <button type="button" tabIndex={-1} disabled={disabled} onClick={openWheel} aria-label="回転ホイールで時刻を選ぶ" className="ml-1 shrink-0 px-2 flex items-center justify-center text-sm bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 active:scale-95 disabled:opacity-40 transition-all">🕘</button>
+          {wheelOpen && (
+            <span className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center bg-slate-900/50" onClick={() => setWheelOpen(false)}>
+              <span className="bg-white dark:bg-slate-800 w-full sm:max-w-xs rounded-t-[2rem] sm:rounded-2xl shadow-2xl p-5 block anim-scale-in" onClick={e => e.stopPropagation()}>
+                <span className="block text-center text-3xl font-black text-slate-800 dark:text-slate-100 mb-3">{HOUR_ITEMS[wheelH]}:{MINUTE_ITEMS[wheelM]}</span>
+                <span className="flex items-start gap-1">
+                  <TimeWheelColumn items={HOUR_ITEMS} selected={wheelH} onSelect={setWheelH} suffix="時" />
+                  <span className="h-[180px] flex items-center text-2xl font-black text-slate-300 dark:text-slate-600">:</span>
+                  <TimeWheelColumn items={MINUTE_ITEMS} selected={wheelM} onSelect={setWheelM} suffix="分" />
+                </span>
+                <span className="flex gap-2 mt-4">
+                  <button type="button" onClick={() => setWheelOpen(false)} className="flex-1 py-2.5 rounded-xl text-sm font-black bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-slate-600">キャンセル</button>
+                  <button type="button" onClick={applyWheel} className="flex-1 py-2.5 rounded-xl text-sm font-black bg-blue-600 text-white shadow-md">決定</button>
+                </span>
+              </span>
+            </span>
+          )}
         </span>
       );
     };
