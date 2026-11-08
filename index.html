@@ -4507,6 +4507,32 @@
         const inRange = (ds) => ds >= startStr && ds < endStr;
         const sortKey = (ds, pid) => `${ds}-${periodIds.indexOf(pid)}`;
 
+        // 時間割の教科名だけ（例「22社会」）が入ったコマのうち、前の時間割を写しただけのものも消す。
+        // 振替（日課の入れ替え）・入れ替えで自分で動かしたコマは残す：
+        //  - 振替した日は対象外
+        //  - 今の時間割でその時限と同じ教科 → 消して入れ直す（中身は同じ）
+        //  - 今の時間割のどこにもない教科、または前の時間割のその時限と同じ教科 → 前の時間割の名残として消す
+        const templateEntries = listTemplateEntries(baseTemplate).map(e => getTemplateEntry(baseTemplate, e.key, {}));
+        if (!templateEntries.length) templateEntries.push(getTemplateEntry(baseTemplate, null, {}));
+        const subjOf = (c) => (c?.subject || '').trim();
+        const isStaleTimetableCopy = (ds, pid, cell) => {
+          if (weeklySettings[ds]?.routine !== undefined) return false;
+          const subj = subjOf(cell);
+          if (!subj || subj.includes('\n')) return false;
+          const [y, m, d] = ds.split('-').map(Number);
+          const di = (new Date(y, m - 1, d).getDay() + 6) % 7;
+          const tk = `${di}-${pid}`;
+          const cur = getTemplateFor(ds);
+          const memo = (cell.memo || '').trim();
+          const memoOk = (t) => !memo || memo === (t?.memo || '').trim();
+          if (subjOf(cur[tk]) === subj) return memoOk(cur[tk]);
+          const oldAtSlot = templateEntries.find(t => t !== cur && subjOf(t[tk]) === subj);
+          if (oldAtSlot) return memoOk(oldAtSlot[tk]);
+          const inCurrent = Object.keys(cur).some(k => subjOf(cur[k]) === subj);
+          const inAnyOld = templateEntries.some(t => Object.keys(t).some(k => subjOf(t[k]) === subj));
+          return !inCurrent && inAnyOld && !memo;
+        };
+
         // 範囲より前の最後の自動入力コマ／範囲内で消すコマのうち最初のもの を教科×クラスごとに記録
         const lastBefore = {}, firstCleared = {};
         let cleared = 0;
@@ -4515,6 +4541,7 @@
           if (periodIds.indexOf(pid) < 0) continue;
           const cell = nd[key];
           if (!cell?.subject || cell.useTemplate) continue;
+          if (inRange(ds) && isStaleTimetableCopy(ds, pid, cell)) { delete nd[key]; cleared++; continue; }
           const hit = matchAuto(cell.subject);
           if (!hit) continue;
           const sk = sortKey(ds, pid);
