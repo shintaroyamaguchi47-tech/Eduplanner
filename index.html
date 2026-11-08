@@ -4473,17 +4473,81 @@
         showToast(`${label}を挿入しました`);
       };
 
-      // 週の自動入力：テンプレートの教科と進度データを照合し、自動的に週案を埋める
-      const handleAutoFillWeek = () => {
-        if (syllabusData.length === 0) { showToast('進度データがありません'); return; }
+      // 週案の自動入力（今週／学年末まで）の共通処理。
+      // 範囲内で「教科（単元 h/H）」の形のまま残っている自動入力済みのコマは、いったん消してから
+      // 今の基本時間割で入れ直す。後期に時間割が変わっても前期の授業が残らないようにするため。
+      // 単元テスト・自習・延長・手入力のコマはそのまま残す。
+      const autoFillRange = (rangeStart, endDate) => {
         const periodIds = ['p1','p2','p3','p4','p5','p6'];
-        let nd = {...weeklyData};
+        const esc = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const startStr = formatDate(rangeStart);
+        const endStr = formatDate(endDate);
+        const nd = {...weeklyData};
         let up = syllabusData.map(s => ({...s, classProgress: {...(s.classProgress||{})}}));
-        let filled = 0;
 
-        for (let i = 0; i < 7; i++) {
-          const cd = new Date(currentWeekStart); cd.setDate(cd.getDate() + i);
+        // 教科×クラスごとの自動入力パターン
+        const targets = [];
+        up.forEach((s, idx) => {
+          if (s.type !== 'auto' || !s.units?.length) return;
+          const clsList = s.classes?.length ? [null, ...s.classes] : [null];
+          clsList.forEach(cls => targets.push({
+            idx, cls, key: `${idx}|${cls || ''}`,
+            pat: new RegExp(`^${esc(cls || '')}${esc(s.name)}（(.+) (\\d+)/(\\d+)）$`),
+          }));
+        });
+        const matchAuto = (subject) => {
+          for (const t of targets) {
+            const m = (subject || '').trim().match(t.pat);
+            if (!m) continue;
+            const ui = up[t.idx].units.findIndex(u => u.name === m[1]);
+            if (ui >= 0) return { t, ui, h: parseInt(m[2]) };
+          }
+          return null;
+        };
+        const inRange = (ds) => ds >= startStr && ds < endStr;
+        const sortKey = (ds, pid) => `${ds}-${periodIds.indexOf(pid)}`;
+
+        // 範囲より前の最後の自動入力コマ／範囲内で消すコマのうち最初のもの を教科×クラスごとに記録
+        const lastBefore = {}, firstCleared = {};
+        let cleared = 0;
+        for (const key of Object.keys(nd)) {
+          const ds = key.substring(0, 10), pid = key.substring(11);
+          if (periodIds.indexOf(pid) < 0) continue;
+          const cell = nd[key];
+          if (!cell?.subject || cell.useTemplate) continue;
+          const hit = matchAuto(cell.subject);
+          if (!hit) continue;
+          const sk = sortKey(ds, pid);
+          if (ds < startStr) {
+            const prev = lastBefore[hit.t.key];
+            if (!prev || sk > prev.sk) lastBefore[hit.t.key] = { sk, ui: hit.ui, h: hit.h };
+          } else if (inRange(ds)) {
+            const prev = firstCleared[hit.t.key];
+            if (!prev || sk < prev.sk) firstCleared[hit.t.key] = { sk, ui: hit.ui, h: hit.h };
+            delete nd[key];
+            cleared++;
+          }
+        }
+
+        // 入れ直しの開始位置：範囲より前の続き → 消したコマの最初 → 保存済みの進度
+        const touched = new Set();
+        for (const t of targets) {
+          const s = up[t.idx];
+          let start = null;
+          if (lastBefore[t.key]) {
+            let ui = lastBefore[t.key].ui, h = lastBefore[t.key].h + 1;
+            if (h > (s.units[ui]?.hours || 0)) { ui++; h = 1; }
+            start = { ui, h };
+          } else if (firstCleared[t.key]) {
+            start = { ui: firstCleared[t.key].ui, h: firstCleared[t.key].h };
+          }
+          if (start) up[t.idx] = setClassProgress(s, t.cls, start.ui, start.h);
+        }
+
+        let filled = 0;
+        for (const cd = new Date(rangeStart); cd < endDate; cd.setDate(cd.getDate() + 1)) {
           const ds = formatDate(cd);
+          const i = (cd.getDay() + 6) % 7;
           const setting = getDaySetting(ds, i);
           if (isNoClassType(setting.type)) continue;
 
@@ -4492,12 +4556,9 @@
             const ov = nd[wk];
             if (ov && !ov.useTemplate) continue;
 
-            const tk = `${i}-${pid}`;
-            const tmpl = getTemplateFor(ds)[tk];
+            const tmpl = getTemplateFor(ds)[`${i}-${pid}`];
             if (!tmpl || !tmpl.subject || !tmpl.subject.trim()) continue;
-            const tSubj = tmpl.subject.trim();
-
-            const match = findSyllabusMatch(tSubj, up);
+            const match = findSyllabusMatch(tmpl.subject.trim(), up);
             if (!match) continue;
             const s = up[match.idx];
             const prog = getClassProgress(s, match.cls);
@@ -4505,13 +4566,14 @@
             if (!unit) continue;
 
             const prefix = match.cls || '';
-            const text = `${prefix}${s.name}（${unit.name} ${prog.currentHour}/${unit.hours}）`;
             const times = SCHEDULE_TIMES[setting.type]?.[pid];
             nd[wk] = {
-              subject: text, memo: tmpl.memo || '', useTemplate: false,
+              subject: `${prefix}${s.name}（${unit.name} ${prog.currentHour}/${unit.hours}）`,
+              memo: tmpl.memo || '', useTemplate: false,
               startTime: times?.start || '', endTime: times?.end || '', color: ''
             };
             filled++;
+            touched.add(`${match.idx}|${match.cls || ''}`);
             let nh = prog.currentHour + 1;
             let nu = prog.currentUnitIdx;
             if (nh > unit.hours) { nh = 1; nu++; }
@@ -4519,10 +4581,18 @@
           }
         }
 
-        if (filled === 0) { showToast('自動入力できる授業がありません'); return; }
+        if (filled === 0 && cleared === 0) { showToast('自動入力できる授業がありません'); return; }
         saveSyllabus(up);
         saveAll(baseTemplate, templateSettings, nd, weeklySettings);
-        showToast(`📚 ${filled}コマ自動入力しました`);
+        const removed = cleared - filled;
+        showToast(removed > 0 ? `📚 ${filled}コマ自動入力しました（時間割にない古いコマ${removed}件を削除）` : `📚 ${filled}コマ自動入力しました`);
+      };
+
+      // 週の自動入力：テンプレートの教科と進度データを照合し、自動的に週案を埋める
+      const handleAutoFillWeek = () => {
+        if (syllabusData.length === 0) { showToast('進度データがありません'); return; }
+        const end = new Date(currentWeekStart); end.setDate(end.getDate() + 7);
+        autoFillRange(new Date(currentWeekStart), end);
       };
 
       // 今週以降・学年末まで全週を自動入力
@@ -4532,61 +4602,8 @@
         const yearEndVac = vacationsOfYear(vacations, templateSchoolYear).find(v => v.name === '学年末休業');
         const endDate = yearEndVac ? new Date(`${yearEndVac.start}T00:00:00`) : new Date(templateSchoolYear + 1, 2, 20);
         const weeksCount = Math.ceil((endDate - currentWeekStart) / (7 * 24 * 60 * 60 * 1000));
-        if (!window.confirm(`今週から学年末まで（約${weeksCount}週分）の授業を自動入力します。\n既に入力済みのコマは上書きしません。\nよろしいですか？`)) return;
-
-        const periodIds = ['p1','p2','p3','p4','p5','p6'];
-        let nd = {...weeklyData};
-        let up = syllabusData.map(s => ({...s, classProgress: {...(s.classProgress||{})}}));
-        let filled = 0;
-
-        let weekStart = new Date(currentWeekStart);
-        while (weekStart < endDate) {
-          for (let i = 0; i < 7; i++) {
-            const cd = new Date(weekStart); cd.setDate(cd.getDate() + i);
-            if (cd >= endDate) break;
-
-            const ds = formatDate(cd);
-            const setting = getDaySetting(ds, i);
-            if (isNoClassType(setting.type)) continue;
-
-            for (const pid of periodIds) {
-              const wk = `${ds}-${pid}`;
-              const ov = nd[wk];
-              if (ov && !ov.useTemplate) continue;
-
-              const tk = `${i}-${pid}`;
-              const tmpl = getTemplateFor(ds)[tk];
-              if (!tmpl || !tmpl.subject || !tmpl.subject.trim()) continue;
-              const tSubj = tmpl.subject.trim();
-
-              const match = findSyllabusMatch(tSubj, up);
-              if (!match) continue;
-              const s = up[match.idx];
-              const prog = getClassProgress(s, match.cls);
-              const unit = s.units?.[prog.currentUnitIdx];
-              if (!unit) continue;
-
-              const prefix = match.cls || '';
-              const text = `${prefix}${s.name}（${unit.name} ${prog.currentHour}/${unit.hours}）`;
-              const times = SCHEDULE_TIMES[setting.type]?.[pid];
-              nd[wk] = {
-                subject: text, memo: tmpl.memo || '', useTemplate: false,
-                startTime: times?.start || '', endTime: times?.end || '', color: ''
-              };
-              filled++;
-              let nh = prog.currentHour + 1;
-              let nu = prog.currentUnitIdx;
-              if (nh > unit.hours) { nh = 1; nu++; }
-              up[match.idx] = setClassProgress(up[match.idx], match.cls, nu, nh);
-            }
-          }
-          weekStart.setDate(weekStart.getDate() + 7);
-        }
-
-        if (filled === 0) { showToast('自動入力できる授業がありません'); return; }
-        saveSyllabus(up);
-        saveAll(baseTemplate, templateSettings, nd, weeklySettings);
-        showToast(`📚 ${filled}コマ自動入力しました`);
+        if (!window.confirm(`今週から学年末まで（約${weeksCount}週分）の授業を自動入力します。\n今の時間割で入れ直すため、自動入力済みのコマ（「教科（単元 1/5）」の形のもの）は置き換わり、時間割にないコマは消えます。\n単元テスト・自習・延長・手入力したコマはそのまま残します。\nよろしいですか？`)) return;
+        autoFillRange(new Date(currentWeekStart), endDate);
       };
 
       const handleCopyDay = (target,source) => { if(source==='') return; const sIdx=parseInt(source); const tgtSettings=getTemplateSettingsFor(target); const tgtTemplate=getTemplateFor(target); const ns={...weeklySettings,[target]:{...(tgtSettings[sIdx]||DEFAULT_TEMPLATE_SETTINGS[sIdx]),routine:sIdx}}; const nd={...weeklyData}; ROWS.forEach(r=>{ nd[`${target}-${r.id}`]={...(tgtTemplate[`${sIdx}-${r.id}`]||{}),useTemplate:false}; }); setWeeklySettings(ns); setWeeklyData(nd); saveAll(baseTemplate,templateSettings,nd,ns); };
@@ -5833,7 +5850,7 @@
                                 <button onClick={handleAutoFillWeek} className="action-btn text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2.5 py-1.5 rounded-lg hover:bg-blue-100 transition-colors flex items-center gap-1 whitespace-nowrap" title="基本設定の教科と進度データを照合し、今週の授業を自動入力">
                                   📚 今週を自動入力
                                 </button>
-                                <button onClick={handleAutoFillAllWeeks} className="action-btn text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-1.5 rounded-lg hover:bg-indigo-100 transition-colors flex items-center gap-1 whitespace-nowrap" title="今週から学年末まで全週の授業を自動入力（入力済みのコマは上書きしません）">
+                                <button onClick={handleAutoFillAllWeeks} className="action-btn text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-1.5 rounded-lg hover:bg-indigo-100 transition-colors flex items-center gap-1 whitespace-nowrap" title="今週から学年末まで、今の時間割で授業を入れ直す（単元テスト・自習・手入力のコマは残します）">
                                   📚 学期末まで自動入力
                                 </button>
                               </>
