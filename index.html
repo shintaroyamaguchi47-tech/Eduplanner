@@ -1551,6 +1551,8 @@
       const [tempUnitPickerSel, setTempUnitPickerSel] = useState(null);
       // 単元テストの単元選択リストを開いている教科・クラス（`${subjIdx}|${cls}`）
       const [testPickerKey, setTestPickerKey] = useState(null);
+      // そのリストで選んでいる単元の番号（複数の単元をまとめて1回のテストにできる）
+      const [testPickerSel, setTestPickerSel] = useState([]);
       const [showCellAdvanced, setShowCellAdvanced] = useState(false);
       const [showHandwritingPad, setShowHandwritingPad] = useState(false);
       const [unitPlanSubjIdx, setUnitPlanSubjIdx] = useState(0);
@@ -4384,22 +4386,42 @@
         return Math.min(Math.max(ui, 0), subj.units.length - 1);
       };
 
-      // 「🧪 単元テスト」を押したときに出す、テストする単元の選択リスト
+      // 「🧪 単元テスト」ボタン：単元の選択リストを開閉する。開くときはおすすめの単元を選んだ状態にする
+      const toggleTestPicker = (subj, subjIdx, cls) => {
+        const key = `${subjIdx}|${cls || ''}`;
+        if (testPickerKey === key) { setTestPickerKey(null); return; }
+        const defIdx = editingCell ? getDefaultTestUnitIdx(subj, cls, editingCell.dateStr, editingCell.periodId) : -1;
+        setTestPickerSel(defIdx >= 0 ? [defIdx] : []);
+        setTestPickerKey(key);
+      };
+
+      // 「🧪 単元テスト」を押したときに出す、テストする単元の選択リスト。
+      // 単元は複数選べて、選んだ単元をまとめた1回のテストとして入力する
       const renderTestUnitPicker = (subj, subjIdx, cls) => {
         if (!editingCell || testPickerKey !== `${subjIdx}|${cls || ''}` || !subj.units?.length) return null;
         const defIdx = getDefaultTestUnitIdx(subj, cls, editingCell.dateStr, editingCell.periodId);
+        const sel = testPickerSel.filter(i => i >= 0 && i < subj.units.length).sort((a, b) => a - b);
+        const toggle = (uIdx) => setTestPickerSel(cur => cur.includes(uIdx) ? cur.filter(i => i !== uIdx) : [...cur, uIdx]);
+        const names = sel.map(i => subj.units[i].name);
         return (
-          <div className="bg-rose-50 border border-rose-200 rounded-lg p-2 space-y-1">
-            <div className="text-[10px] font-black text-rose-700">🧪 どの単元のテスト？</div>
+          <div className="bg-rose-50 border border-rose-200 rounded-lg p-2 space-y-1.5">
+            <div className="text-[10px] font-black text-rose-700">🧪 どの単元のテスト？（まとめてテストするときは複数選べます）</div>
             <div className="flex flex-wrap gap-1">
-              {subj.units.map((u, uIdx) => (
-                <button key={uIdx} type="button"
-                  onClick={() => { handleInsertSpecial('test', subjIdx, cls, u.name); setTestPickerKey(null); }}
-                  className={`text-[11px] font-bold py-1 px-2 rounded-md border shadow-sm active:scale-95 transition-all ${uIdx === defIdx ? 'bg-rose-600 text-white border-rose-700' : 'bg-white text-rose-700 border-rose-300 hover:bg-rose-100'}`}>
-                  {u.name}{uIdx === defIdx ? '（おすすめ）' : ''}
-                </button>
-              ))}
+              {subj.units.map((u, uIdx) => {
+                const on = sel.includes(uIdx);
+                return (
+                  <button key={uIdx} type="button" onClick={() => toggle(uIdx)}
+                    className={`text-[11px] font-bold py-1 px-2 rounded-md border shadow-sm active:scale-95 transition-all ${on ? 'bg-rose-600 text-white border-rose-700' : 'bg-white text-rose-700 border-rose-300 hover:bg-rose-100'}`}>
+                    {on ? '✓ ' : ''}{u.name}{uIdx === defIdx ? '（おすすめ）' : ''}
+                  </button>
+                );
+              })}
             </div>
+            <button type="button" disabled={!names.length}
+              onClick={() => { handleInsertSpecial('test', subjIdx, cls, names.join('・')); setTestPickerKey(null); }}
+              className="w-full bg-rose-600 text-white text-[11px] font-black py-1.5 px-2 rounded-md shadow-sm hover:bg-rose-700 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed truncate">
+              {names.length ? `「${names.join('・')} 単元テスト」を入力` : '単元を選んでください'}
+            </button>
           </div>
         );
       };
@@ -4843,12 +4865,14 @@
         const esc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const prefixes = s.classes?.length ? s.classes : [''];
         const head = `(?:${prefixes.map(esc).join('|')})${esc(s.name)}（`;
-        const re = new RegExp(`^(${head})${esc(oldName)}((?: \\d+/\\d+| 単元テスト)）)$`);
+        const re = new RegExp(`^(${head})${esc(oldName)}( \\d+/\\d+）)$`);
+        // 単元テストは「A・B 単元テスト」のように複数の単元をまとめていることがある
+        const testRe = new RegExp(`^(${head}(?:.+・)?)${esc(oldName)}((?:・.+)? 単元テスト）)$`);
         const nd = { ...weeklyData };
         let changed = 0;
         Object.keys(nd).forEach(k => {
           const cell = nd[k];
-          const m = cell?.subject?.match(re);
+          const m = cell?.subject?.match(re) || cell?.subject?.match(testRe);
           if (m) { nd[k] = { ...cell, subject: `${m[1]}${nm}${m[2]}` }; changed++; }
         });
 
@@ -7875,7 +7899,7 @@
                                           <button type="button" onClick={()=>{setTempSubject(text); setTempUnitPickerSel({ subjIdx, cls, unitIdx: prog.currentUnitIdx, hour: prog.currentHour });}} title="単元・時間目を選んで入力" className="shrink-0 bg-indigo-50 text-indigo-600 text-[10px] font-bold py-2 px-2 rounded-lg border border-indigo-300 shadow-sm active:scale-95 hover:bg-indigo-100 transition-colors whitespace-nowrap">単元選択</button>
                                         </div>
                                         <div className="flex gap-1 pl-0.5">
-                                          <button type="button" onClick={()=>setTestPickerKey(k => k === `${subjIdx}|${cls || ''}` ? null : `${subjIdx}|${cls || ''}`)} className="flex-1 bg-rose-50 text-rose-700 text-[11px] font-black py-1.5 px-2 rounded-md border border-rose-300 shadow-sm hover:bg-rose-100 active:scale-95 transition-all">🧪 単元テスト</button>
+                                          <button type="button" onClick={()=>toggleTestPicker(subj, subjIdx, cls)} className="flex-1 bg-rose-50 text-rose-700 text-[11px] font-black py-1.5 px-2 rounded-md border border-rose-300 shadow-sm hover:bg-rose-100 active:scale-95 transition-all">🧪 単元テスト</button>
                                           <button type="button" onClick={()=>handleInsertSpecial('self', subjIdx, cls)} className="flex-1 bg-amber-50 text-amber-800 text-[11px] font-black py-1.5 px-2 rounded-md border border-amber-300 shadow-sm hover:bg-amber-100 active:scale-95 transition-all">📖 自習</button>
                                           <button type="button" onClick={()=>handleInsertSpecial('repeat', subjIdx, cls)} className="flex-1 bg-slate-50 text-slate-700 text-[11px] font-black py-1.5 px-2 rounded-md border border-slate-300 shadow-sm hover:bg-slate-100 active:scale-95 transition-all">🔁 もう1時間</button>
                                         </div>
@@ -8054,7 +8078,7 @@
                                     <button type="button" onClick={()=>{setTempSubject(text); setTempUnitPickerSel({ subjIdx, cls, unitIdx: prog.currentUnitIdx, hour: prog.currentHour });}} title="単元・時間目を選んで入力" className="shrink-0 bg-indigo-50 text-indigo-600 text-[10px] font-bold py-2 px-2 rounded-lg border border-indigo-300 shadow-sm active:scale-95 hover:bg-indigo-100 transition-colors whitespace-nowrap">単元選択</button>
                                   </div>
                                   <div className="flex gap-1 pl-0.5">
-                                    <button type="button" onClick={()=>setTestPickerKey(k => k === `${subjIdx}|${cls || ''}` ? null : `${subjIdx}|${cls || ''}`)} className="flex-1 bg-rose-50 text-rose-700 text-[11px] font-black py-1.5 px-2 rounded-md border border-rose-300 shadow-sm hover:bg-rose-100 active:scale-95 transition-all">🧪 単元テスト</button>
+                                    <button type="button" onClick={()=>toggleTestPicker(subj, subjIdx, cls)} className="flex-1 bg-rose-50 text-rose-700 text-[11px] font-black py-1.5 px-2 rounded-md border border-rose-300 shadow-sm hover:bg-rose-100 active:scale-95 transition-all">🧪 単元テスト</button>
                                     <button type="button" onClick={()=>handleInsertSpecial('self', subjIdx, cls)} className="flex-1 bg-amber-50 text-amber-800 text-[11px] font-black py-1.5 px-2 rounded-md border border-amber-300 shadow-sm hover:bg-amber-100 active:scale-95 transition-all">📖 自習</button>
                                     <button type="button" onClick={()=>handleInsertSpecial('repeat', subjIdx, cls)} className="flex-1 bg-slate-50 text-slate-700 text-[11px] font-black py-1.5 px-2 rounded-md border border-slate-300 shadow-sm hover:bg-slate-100 active:scale-95 transition-all">🔁 もう1時間</button>
                                   </div>
