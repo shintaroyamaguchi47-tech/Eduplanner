@@ -1549,6 +1549,8 @@
       const [navTabDay, setNavTabDay] = useState(null);   // タブ操作で参照中のテンプレート曜日
       const [navTabPeriod, setNavTabPeriod] = useState(null); // タブ操作で参照中のテンプレート時限
       const [tempUnitPickerSel, setTempUnitPickerSel] = useState(null);
+      // 単元テストの単元選択リストを開いている教科・クラス（`${subjIdx}|${cls}`）
+      const [testPickerKey, setTestPickerKey] = useState(null);
       const [showCellAdvanced, setShowCellAdvanced] = useState(false);
       const [showHandwritingPad, setShowHandwritingPad] = useState(false);
       const [unitPlanSubjIdx, setUnitPlanSubjIdx] = useState(0);
@@ -4371,6 +4373,37 @@
         showToast(`📚 ${res.filled}コマ自動入力しました${res.filled > 1 ? tail : ''}`);
       };
 
+      // 単元テストの既定の単元。単元テストは単元が終わった後に行うので、
+      // 編集中のコマが新しい単元の1時間目にあたるなら（＝直前の単元が終わったところなら）直前の単元、
+      // 単元の途中なら今の単元を返す。
+      const getDefaultTestUnitIdx = (subj, cls, ds, pid) => {
+        if (!subj?.units?.length) return -1;
+        const prog = getCellRelativeProgress(subj, cls, ds, pid);
+        let ui = prog.currentUnitIdx;
+        if (prog.currentHour <= 1 && ui > 0) ui -= 1;
+        return Math.min(Math.max(ui, 0), subj.units.length - 1);
+      };
+
+      // 「🧪 単元テスト」を押したときに出す、テストする単元の選択リスト
+      const renderTestUnitPicker = (subj, subjIdx, cls) => {
+        if (!editingCell || testPickerKey !== `${subjIdx}|${cls || ''}` || !subj.units?.length) return null;
+        const defIdx = getDefaultTestUnitIdx(subj, cls, editingCell.dateStr, editingCell.periodId);
+        return (
+          <div className="bg-rose-50 border border-rose-200 rounded-lg p-2 space-y-1">
+            <div className="text-[10px] font-black text-rose-700">🧪 どの単元のテスト？</div>
+            <div className="flex flex-wrap gap-1">
+              {subj.units.map((u, uIdx) => (
+                <button key={uIdx} type="button"
+                  onClick={() => { handleInsertSpecial('test', subjIdx, cls, u.name); setTestPickerKey(null); }}
+                  className={`text-[11px] font-bold py-1 px-2 rounded-md border shadow-sm active:scale-95 transition-all ${uIdx === defIdx ? 'bg-rose-600 text-white border-rose-700' : 'bg-white text-rose-700 border-rose-300 hover:bg-rose-100'}`}>
+                  {u.name}{uIdx === defIdx ? '（おすすめ）' : ''}
+                </button>
+              ))}
+            </div>
+          </div>
+        );
+      };
+
       // 単元テスト・自習・延長などの特別コマを挿入し、同週の後続セルを1コマずらす
       const handleInsertSpecial = (kind, subjIdx, cls = null, unitNameOverride = null) => {
         if (!editingCell || editingCell.isTemplate) return;
@@ -4394,7 +4427,8 @@
         let text;
         let newColor = tempColor || '';
         if (kind === 'test') {
-          const testUnitName = unitNameOverride || (wasConsuming ? wasConsuming[1] : unitName);
+          const defIdx = getDefaultTestUnitIdx(subj, cls, ds, pid);
+          const testUnitName = unitNameOverride || subj.units?.[defIdx]?.name || '';
           text = testUnitName ? `${prefix}${subj.name}（${testUnitName} 単元テスト）` : `${prefix}${subj.name}（単元テスト）`;
           newColor = 'test';
         } else if (kind === 'self') {
@@ -4666,7 +4700,7 @@
       };
       const setEventText = (text) => { setTempSubject(text); setTempEventRows(eventRowsFromText(text)); };
 
-      const openEditModal = (cd, ds, row, di, dn, ih) => { const sp = (!ih && activeTab==='weekly') ? getCellSpan(ds, row.id, di) : null; if (sp && row.id !== sp.from) { openEditModal(getCellData(ds, sp.from, di), ds, ROWS.find(r=>r.id===sp.from), di, dn, ih); return; } setTempSpanTo(null); if(row.id==='afterschool'){ let ie=cd.events?.length>0?[...cd.events]:[]; if(ie.length===0&&(cd.subject||cd.memo)) ie=[{startTime:cd.startTime||'',endTime:cd.endTime||'',subject:cd.subject||'',memo:cd.memo||''}]; while(ie.length<5) ie.push({startTime:'',endTime:'',subject:'',memo:''}); setTempEvents(ie); } else if (row.id === 'event' && activeTab !== 'template') { const raw = weeklyData[`${ds}-event`]; setEventText(raw?.subject || ''); setTempMemo(cd.memo||''); setTempStartTime(cd.startTime||''); setTempEndTime(cd.endTime||''); } else { if(row.id==='event') setEventText(cd.subject||''); else setTempSubject(cd.subject||''); setTempMemo(cd.memo||''); let sT=cd.startTime||''; let eT=cd.endTime||''; if(!ih && activeTab!=='template' && row.id!=='event' && row.id!=='diary') { const sc=SCHEDULE_TIMES[getDaySetting(ds,di).type]?.[row.id]; if(sc){ if(!sT) sT=sc.start||''; if(!eT) eT=sc.end||''; } } setTempStartTime(sT); setTempEndTime(eT); } setTempHandwriting(cd.handwriting||null); setTempColor(cd.color||''); setTempUnitPickerSel(null); setNavTabDay(null); setNavTabPeriod(null); setEditingCell({dateStr:ds, periodId:row.id, dayIndex:di, dayName:dn, periodName:sp ? `${sp.from.replace('p','')}〜${sp.to.replace('p','')}限` : row.name, isTemplate:activeTab==='template', ih, span:sp}); };
+      const openEditModal = (cd, ds, row, di, dn, ih) => { const sp = (!ih && activeTab==='weekly') ? getCellSpan(ds, row.id, di) : null; if (sp && row.id !== sp.from) { openEditModal(getCellData(ds, sp.from, di), ds, ROWS.find(r=>r.id===sp.from), di, dn, ih); return; } setTempSpanTo(null); if(row.id==='afterschool'){ let ie=cd.events?.length>0?[...cd.events]:[]; if(ie.length===0&&(cd.subject||cd.memo)) ie=[{startTime:cd.startTime||'',endTime:cd.endTime||'',subject:cd.subject||'',memo:cd.memo||''}]; while(ie.length<5) ie.push({startTime:'',endTime:'',subject:'',memo:''}); setTempEvents(ie); } else if (row.id === 'event' && activeTab !== 'template') { const raw = weeklyData[`${ds}-event`]; setEventText(raw?.subject || ''); setTempMemo(cd.memo||''); setTempStartTime(cd.startTime||''); setTempEndTime(cd.endTime||''); } else { if(row.id==='event') setEventText(cd.subject||''); else setTempSubject(cd.subject||''); setTempMemo(cd.memo||''); let sT=cd.startTime||''; let eT=cd.endTime||''; if(!ih && activeTab!=='template' && row.id!=='event' && row.id!=='diary') { const sc=SCHEDULE_TIMES[getDaySetting(ds,di).type]?.[row.id]; if(sc){ if(!sT) sT=sc.start||''; if(!eT) eT=sc.end||''; } } setTempStartTime(sT); setTempEndTime(eT); } setTempHandwriting(cd.handwriting||null); setTempColor(cd.color||''); setTempUnitPickerSel(null); setTestPickerKey(null); setNavTabDay(null); setNavTabPeriod(null); setEditingCell({dateStr:ds, periodId:row.id, dayIndex:di, dayName:dn, periodName:sp ? `${sp.from.replace('p','')}〜${sp.to.replace('p','')}限` : row.name, isTemplate:activeTab==='template', ih, span:sp}); };
       const updateTempEvent = (i,f,v) => { const n=[...tempEvents]; n[i][f]=v; setTempEvents(n); };
 
       // 授業予定モーダル内で曜日・時間タブを押したとき：
@@ -7841,10 +7875,11 @@
                                           <button type="button" onClick={()=>{setTempSubject(text); setTempUnitPickerSel({ subjIdx, cls, unitIdx: prog.currentUnitIdx, hour: prog.currentHour });}} title="単元・時間目を選んで入力" className="shrink-0 bg-indigo-50 text-indigo-600 text-[10px] font-bold py-2 px-2 rounded-lg border border-indigo-300 shadow-sm active:scale-95 hover:bg-indigo-100 transition-colors whitespace-nowrap">単元選択</button>
                                         </div>
                                         <div className="flex gap-1 pl-0.5">
-                                          <button type="button" onClick={()=>handleInsertSpecial('test', subjIdx, cls)} className="flex-1 bg-rose-50 text-rose-700 text-[11px] font-black py-1.5 px-2 rounded-md border border-rose-300 shadow-sm hover:bg-rose-100 active:scale-95 transition-all">🧪 単元テスト</button>
+                                          <button type="button" onClick={()=>setTestPickerKey(k => k === `${subjIdx}|${cls || ''}` ? null : `${subjIdx}|${cls || ''}`)} className="flex-1 bg-rose-50 text-rose-700 text-[11px] font-black py-1.5 px-2 rounded-md border border-rose-300 shadow-sm hover:bg-rose-100 active:scale-95 transition-all">🧪 単元テスト</button>
                                           <button type="button" onClick={()=>handleInsertSpecial('self', subjIdx, cls)} className="flex-1 bg-amber-50 text-amber-800 text-[11px] font-black py-1.5 px-2 rounded-md border border-amber-300 shadow-sm hover:bg-amber-100 active:scale-95 transition-all">📖 自習</button>
                                           <button type="button" onClick={()=>handleInsertSpecial('repeat', subjIdx, cls)} className="flex-1 bg-slate-50 text-slate-700 text-[11px] font-black py-1.5 px-2 rounded-md border border-slate-300 shadow-sm hover:bg-slate-100 active:scale-95 transition-all">🔁 もう1時間</button>
                                         </div>
+                                        {renderTestUnitPicker(subj, subjIdx, cls)}
                                       </div>
                                     );
                                   });
@@ -8019,10 +8054,11 @@
                                     <button type="button" onClick={()=>{setTempSubject(text); setTempUnitPickerSel({ subjIdx, cls, unitIdx: prog.currentUnitIdx, hour: prog.currentHour });}} title="単元・時間目を選んで入力" className="shrink-0 bg-indigo-50 text-indigo-600 text-[10px] font-bold py-2 px-2 rounded-lg border border-indigo-300 shadow-sm active:scale-95 hover:bg-indigo-100 transition-colors whitespace-nowrap">単元選択</button>
                                   </div>
                                   <div className="flex gap-1 pl-0.5">
-                                    <button type="button" onClick={()=>handleInsertSpecial('test', subjIdx, cls)} className="flex-1 bg-rose-50 text-rose-700 text-[11px] font-black py-1.5 px-2 rounded-md border border-rose-300 shadow-sm hover:bg-rose-100 active:scale-95 transition-all">🧪 単元テスト</button>
+                                    <button type="button" onClick={()=>setTestPickerKey(k => k === `${subjIdx}|${cls || ''}` ? null : `${subjIdx}|${cls || ''}`)} className="flex-1 bg-rose-50 text-rose-700 text-[11px] font-black py-1.5 px-2 rounded-md border border-rose-300 shadow-sm hover:bg-rose-100 active:scale-95 transition-all">🧪 単元テスト</button>
                                     <button type="button" onClick={()=>handleInsertSpecial('self', subjIdx, cls)} className="flex-1 bg-amber-50 text-amber-800 text-[11px] font-black py-1.5 px-2 rounded-md border border-amber-300 shadow-sm hover:bg-amber-100 active:scale-95 transition-all">📖 自習</button>
                                     <button type="button" onClick={()=>handleInsertSpecial('repeat', subjIdx, cls)} className="flex-1 bg-slate-50 text-slate-700 text-[11px] font-black py-1.5 px-2 rounded-md border border-slate-300 shadow-sm hover:bg-slate-100 active:scale-95 transition-all">🔁 もう1時間</button>
                                   </div>
+                                  {renderTestUnitPicker(subj, subjIdx, cls)}
                                 </div>
                               );
                             });
