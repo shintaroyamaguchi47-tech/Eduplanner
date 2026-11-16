@@ -277,6 +277,7 @@
   <!-- 画面に依存しない関数（tests/ で単体テストしている）。ビルド時は /assets/ に置き換わる -->
   <script src="src/calendar.js"></script>
   <script src="src/sanitize.js"></script>
+  <script src="src/merge.js"></script>
   <script type="text/babel">
     const { useState, useEffect, useRef, useMemo, useCallback, useLayoutEffect } = React;
     const _importDynamic = new Function('modulePath', 'return import(modulePath)');
@@ -1633,6 +1634,10 @@
       const [yearSetupVacs, setYearSetupVacs] = useState([{ name: '夏季休業', start: '', end: '' }, { name: '冬季休業', start: '', end: '' }, { name: '学年末休業', start: '', end: '' }]);
       const [yearSetupResult, setYearSetupResult] = useState(null);
       const pendingCloudSavesRef = useRef({});
+      // 読み込み・保存の処理（コールバックの中）から、いま画面に出ているデータを読むためのもの
+      const latestDataRef = useRef({});
+      latestDataRef.current = { baseTemplate, templateSettings, weeklyData, weeklySettings, todos, notesData, syllabusData, quickMemos, yearlyData, documents, vacations };
+      const [localBannerHidden, setLocalBannerHidden] = useState(false);
       const saveStatusTimerRef = useRef(null);
       const quickCanvasRef = useRef(null);
       const isDrawingRef = useRef(false);
@@ -2974,6 +2979,7 @@
       const isUndoRedo = useRef(false);
       const cloudDataLoaded = useRef(false);
       const saveToFirestoreRef = useRef(null);
+      const retryPendingCloudSavesRef = useRef(null);
       const saveWeeklyDocsRef = useRef(null);
       // 週案は年度ごとのドキュメント（weekly_2026 など）に分けて保存する。
       // Firestoreは1ドキュメント1MiBが上限で、手書きが画像として同じ中に入るため、
@@ -3132,18 +3138,60 @@
           weeklyMigratedRef.current = false; weeklyMigrationRunRef.current = false;
         };
         resetWeeklyRefs();
-        let hasData = false; let localFallbackUsed = false;
+        let hasData = false; let localFallbackUsed = false; let reconciled = false;
         const loaded = { template: false, weekly: false, weeklyYears: false, todos: false, notes: false, syllabus: false, quickMemos: false, extra: false };
+        // 10秒で読み込みが終わらないときは端末内のデータで先に表示する（オフラインモード）。
+        // そのあいだに届いたクラウドの内容は画面に出さずに cloudLatest に貯めておき、読み込みが揃ったら
+        // 「表示を始めた時点の端末内データ」「この端末での編集」「クラウドの最新」を突き合わせて1つにまとめる。
+        // 以前は、いったんオフラインモードになると再読み込みするまでクラウドの更新をすべて捨てていたため、
+        // 他の端末で入れた予定が届かず、さらにこの端末の古いデータでクラウドを上書きしてしまっていた。
+        const DATA_KEYS = ['baseTemplate', 'templateSettings', 'weeklyData', 'weeklySettings', 'todos', 'notesData', 'syllabusData', 'quickMemos', 'yearlyData', 'documents', 'vacations'];
+        const SETTERS = { baseTemplate: setBaseTemplate, templateSettings: setTemplateSettings, weeklyData: setWeeklyData, weeklySettings: setWeeklySettings, todos: setTodos, notesData: setNotesData, syllabusData: setSyllabusData, quickMemos: setQuickMemos, yearlyData: setYearlyData, documents: setDocuments, vacations: setVacations };
+        const cloudLatest = {};
+        let localBase = null;
+        const staging = () => localFallbackUsed && !reconciled;
+        const put = (key, value) => { cloudLatest[key] = value; if (!staging()) SETTERS[key](value); };
         const cacheToLocal = () => {
-          try {
-            const snap = { baseTemplate, templateSettings, weeklyData, weeklySettings, todos, notesData, syllabusData, quickMemos, yearlyData, documents, vacations };
-            localStorage.setItem('ep_local_data', JSON.stringify(snap));
-          } catch(e){}
+          try { localStorage.setItem('ep_local_data', JSON.stringify(latestDataRef.current)); } catch(e){}
+        };
+        const reconcileLocalWithCloud = () => {
+          reconciled = true;
+          const mine = latestDataRef.current;
+          const merged = {};
+          DATA_KEYS.forEach(k => {
+            merged[k] = cloudLatest[k] === undefined ? mine[k] : mergeThreeWay(localBase[k], mine[k], cloudLatest[k]);
+            SETTERS[k](merged[k]);
+          });
+          // 端末内の古いデータで作った保存待ちは、まとめ直した内容で作り直す（Google連携の設定など、ほかの項目は残す）
+          const pending = pendingCloudSavesRef.current;
+          const keep = (name, fields) => { const rest = { ...(pending[name] || {}) }; fields.forEach(f => delete rest[f]); return rest; };
+          const extraRest = keep('extra', ['yearlyData', 'documents', 'vacations']);
+          Object.keys(pending).forEach(name => { if (/^weekly/.test(name) || ['template', 'todos', 'notes', 'syllabus', 'quickMemos', 'extra'].includes(name)) delete pending[name]; });
+          cloudDataLoaded.current = true;
+          setDataLoadStatus('loaded');
+          const changed = (...keys) => keys.some(k => JSON.stringify(merged[k]) !== JSON.stringify(cloudLatest[k]));
+          const save = saveToFirestoreRef.current;
+          if (save) {
+            if (changed('baseTemplate', 'templateSettings')) save('template', { baseTemplate: merged.baseTemplate, templateSettings: merged.templateSettings });
+            if (changed('todos')) save('todos', { todos: merged.todos });
+            if (changed('notesData')) save('notes', { notes: merged.notesData });
+            if (changed('syllabusData')) save('syllabus', { syllabus: merged.syllabusData });
+            if (changed('quickMemos')) save('quickMemos', { memos: merged.quickMemos });
+            if (changed('yearlyData', 'documents', 'vacations') || Object.keys(extraRest).length) save('extra', { ...extraRest, yearlyData: merged.yearlyData, documents: merged.documents, vacations: merged.vacations });
+          }
+          // 保存済みの目印はクラウドの内容に合わせ直す（オフラインモード中の編集を「保存済み」と見なして送り漏らさないように）
+          weeklySavedRef.current = {};
+          Object.entries(splitWeeklyByYear(cloudLatest.weeklyData || {}, cloudLatest.weeklySettings || {})).forEach(([y, p]) => { weeklySavedRef.current[y] = JSON.stringify(p); });
+          if (saveWeeklyDocsRef.current) saveWeeklyDocsRef.current(merged.weeklyData, merged.weeklySettings);
+          saveToLocal(merged);
+          if (Object.keys(pending).length && retryPendingCloudSavesRef.current) retryPendingCloudSavesRef.current();
+          showToast('☁️ クラウドとつながり、他の端末の変更を取り込みました');
         };
         const markLoaded = (key, docExists) => {
           loaded[key] = true;
           if (docExists) hasData = true;
           if (Object.values(loaded).every(Boolean)) {
+            if (staging()) { reconcileLocalWithCloud(); return; }
             cloudDataLoaded.current = true;
             setDataLoadStatus(hasData ? 'loaded' : 'empty');
             if (hasData) setTimeout(cacheToLocal, 500);
@@ -3153,9 +3201,13 @@
           if (!cloudDataLoaded.current) {
             const local = loadFromLocal();
             if (local) {
+              const before = latestDataRef.current;
               applyLocalData(local);
-              cloudDataLoaded.current = true;
+              localBase = {};
+              DATA_KEYS.forEach(k => { localBase[k] = JSON.parse(JSON.stringify(local[k] !== undefined ? local[k] : before[k])); });
+              // クラウドの読み込みが揃うまでは cloudDataLoaded を立てない。この間の保存は端末内に残し、クラウドへは送らずに保留する
               localFallbackUsed = true;
+              setLocalBannerHidden(false);
               setDataLoadStatus('local');
             } else {
               setDataLoadStatus('timeout');
@@ -3164,7 +3216,7 @@
         }, 10000);
         const listen = async () => {
           const { doc, onSnapshot } = await _importDynamic("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
-          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','template'), s => { if (localFallbackUsed) return; if(s.exists()){ const d=s.data(); if(d.baseTemplate) setBaseTemplate(d.baseTemplate); if(d.templateSettings) setTemplateSettings(d.templateSettings); } markLoaded('template', s.exists()); }));
+          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','template'), s => { if(s.exists()){ const d=s.data(); if(d.baseTemplate) put('baseTemplate', d.baseTemplate); if(d.templateSettings) put('templateSettings', d.templateSettings); } markLoaded('template', s.exists()); }));
           // 週案は「移行前の旧ドキュメント」と「年度ごとのドキュメント」を合わせて読む。
           // 移行後は旧ドキュメントには書き込まないが、移行前の控えとして残しておく
           const applyWeeklyParts = () => {
@@ -3178,19 +3230,17 @@
               Object.assign(data, part.weeklyData || {});
               Object.assign(settings, part.weeklySettings || {});
             });
-            setWeeklyData(data); setWeeklySettings(settings);
+            put('weeklyData', data); put('weeklySettings', settings);
             weeklySavedRef.current = {};
             Object.entries(splitWeeklyByYear(data, settings)).forEach(([y, p]) => { weeklySavedRef.current[y] = JSON.stringify(p); });
           };
           unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','weekly'), s => {
-            if (localFallbackUsed) return;
             if (s.exists()) { const d = s.data(); weeklyPartsRef.current.legacy = { weeklyData: d.weeklyData || {}, weeklySettings: d.weeklySettings || {} }; applyWeeklyParts(); }
             markLoaded('weekly', s.exists());
           }));
           const yearUnsubs = {};
           const pendingYears = new Set();
           unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','weeklyIndex'), s => {
-            if (localFallbackUsed) return;
             const idx = s.exists() ? s.data() : null;
             weeklyMigratedRef.current = !!(idx && idx.migrated);
             const years = (idx && Array.isArray(idx.years)) ? idx.years.map(String) : [];
@@ -3200,8 +3250,7 @@
               if (yearUnsubs[y]) return;
               pendingYears.add(y);
               yearUnsubs[y] = onSnapshot(doc(db,'users',uid,'teacherPlanner',`weekly_${y}`), ys => {
-                if (localFallbackUsed) return;
-                const d = ys.exists() ? ys.data() : {};
+                    const d = ys.exists() ? ys.data() : {};
                 weeklyPartsRef.current[y] = { weeklyData: d.weeklyData || {}, weeklySettings: d.weeklySettings || {} };
                 applyWeeklyParts();
                 pendingYears.delete(y);
@@ -3210,12 +3259,11 @@
               unsubs.push(() => yearUnsubs[y]());
             });
           }));
-          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','todos'), s => { if (localFallbackUsed) return; if(s.exists()&&Array.isArray(s.data().todos)) setTodos(s.data().todos); markLoaded('todos', s.exists()); }));
-          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','notes'), s => { if (localFallbackUsed) return; if(s.exists()&&Array.isArray(s.data().notes)) setNotesData(s.data().notes); markLoaded('notes', s.exists()); }));
-          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','syllabus'), s => { if (localFallbackUsed) return; if(s.exists()&&Array.isArray(s.data().syllabus)) setSyllabusData(s.data().syllabus); markLoaded('syllabus', s.exists()); }));
-          unsubs.push(onSnapshot(doc(doc(db,'users',uid),'teacherPlanner','quickMemos'), s => { if (localFallbackUsed) return; if(s.exists()&&Array.isArray(s.data().memos)) setQuickMemos(s.data().memos); markLoaded('quickMemos', s.exists()); }));
+          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','todos'), s => { if(s.exists()&&Array.isArray(s.data().todos)) put('todos', s.data().todos); markLoaded('todos', s.exists()); }));
+          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','notes'), s => { if(s.exists()&&Array.isArray(s.data().notes)) put('notesData', s.data().notes); markLoaded('notes', s.exists()); }));
+          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','syllabus'), s => { if(s.exists()&&Array.isArray(s.data().syllabus)) put('syllabusData', s.data().syllabus); markLoaded('syllabus', s.exists()); }));
+          unsubs.push(onSnapshot(doc(doc(db,'users',uid),'teacherPlanner','quickMemos'), s => { if(s.exists()&&Array.isArray(s.data().memos)) put('quickMemos', s.data().memos); markLoaded('quickMemos', s.exists()); }));
           unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','extra'), s => {
-            if (localFallbackUsed) return;
             if(s.exists()){
               const d=s.data();
               if(d.yearlyData && typeof d.yearlyData === 'object'){
@@ -3226,10 +3274,10 @@
                        mergedYearlyData[year][md] = d.yearlyData[year][md];
                    });
                 });
-                setYearlyData(mergedYearlyData);
+                put('yearlyData', mergedYearlyData);
               }
-              if(Array.isArray(d.documents)) setDocuments(d.documents);
-              if(Array.isArray(d.vacations)) setVacations(d.vacations);
+              if(Array.isArray(d.documents)) put('documents', d.documents);
+              if(Array.isArray(d.vacations)) put('vacations', d.vacations);
               // Googleカレンダー連携設定をクラウドから復元（localStorageが消えても連携が維持される）
               if (d.googleCalSettings && typeof d.googleCalSettings === 'object') {
                 const g = d.googleCalSettings;
@@ -3387,6 +3435,7 @@
           showToast('☁️ 未同期の変更を保存しました');
         }
       };
+      retryPendingCloudSavesRef.current = retryPendingCloudSaves;
 
       useEffect(() => {
         if (isOnline) retryPendingCloudSaves();
@@ -5771,11 +5820,11 @@
           })()}
           {toastMessage && <div className="no-print fixed top-[calc(4rem+env(safe-area-inset-top))] left-1/2 -translate-x-1/2 bg-slate-800 text-white px-4 py-2 rounded-full z-[300] shadow-lg anim-scale-in font-bold text-sm">{toastMessage}</div>}
           {showConnCheck && <ConnectionCheck onClose={()=>setShowConnCheck(false)} />}
-          {(dataLoadStatus === 'loading' || dataLoadStatus === 'timeout' || dataLoadStatus === 'empty' || dataLoadStatus === 'local') && (
+          {(dataLoadStatus === 'loading' || dataLoadStatus === 'timeout' || dataLoadStatus === 'empty' || (dataLoadStatus === 'local' && !localBannerHidden)) && (
             <div className="fixed top-[calc(4rem+env(safe-area-inset-top))] left-1/2 -translate-x-1/2 z-[200] max-w-md w-[90%]">
               <div className={`px-4 py-3 rounded-xl shadow-lg border text-xs font-bold text-center ${dataLoadStatus === 'loading' ? 'bg-blue-50 border-blue-200 text-blue-700' : dataLoadStatus === 'local' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>
                 {dataLoadStatus === 'loading' && <span>データを読み込んでいます...</span>}
-                {dataLoadStatus === 'local' && <span>ローカルデータを使用中（オフラインモード）<button onClick={()=>setDataLoadStatus('loaded')} className="ml-2 underline">閉じる</button></span>}
+                {dataLoadStatus === 'local' && <span>端末内のデータで表示中（オフラインモード）。クラウドとつながったら、他の端末の変更を自動で取り込みます<button onClick={()=>setLocalBannerHidden(true)} className="ml-2 underline">閉じる</button></span>}
                 {dataLoadStatus === 'timeout' && <span>サーバーに接続できません。設定画面からバックアップファイルをインポートしてデータを復元できます。</span>}
                 {dataLoadStatus === 'empty' && <span>サーバーにデータがありません。設定画面からバックアップファイルをインポートしてデータを復元できます。</span>}
               </div>

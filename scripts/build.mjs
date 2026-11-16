@@ -44,7 +44,7 @@ writeFileSync(join(assets, appName), code);
 html = html.slice(0, start) + `<script src="/assets/${appName}"></script>` + html.slice(end + '</script>'.length);
 
 // 1b) src/ の素の JS（JSX なし）はそのまま /assets/ にハッシュ付きで置く
-for (const name of ['calendar', 'sanitize']) {
+for (const name of ['calendar', 'sanitize', 'merge']) {
   const buf = readFileSync(join(root, 'src', `${name}.js`));
   const out = `${name}.${hash(buf)}.js`;
   writeFileSync(join(assets, out), buf);
