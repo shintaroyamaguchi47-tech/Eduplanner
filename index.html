@@ -1634,6 +1634,11 @@
       const [yearSetupVacs, setYearSetupVacs] = useState([{ name: '夏季休業', start: '', end: '' }, { name: '冬季休業', start: '', end: '' }, { name: '学年末休業', start: '', end: '' }]);
       const [yearSetupResult, setYearSetupResult] = useState(null);
       const pendingCloudSavesRef = useRef({});
+      // ドキュメント名 -> この端末が最後に見たクラウドの内容。保存のときはここから変わった所だけを送る
+      const cloudDocBaseRef = useRef({});
+      // ドキュメント名 -> 送信中の数／最後にこの端末から保存した時刻（クラウドからの読み直しで自分の編集を戻さないため）
+      const saveInFlightRef = useRef({});
+      const lastLocalSaveRef = useRef({});
       // 読み込み・保存の処理（コールバックの中）から、いま画面に出ているデータを読むためのもの
       const latestDataRef = useRef({});
       latestDataRef.current = { baseTemplate, templateSettings, weeklyData, weeklySettings, todos, notesData, syllabusData, quickMemos, yearlyData, documents, vacations };
@@ -2268,9 +2273,17 @@
 
       // ---- Googleカレンダーでの書き直しをアプリに戻す ----
       // 変更はいったん下書きにためて、同期の最後に1回だけ保存する
-      const draftWeekly = (draft) => (draft.weekly || (draft.weekly = { ...weeklyData }));
-      const draftYearly = (draft) => (draft.yearly || (draft.yearly = { ...yearlyData }));
-      const draftYearlyLines = (draft, ds) => getYearlyEventText(draft.yearly || yearlyData, ds)
+      // 同期は時間がかかるので、下書きを作り始めた時点の内容（weeklyFrom / yearlyFrom）も覚えておき、
+      // 保存するときは書き換えた所だけを最新のデータに当てはめる（同期中に他の端末から届いた予定を消さない）
+      const draftWeekly = (draft) => {
+        if (!draft.weekly) { draft.weeklyFrom = latestDataRef.current.weeklyData || weeklyData; draft.weekly = { ...draft.weeklyFrom }; }
+        return draft.weekly;
+      };
+      const draftYearly = (draft) => {
+        if (!draft.yearly) { draft.yearlyFrom = latestDataRef.current.yearlyData || yearlyData; draft.yearly = { ...draft.yearlyFrom }; }
+        return draft.yearly;
+      };
+      const draftYearlyLines = (draft, ds) => getYearlyEventText(draft.yearly || latestDataRef.current.yearlyData || yearlyData, ds)
         .split('\n').map(l => l.trim()).filter(Boolean);
 
       // その日の行事欄のうち、週案だけに書いた行（年間予定から来た行は除く）
@@ -2711,8 +2724,11 @@
           }
 
           // 書き戻し・取り込みでアプリ側に入った変更を、まとめて保存する
-          if (draft.weekly) saveAll(baseTemplate, templateSettings, draft.weekly, weeklySettings);
-          if (draft.yearly) saveExtraData(draft.yearly, documents, vacations);
+          if (draft.weekly || draft.yearly) {
+            const cur = latestDataRef.current;
+            if (draft.weekly) saveAll(cur.baseTemplate, cur.templateSettings, mergeCarryEdits(cur.weeklyData, draft.weeklyFrom, draft.weekly), cur.weeklySettings);
+            if (draft.yearly) saveExtraData(mergeCarryEdits(cur.yearlyData, draft.yearlyFrom, draft.yearly, 2), cur.documents, cur.vacations);
+          }
           if (draft.count > 0 || conflictCount > 0) {
             const parts = [];
             const writeBackCount = draft.count - adoptedCount;
@@ -3214,9 +3230,19 @@
             }
           }
         }, 10000);
+        // ドキュメント名 -> 受け取った内容を画面に反映する処理。リアルタイムの受信と、サーバーからの読み直しで共通に使う
+        const handlers = {};
+        const noteBase = (name, s) => { cloudDocBaseRef.current[name] = s.exists() ? s.data() : null; };
+        let closed = false;
         const listen = async () => {
           const { doc, onSnapshot } = await _importDynamic("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
-          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','template'), s => { if(s.exists()){ const d=s.data(); if(d.baseTemplate) put('baseTemplate', d.baseTemplate); if(d.templateSettings) put('templateSettings', d.templateSettings); } markLoaded('template', s.exists()); }));
+          const watch = (name, handler) => {
+            handlers[name] = (s) => { noteBase(name, s); handler(s); };
+            const unsub = onSnapshot(doc(db,'users',uid,'teacherPlanner',name), s => handlers[name](s));
+            unsubs.push(unsub);
+            return unsub;
+          };
+          watch('template', s => { if(s.exists()){ const d=s.data(); if(d.baseTemplate) put('baseTemplate', d.baseTemplate); if(d.templateSettings) put('templateSettings', d.templateSettings); } markLoaded('template', s.exists()); });
           // 週案は「移行前の旧ドキュメント」と「年度ごとのドキュメント」を合わせて読む。
           // 移行後は旧ドキュメントには書き込まないが、移行前の控えとして残しておく
           const applyWeeklyParts = () => {
@@ -3234,13 +3260,13 @@
             weeklySavedRef.current = {};
             Object.entries(splitWeeklyByYear(data, settings)).forEach(([y, p]) => { weeklySavedRef.current[y] = JSON.stringify(p); });
           };
-          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','weekly'), s => {
+          watch('weekly', s => {
             if (s.exists()) { const d = s.data(); weeklyPartsRef.current.legacy = { weeklyData: d.weeklyData || {}, weeklySettings: d.weeklySettings || {} }; applyWeeklyParts(); }
             markLoaded('weekly', s.exists());
-          }));
+          });
           const yearUnsubs = {};
           const pendingYears = new Set();
-          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','weeklyIndex'), s => {
+          watch('weeklyIndex', s => {
             const idx = s.exists() ? s.data() : null;
             weeklyMigratedRef.current = !!(idx && idx.migrated);
             const years = (idx && Array.isArray(idx.years)) ? idx.years.map(String) : [];
@@ -3249,21 +3275,20 @@
             years.forEach(y => {
               if (yearUnsubs[y]) return;
               pendingYears.add(y);
-              yearUnsubs[y] = onSnapshot(doc(db,'users',uid,'teacherPlanner',`weekly_${y}`), ys => {
-                    const d = ys.exists() ? ys.data() : {};
+              yearUnsubs[y] = watch(`weekly_${y}`, ys => {
+                const d = ys.exists() ? ys.data() : {};
                 weeklyPartsRef.current[y] = { weeklyData: d.weeklyData || {}, weeklySettings: d.weeklySettings || {} };
                 applyWeeklyParts();
                 pendingYears.delete(y);
                 if (pendingYears.size === 0) markLoaded('weeklyYears', ys.exists());
               });
-              unsubs.push(() => yearUnsubs[y]());
             });
-          }));
-          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','todos'), s => { if(s.exists()&&Array.isArray(s.data().todos)) put('todos', s.data().todos); markLoaded('todos', s.exists()); }));
-          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','notes'), s => { if(s.exists()&&Array.isArray(s.data().notes)) put('notesData', s.data().notes); markLoaded('notes', s.exists()); }));
-          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','syllabus'), s => { if(s.exists()&&Array.isArray(s.data().syllabus)) put('syllabusData', s.data().syllabus); markLoaded('syllabus', s.exists()); }));
-          unsubs.push(onSnapshot(doc(doc(db,'users',uid),'teacherPlanner','quickMemos'), s => { if(s.exists()&&Array.isArray(s.data().memos)) put('quickMemos', s.data().memos); markLoaded('quickMemos', s.exists()); }));
-          unsubs.push(onSnapshot(doc(db,'users',uid,'teacherPlanner','extra'), s => {
+          });
+          watch('todos', s => { if(s.exists()&&Array.isArray(s.data().todos)) put('todos', s.data().todos); markLoaded('todos', s.exists()); });
+          watch('notes', s => { if(s.exists()&&Array.isArray(s.data().notes)) put('notesData', s.data().notes); markLoaded('notes', s.exists()); });
+          watch('syllabus', s => { if(s.exists()&&Array.isArray(s.data().syllabus)) put('syllabusData', s.data().syllabus); markLoaded('syllabus', s.exists()); });
+          watch('quickMemos', s => { if(s.exists()&&Array.isArray(s.data().memos)) put('quickMemos', s.data().memos); markLoaded('quickMemos', s.exists()); });
+          watch('extra', s => {
             if(s.exists()){
               const d=s.data();
               if(d.yearlyData && typeof d.yearlyData === 'object'){
@@ -3292,9 +3317,65 @@
               }
             }
             markLoaded('extra', s.exists());
-          }));
+          });
         };
-        listen(); return () => { clearTimeout(timeout); unsubs.forEach(u=>u()); cloudDataLoaded.current = false; resetWeeklyRefs(); };
+        // リアルタイムの受信は、学校のフィルタや端末のスリープのあとで止まったまま気づけないことがある。
+        // 画面に戻ったとき・通信が戻ったとき・開いている間は1分半ごとに、サーバーから直接読み直して取りこぼしを拾う
+        // （Firestore Lite は普通の HTTPS の読み込みなので、リアルタイムの通信が止められていても届く）
+        let lite = null; let liteDb = null; let refreshing = false; let lastRefreshAt = 0;
+        const refreshFromServer = async () => {
+          if (closed || refreshing || !navigator.onLine) return;
+          if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+          if (Date.now() - lastRefreshAt < 5000) return;
+          refreshing = true; lastRefreshAt = Date.now();
+          try {
+            if (!lite) {
+              lite = await _importDynamic("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore-lite.js");
+              liteDb = lite.getFirestore(db.app);
+            }
+            // 目次（年度の一覧）を先に読み、増えた年度があれば次の読み直しで拾う。
+            // 週案は手書きの画像も入っていて大きいので、移行前の旧ドキュメントと過ぎた年度は読み直さない
+            const thisYear = getSchoolYearOf(formatDate(new Date()));
+            const names = ['weeklyIndex', ...Object.keys(handlers).filter(n => {
+              if (n === 'weeklyIndex') return false;
+              if (n === 'weekly') return !weeklyMigratedRef.current;
+              const m = n.match(/^weekly_(\d{4})$/);
+              return !m || Number(m[1]) >= thisYear;
+            })];
+            for (const name of names) {
+              if (closed) return;
+              try {
+                const s = await lite.getDoc(lite.doc(liteDb, 'users', uid, 'teacherPlanner', name));
+                if (closed || !handlers[name]) continue;
+                // この端末から保存したばかり・保存待ちのドキュメントは、自分の編集を古い内容で戻さないように触らない。
+                // ただしオフラインモード中は、読み込みが揃ったときに突き合わせてまとめるので、そのまま受け取る
+                if (cloudDataLoaded.current) {
+                  if (pendingCloudSavesRef.current[name] || (saveInFlightRef.current[name] || 0) > 0) continue;
+                  if (Date.now() - (lastLocalSaveRef.current[name] || 0) < 15000) continue;
+                }
+                const raw = s.exists() ? s.data() : null;
+                if (mergeSame(raw, cloudDocBaseRef.current[name])) continue;
+                handlers[name](s);
+              } catch (e) {}
+            }
+          } catch (e) {
+          } finally { refreshing = false; }
+        };
+        const onVisible = () => { if (document.visibilityState !== 'hidden') refreshFromServer(); };
+        document.addEventListener('visibilitychange', onVisible);
+        window.addEventListener('focus', onVisible);
+        window.addEventListener('online', onVisible);
+        const refreshTimer = setInterval(refreshFromServer, 90000);
+        // リアルタイムの受信がまったく届かない端末でも、起動から少しして一度は読み直す
+        const firstRefresh = setTimeout(refreshFromServer, 12000);
+        listen(); return () => {
+          closed = true;
+          clearTimeout(timeout); clearTimeout(firstRefresh); clearInterval(refreshTimer);
+          document.removeEventListener('visibilitychange', onVisible);
+          window.removeEventListener('focus', onVisible);
+          window.removeEventListener('online', onVisible);
+          unsubs.forEach(u=>u()); cloudDataLoaded.current = false; resetWeeklyRefs(); cloudDocBaseRef.current = {};
+        };
       }, [cloudUser]);
 
       // 旧ドキュメント1本にまとまっている週案を、初回だけ年度ごとのドキュメントに書き出す。
@@ -3401,9 +3482,21 @@
           return false;
         }
         if(cloudUser && window.__firebaseDb){
+          // 最後に見たクラウドの内容から変わった所だけを送る（他の端末で入れた予定を、この端末の古い内容で上書きしない）
+          const full = cleanData(data);
+          const base = cloudDocBaseRef.current[name];
+          const payload = base ? mergeSavePatch(base, full) : full;
+          lastLocalSaveRef.current[name] = Date.now();
+          if (base && Object.keys(payload).length === 0) {
+            delete pendingCloudSavesRef.current[name];
+            return true;
+          }
+          saveInFlightRef.current[name] = (saveInFlightRef.current[name] || 0) + 1;
           try {
             setSaveStatus('saving');
-            await window.__firebaseSetDoc(window.__firebaseDoc(window.__firebaseDb,'users',cloudUser.uid,'teacherPlanner',name), cleanData(data), {merge:true});
+            await window.__firebaseSetDoc(window.__firebaseDoc(window.__firebaseDb,'users',cloudUser.uid,'teacherPlanner',name), payload, {merge:true});
+            cloudDocBaseRef.current[name] = mergeApplyPatch(cloudDocBaseRef.current[name] || {}, payload);
+            lastLocalSaveRef.current[name] = Date.now();
             delete pendingCloudSavesRef.current[name];
             setLastSavedAt(new Date());
             setSaveStatus('saved');
@@ -3418,6 +3511,8 @@
             setSaveStatus('error');
             showToast('⚠️ 保存に失敗しました。ネットワークを確認してください。');
             return false;
+          } finally {
+            saveInFlightRef.current[name] = Math.max(0, (saveInFlightRef.current[name] || 1) - 1);
           }
         }
         return false;

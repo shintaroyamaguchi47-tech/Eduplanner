@@ -52,3 +52,42 @@ test('他の端末で消したキーは、この端末で変えていなけれ�
 test('クラウドにまだ無いときは、この端末の内容を採る', () => {
   assert.deepEqual(merge(undefined, [{ id: 1 }], undefined), [{ id: 1 }]);
 });
+
+const patch = (b, n) => plain(load('mergeSavePatch')(b, n));
+
+test('保存するときは、この端末で変えた予定だけを送る（他の端末の予定を古い内容で上書きしない）', () => {
+  // クラウドにはiPadで入れた 11-18 の予定がある。この端末はまだそれを受け取っておらず、11-17 だけを編集した
+  const base = { yearlyData: { 2026: { '11-17': '', '11-18': '' } }, documents: [], vacations: [] };
+  const next = { yearlyData: { 2026: { '11-17': '研究授業', '11-18': '' } }, documents: [], vacations: [] };
+  assert.deepEqual(patch(base, next), { yearlyData: { 2026: { '11-17': '研究授業' } } });
+});
+
+test('クラウドの内容をまだ知らないときは、すべて送る', () => {
+  const next = { todos: [{ id: 1 }] };
+  assert.deepEqual(patch(null, next), next);
+});
+
+test('配列や中身の変わった項目はまるごと送り、空の {} もそのまま送る', () => {
+  const base = { todos: [{ id: 1, text: 'a' }], w: { a: { subject: '国語', memo: 'x' } }, s: { k: { x: 1 } } };
+  const next = { todos: [{ id: 1, text: 'b' }], w: { a: { subject: '数学', memo: 'x' } }, s: { k: {} } };
+  assert.deepEqual(patch(base, next), { todos: [{ id: 1, text: 'b' }], w: { a: { subject: '数学' } }, s: { k: {} } });
+});
+
+test('送った差分を手元のクラウドの内容に当てはめる', () => {
+  const base = { yearlyData: { 2026: { '11-17': '', '11-18': '遠足' } }, documents: [] };
+  const out = plain(load('mergeApplyPatch')(base, { yearlyData: { 2026: { '11-17': '研究授業' } } }));
+  assert.deepEqual(out, { yearlyData: { 2026: { '11-17': '研究授業', '11-18': '遠足' } }, documents: [] });
+});
+
+test('時間のかかる同期の結果は、書き換えた所だけを最新のデータに当てはめる', () => {
+  const carry = (c, f, t, d) => plain(load('mergeCarryEdits')(c, f, t, d));
+  // 同期を始めた時点のデータ
+  const from = { 2026: { '11-17': '', '11-18': '' } };
+  // 同期が 11-17 に書き戻した
+  const to = { 2026: { '11-17': 'Googleで直した', '11-18': '' }, 2027: { '4-6': '始業式' } };
+  // 同期中にiPadから 11-18 の予定が届いていた
+  const cur = { 2026: { '11-17': '', '11-18': 'iPadで入れた' }, 2027: { '4-7': '入学式' } };
+  assert.deepEqual(carry(cur, from, to, 2), { 2026: { '11-17': 'Googleで直した', '11-18': 'iPadで入れた' }, 2027: { '4-6': '始業式', '4-7': '入学式' } });
+  // 1段のとき：週案のコマ単位
+  assert.deepEqual(carry({ a: 1, b: 2, c: 3 }, { a: 1, c: 3 }, { a: 9 }, 1), { a: 9, b: 2 });
+});

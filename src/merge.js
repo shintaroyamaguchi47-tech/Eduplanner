@@ -73,3 +73,52 @@ const mergeThreeWay = (base, mine, theirs) => {
   }
   return mine;
 };
+
+// クラウドへ保存するとき、送る中身を「この端末が最後に見たクラウドの内容（base）」から変わった所だけに絞る。
+// 以前は保存のたびに年間予定・週案をまるごと送っていたため、他の端末の変更をまだ受け取っていない端末が
+// 何か1つ編集すると、他の端末で入れた予定まで古い内容で上書きしてしまっていた。
+// 保存は setDoc(..., { merge: true }) で行うので、送らなかった所はクラウド側の内容がそのまま残る。
+// （merge: true の保存はもともと項目を消さないので、ここでも消した項目を送ることはしない）
+const mergeSavePatch = (base, next) => {
+  if (!mergeIsPlainObject(base) || !mergeIsPlainObject(next)) return next;
+  const out = {};
+  Object.keys(next).forEach(k => {
+    const n = next[k], b = base[k];
+    if (mergeSame(n, b)) return;
+    // 空の {} は merge: true でもその項目を {} に置き換えるので、そのまま送る（これまでと同じ動き）
+    if (mergeIsPlainObject(n) && mergeIsPlainObject(b) && Object.keys(n).length) {
+      const sub = mergeSavePatch(b, n);
+      if (Object.keys(sub).length) out[k] = sub;
+      return;
+    }
+    out[k] = n;
+  });
+  return out;
+};
+
+// mergeSavePatch で作った差分をクラウドへ送り終えたあと、手元の「クラウドの内容」に当てはめる
+const mergeApplyPatch = (base, patch) => {
+  if (!mergeIsPlainObject(base) || !mergeIsPlainObject(patch)) return patch;
+  const out = { ...base };
+  Object.keys(patch).forEach(k => {
+    const p = patch[k];
+    out[k] = mergeIsPlainObject(p) && Object.keys(p).length && mergeIsPlainObject(out[k]) ? mergeApplyPatch(out[k], p) : p;
+  });
+  return out;
+};
+
+// 時間のかかる処理（Googleカレンダー同期など）が、始めた時点のデータ（from）をもとに作った結果（to）のうち、
+// 実際に書き換えた所だけを最新のデータ（cur）に当てはめる。処理中に他の端末から届いた変更を消さないためのもの。
+// depth は何段目まで項目ごとに見るか（年間予定は 年度 → 月日 の2段）
+const mergeCarryEdits = (cur, from, to, depth = 1) => {
+  const out = { ...(mergeIsPlainObject(cur) ? cur : {}) };
+  const f = mergeIsPlainObject(from) ? from : {};
+  const t = mergeIsPlainObject(to) ? to : {};
+  new Set([...Object.keys(f), ...Object.keys(t)]).forEach(k => {
+    const a = f[k], b = t[k];
+    if (a === b || mergeSame(a, b)) return;
+    if (depth > 1 && mergeIsPlainObject(b) && (a === undefined || mergeIsPlainObject(a))) { out[k] = mergeCarryEdits(out[k], a, b, depth - 1); return; }
+    if (b === undefined) delete out[k]; else out[k] = b;
+  });
+  return out;
+};
