@@ -1672,9 +1672,7 @@
           const cd = new Date(currentWeekStart);
           cd.setDate(cd.getDate() + i);
           const ds = formatDate(cd);
-          const setting = getDaySetting(ds, i);
-          if (setting.type === 'holiday') continue;
-
+          // 土日・祝日も、その日に入れた予定は書き出す（休日は基本時間割の授業が空になる）
           for (const pid of periodIds) {
             const data = getCellData(ds, pid, i);
             if (!data.subject?.trim()) {
@@ -1953,7 +1951,9 @@
           const di = (cd.getDay() + 6) % 7;
           const setting = getDaySetting(ds, di);
 
-          if (setting.type !== 'holiday') {
+          // 土日・祝日も、その日に入れた予定（部活の試合・個人予定など）は登録する。
+          // 休日は基本時間割の授業が空になる（getCellData）ので、自分で入れたコマだけが対象になる
+          {
             for (const pid of periodIds) {
               const data = getCellData(ds, pid, di);
               if (!data.subject?.trim()) {
