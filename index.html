@@ -1624,6 +1624,10 @@
       // 取得したGoogleの許可（アクセストークン）。期限内なら使い回して、許可画面を何度も開かずに済ませる
       const googleTokenCacheRef = useRef(null);
       const googleCalSyncInFlightRef = useRef(false);
+      // 同期中に頼まれた次の同期。null=なし / { todosOnly } = 終わったらもう一度同期する
+      const googleCalSyncQueuedRef = useRef(null);
+      // 予約した同期を最新の画面の内容で実行するため、いちばん新しい同期関数を持っておく
+      const runGoogleCalendarSyncRef = useRef(null);
       const todoSyncSignatureRef = useRef(null);
       const planSyncSignatureRef = useRef(null);
 
@@ -2552,7 +2556,13 @@
           if (!silent) showToast('先にGoogle OAuthクライアントIDを入力してください');
           return false;
         }
-        if (googleCalSyncInFlightRef.current) return false;
+        if (googleCalSyncInFlightRef.current) {
+          // 同期中に予定を直したとき、ここで捨てると直した内容がカレンダーに届かない。
+          // 今の同期が終わったら、最新の内容でもう一度同期する
+          const queued = googleCalSyncQueuedRef.current;
+          googleCalSyncQueuedRef.current = { todosOnly: (queued ? queued.todosOnly : true) && todosOnly };
+          return false;
+        }
         googleCalSyncInFlightRef.current = true;
         setGoogleCalSyncing(true);
         // 万一どこかで止まっても「同期中...」の表示が残り続けないようにする保険
@@ -2779,8 +2789,15 @@
           clearTimeout(watchdog);
           googleCalSyncInFlightRef.current = false;
           setGoogleCalSyncing(false);
+          const queued = googleCalSyncQueuedRef.current;
+          if (queued) {
+            googleCalSyncQueuedRef.current = null;
+            // この関数は同期を始めた時点の内容を見ているので、最新の関数で同期し直す
+            setTimeout(() => { runGoogleCalendarSyncRef.current?.({ silent: true, todosOnly: queued.todosOnly }); }, 1000);
+          }
         }
       };
+      runGoogleCalendarSyncRef.current = runGoogleCalendarSync;
 
       const handleConnectGoogleCalendar = async () => {
         const trimmed = googleClientId.trim();
