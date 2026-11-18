@@ -1597,6 +1597,9 @@
       const [googleDeviceOffReason, setGoogleDeviceOffReason] = useState(() => { try { return localStorage.getItem('eduplanner_googleDeviceOffReason') || ''; } catch (e) { return ''; } });
       const [googleCalLastSync, setGoogleCalLastSync] = useState(() => { try { return localStorage.getItem('eduplanner_googleCalLastSync') || ''; } catch (e) { return ''; } });
       const [googleCalSyncing, setGoogleCalSyncing] = useState(false);
+      // 週案・年間予定に、まだGoogleカレンダーへ反映されていない変更があるかどうか。
+      // 自動同期が失敗しても（iPadで許可が取れない等）画面で分かるようにするための印
+      const [gcalPending, setGcalPending] = useState(false);
       // 直前の同期が失敗した理由。自動同期は画面に何も出ないため、設定画面で状況が分かるようにする
       const [googleCalLastError, setGoogleCalLastError] = useState(() => { try { return localStorage.getItem('eduplanner_googleCalLastError') || ''; } catch (e) { return ''; } });
       // TODOをGoogleカレンダーの「タスク」として登録する（オフのときは従来どおり終日予定として登録）
@@ -1622,6 +1625,7 @@
       const googleTokenCacheRef = useRef(null);
       const googleCalSyncInFlightRef = useRef(false);
       const todoSyncSignatureRef = useRef(null);
+      const planSyncSignatureRef = useRef(null);
 
       const [isOnline, setIsOnline] = useState(navigator.onLine);
       const [saveStatus, setSaveStatus] = useState(navigator.onLine ? 'saved' : 'offline');
@@ -1753,7 +1757,7 @@
         window.open(`https://calendar.google.com/calendar/render?${params.toString()}`, '_blank');
       };
 
-      // Googleカレンダー自動同期: アプリを開いたときに今日から1週間の予定と未完了TODOを反映
+      // Googleカレンダー自動同期: アプリを開いたときと予定を編集したときに、今日から2週間の予定と未完了TODOを反映
       const GCAL_SYNC_TAG = 'eduplannerSync';
       // 前回アプリとGoogleカレンダーで内容が一致したときの署名。これと今の内容を見比べて、
       // どちら側で書き直されたのかを判断する
@@ -2038,7 +2042,7 @@
         return /^eduplanner-\d{4}-\d{2}-\d{2}-\d+@eduplanner$/.test(ev.iCalUID || '');
       };
 
-      // メインカレンダーの予定を日付ごとに集める。範囲は週案の同期と同じ「今日から1週間」
+      // メインカレンダーの予定を日付ごとに集める。範囲は週案の同期と同じ「今日から2週間」
       const fetchImportedGcalEvents = async (token, windowStart, windowEnd) => {
         const byDate = {};
         // 行事欄に取り込める予定（1日で収まるものだけ）
@@ -2600,12 +2604,12 @@
           }
 
           const startDate = getJSTDate();
-          const rangeEnd = new Date(startDate); rangeEnd.setDate(rangeEnd.getDate() + 7);
+          const rangeEnd = new Date(startDate); rangeEnd.setDate(rangeEnd.getDate() + 14);
 
-          const scheduleEvents = todosOnly ? [] : buildScheduleEventsForSync(startDate, 7);
-          // 年間予定は設定がオンなら今日から1年先まで、オフでも週案と同じ1週間分だけ登録する
+          const scheduleEvents = todosOnly ? [] : buildScheduleEventsForSync(startDate, 14);
+          // 年間予定は設定がオンなら今日から1年先まで、オフでも週案と同じ2週間分だけ登録する
           const useYearly = yearlyEnabled === undefined ? googleYearlySync : yearlyEnabled;
-          const yearlyDays = useYearly ? 366 : 7;
+          const yearlyDays = useYearly ? 366 : 14;
           const yearlyEvents = todosOnly ? [] : buildYearlyEventsForSync(startDate, yearlyDays);
           const todoEvents = tasksGranted ? [] : buildTodoEventsForSync();
           const allItems = [...scheduleEvents, ...yearlyEvents, ...todoEvents];
@@ -2614,7 +2618,7 @@
 
           // EduPlanner側で消えた項目をカレンダーからも削除する。
           // ・ToDo: 完了・削除されたものは期日に関係なく削除
-          // ・週案(今日〜7日間): 予定から消えたコマを削除。過去の週案イベントは記録として残す
+          // ・週案(今日〜14日間): 予定から消えたコマを削除。過去の週案イベントは記録として残す
           // ・年間予定(今日以降): 年間タブから消した行事や、登録範囲外になった行事を削除。過去の分は記録として残す
           const currentKeys = new Set(allItems.map(it => it.key));
           const windowStart = formatDate(startDate);
@@ -2755,6 +2759,8 @@
             const nowIso = new Date().toISOString();
             setGoogleCalLastSync(nowIso);
             try { localStorage.setItem('eduplanner_googleCalLastSync', nowIso); } catch (e) {}
+            // 予定の同期まで完了したので「未同期の変更」の印を消す
+            setGcalPending(false);
           }
           recordSyncError('');
           if (!silent) {
@@ -2791,6 +2797,7 @@
 
       const handleDisconnectGoogleCalendar = () => {
         setGoogleCalConnected(false);
+        setGcalPending(false);
         gisTokenClientRef.current = null;
         googleTokenCacheRef.current = null;
         // 読み込み済みのGoogleカレンダーの予定も消す（解除したのに残り続けないように）
@@ -3431,6 +3438,25 @@
         }, 5000);
         return () => clearTimeout(timer);
       }, [todos, dataLoadStatus, googleCalConnected, googleCalAutoSync, googleDeviceOff]);
+
+      // 週案・年間予定を編集したら、少し待ってからGoogleカレンダーにも反映する。
+      // 起動時の1日1回だけでは、直した予定がいつまでもカレンダーに反映されないため。
+      // 同期の書き戻しでデータが変わって再度呼ばれても、2回目の同期で変更なしとなり収まる
+      useEffect(() => {
+        if (dataLoadStatus !== 'loaded' && dataLoadStatus !== 'local') return;
+        if (googleDeviceOff) return;
+        if (!googleCalConnected || !googleCalAutoSync) return;
+        const signature = JSON.stringify([weeklyData, yearlyData]);
+        if (planSyncSignatureRef.current === null) { planSyncSignatureRef.current = signature; return; }
+        if (planSyncSignatureRef.current === signature) return;
+        // 同期が終わるまでは「未同期の変更あり」として画面に印を出す
+        setGcalPending(true);
+        const timer = setTimeout(() => {
+          planSyncSignatureRef.current = signature;
+          runGoogleCalendarSync({ silent: true });
+        }, 5000);
+        return () => clearTimeout(timer);
+      }, [weeklyData, yearlyData, dataLoadStatus, googleCalConnected, googleCalAutoSync, googleDeviceOff]);
 
       const cleanData = (obj) => { if(obj===undefined) return null; if(obj===null||typeof obj!=='object') return obj; const n=Array.isArray(obj)?[]:{}; for(const k in obj) n[k]=cleanData(obj[k]); return n; };
 
@@ -5957,6 +5983,11 @@
                   <span>{saveStatus==='saving'?'↻':saveStatus==='error'?'!':saveStatus==='offline'?'○':'✓'}</span>
                   <span className="hidden xl:inline">{saveStatus==='saving'?'保存中':saveStatus==='error'?'再試行':saveStatus==='offline'?'端末に保存':'保存済み'}</span>
                 </button>
+                {googleCalConnected && gcalPending && !googleCalSyncing && (
+                  <button onClick={() => runGoogleCalendarSync({ silent: false })} className="h-7 px-2 rounded-md border text-[9px] sm:text-[10px] font-black flex items-center gap-1 whitespace-nowrap transition-colors bg-amber-50 text-amber-700 border-amber-300 hover:bg-amber-100" title="週案・年間予定の変更が、まだGoogleカレンダーに反映されていません。押すと今すぐ同期します">
+                    <span>📅</span><span className="hidden lg:inline">未同期の変更</span>
+                  </button>
+                )}
               </div>
             </div>
 
@@ -7318,7 +7349,7 @@
                       <div className="border border-emerald-200 bg-emerald-50/50 rounded-2xl p-5 shadow-sm md:col-span-2 dark:bg-emerald-900/20 dark:border-emerald-800">
                         <h3 className="text-lg font-black text-emerald-900 dark:text-emerald-300 mb-2 flex items-center gap-2">📅 Googleカレンダー自動同期</h3>
                         <p className="text-xs text-slate-600 dark:text-slate-400 mb-4 font-bold">
-                          アプリを開いたときに、今日から1週間分の週案・年間タブの行事（今日から1年先まで）・未完了のTODOを自動でGoogleカレンダーに反映します（アプリを開いていない間は同期されません）。TODOはカレンダーの終日予定、または下の設定で「Googleタスク」として登録でき、アプリで完了・削除すると数秒後にGoogle側からも消えます。EduPlanner側で作成・更新した予定のみを対象とし、あなたがGoogleカレンダー側で直接追加した予定は削除されません。
+                          アプリを開いたときと週案・年間予定を編集したときに、今日から2週間分の週案・年間タブの行事（今日から1年先まで）・未完了のTODOを自動でGoogleカレンダーに反映します（アプリを開いていない間は同期されません）。TODOはカレンダーの終日予定、または下の設定で「Googleタスク」として登録でき、アプリで完了・削除すると数秒後にGoogle側からも消えます。EduPlanner側で作成・更新した予定のみを対象とし、あなたがGoogleカレンダー側で直接追加した予定は削除されません。
                         </p>
 
                         <div className="rounded-xl border border-slate-300 bg-white dark:bg-slate-800 dark:border-slate-600 p-3 mb-4">
@@ -7380,7 +7411,7 @@
                               <div className="flex items-center justify-between pt-2 border-t border-emerald-100 dark:border-emerald-800">
                                 <div className="pr-3">
                                   <div className="font-bold text-slate-800 dark:text-slate-200 text-sm">年間予定もカレンダーに登録する</div>
-                                  <div className="text-xs text-slate-500 dark:text-slate-400 font-bold">オンにすると、年間タブに入れた行事を今日から1年先まで終日予定として登録します。オフにすると1週間先までの分だけになり、それより先に登録済みの行事はカレンダーから削除されます。</div>
+                                  <div className="text-xs text-slate-500 dark:text-slate-400 font-bold">オンにすると、年間タブに入れた行事を今日から1年先まで終日予定として登録します。オフにすると2週間先までの分だけになり、それより先に登録済みの行事はカレンダーから削除されます。</div>
                                 </div>
                                 <button onClick={toggleGoogleYearlySync} disabled={googleCalSyncing} className={`w-14 h-8 rounded-full transition-colors relative shadow-inner shrink-0 disabled:opacity-40 ${googleYearlySync ? 'bg-emerald-600' : 'bg-slate-300'}`}>
                                   <div className={`absolute top-1 left-1 w-6 h-6 rounded-full bg-white shadow-sm transition-transform ${googleYearlySync ? 'translate-x-6' : 'translate-x-0'}`}></div>
@@ -7390,7 +7421,7 @@
                               <div className="flex items-center justify-between pt-2 border-t border-emerald-100 dark:border-emerald-800">
                                 <div className="pr-3">
                                   <div className="font-bold text-slate-800 dark:text-slate-200 text-sm">Googleカレンダーの予定をアプリにも表示する</div>
-                                  <div className="text-xs text-slate-500 dark:text-slate-400 font-bold">オンにすると、Googleカレンダー（メインのカレンダー）に入っている今日から1週間分の予定を読み込んで、月間カレンダー・週案の日付・タイムライン・ホームに表示します。読み込むだけなので、週案や行事欄の中身は書き換わりません。</div>
+                                  <div className="text-xs text-slate-500 dark:text-slate-400 font-bold">オンにすると、Googleカレンダー（メインのカレンダー）に入っている今日から2週間分の予定を読み込んで、月間カレンダー・週案の日付・タイムライン・ホームに表示します。読み込むだけなので、週案や行事欄の中身は書き換わりません。</div>
                                 </div>
                                 <button onClick={toggleGoogleCalImport} disabled={googleCalSyncing} className={`w-14 h-8 rounded-full transition-colors relative shadow-inner shrink-0 disabled:opacity-40 ${googleCalImport ? 'bg-violet-600' : 'bg-slate-300'}`}>
                                   <div className={`absolute top-1 left-1 w-6 h-6 rounded-full bg-white shadow-sm transition-transform ${googleCalImport ? 'translate-x-6' : 'translate-x-0'}`}></div>
