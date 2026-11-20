@@ -4354,7 +4354,7 @@
       const openLeaveModal = (ds, di) => { const ls = (getDaySetting(ds, di).leaves || []).map(l => ({...l})); if (ls.length === 0) ls.push({ label: '年休', start: '', end: '' }); setTempLeaves(ls); setEditingLeaveDay({ dateStr: ds, dayIndex: di }); };
       const handleSaveLeaves = () => { if (!editingLeaveDay) return; const { dateStr, dayIndex } = editingLeaveDay; const incomplete = tempLeaves.some(l => (l.start && !l.end) || (!l.start && l.end)); if (incomplete) { showToast('開始と終了の時刻を両方入力してください'); return; } const cleaned = tempLeaves.filter(l => l.start && l.end).map(l => ({ label: (l.label || '').trim() || '休暇', start: l.start, end: l.end })); if (tempLeaves.length > 0 && cleaned.length === 0) { showToast('開始と終了の時刻を入力してください'); return; } const ns = { ...getDaySetting(dateStr, dayIndex) }; if (cleaned.length > 0) ns.leaves = cleaned; else delete ns.leaves; handleSettingChange(dateStr, dayIndex, ns); setEditingLeaveDay(null); showToast(cleaned.length > 0 ? '休暇を設定しました' : '休暇を解除しました'); };
       
-      const handleSaveCell = (d) => { let syllabusUp=[...syllabusData]; let ch=false; if(!editingCell.isTemplate && d.subject){ for(let i=0;i<syllabusUp.length;i++){ let s=syllabusUp[i]; if(s.type==='auto') { const tryMatch = (prefix, cls) => { const prog = getClassProgress(s, cls); const unit = s.units?.[prog.currentUnitIdx]; if(!unit) return false; const exp=`${prefix}${s.name}（${unit.name} ${prog.currentHour}/${unit.hours}）`; if(d.subject===exp){ let nh=prog.currentHour+1; let nu=prog.currentUnitIdx; if(nh>unit.hours){nh=1;nu++;} syllabusUp[i]=setClassProgress(syllabusUp[i],cls,nu,nh); return true; } return false; }; if(s.classes&&s.classes.length>0){ for(const cls of s.classes){ if(tryMatch(cls,cls)){ch=true;break;} } }else{ if(tryMatch('',null)){ch=true;} } if(ch) break; }else if(s.type==='history'){ const pat=s.classes&&s.classes.length>0 ? `^(?:${s.classes.join('|')})?${s.name}（(.+)）$` : `^${s.name}（(.+)）$`; const m=d.subject.match(new RegExp(pat)); if(m){ let h=s.history||[]; if(!h.includes(m[1])){ syllabusUp[i]={...s,history:[m[1],...h].slice(0,15)}; ch=true; } } } } } if(editingCell.isTemplate){ const n=setTemplateEntry(baseTemplate, templateEditKey, {...activeTemplate,[`${editingCell.dayIndex}-${editingCell.periodId}`]:d}); saveAll(n,templateSettings,weeklyData,weeklySettings); } else { if(editingCell.periodId==='event') syncEventToYearly(editingCell.dateStr, d.subject || ''); let n={...weeklyData,[`${editingCell.dateStr}-${editingCell.periodId}`]:{...d,useTemplate:false}}; if(editingCell.periodId.startsWith('p')){ const li=getCellLessonInfo(d.subject); if(li){ let nu=li.unitIdx, nh=li.hour+1; if(nh>li.unit.hours){ nh=1; nu++; } const res=fillUnitSequence({weekly:n, subj:li.subj, cls:li.cls, startUnitIdx:nu, startHour:nh, fromDateStr:editingCell.dateStr, fromPid:editingCell.periodId, startSlot:null, color:''}); if(res.filled){ n=res.weekly; syllabusUp=syllabusUp.map((x,ix)=>ix===li.idx?setClassProgress(x,li.cls,res.endUnitIdx,res.endHour):x); ch=true; } } } saveAll(baseTemplate,templateSettings,n,weeklySettings); } if(ch) saveSyllabus(syllabusUp); setEditingCell(null); };
+      const handleSaveCell = (d) => { let syllabusUp=[...syllabusData]; let ch=false; if(!editingCell.isTemplate && d.subject){ for(let i=0;i<syllabusUp.length;i++){ let s=syllabusUp[i]; if(s.type==='auto') { const tryMatch = (prefix, cls) => { const prog = getClassProgress(s, cls); const unit = s.units?.[prog.currentUnitIdx]; if(!unit) return false; const exp=`${prefix}${s.name}（${unit.name} ${prog.currentHour}/${unit.hours}）`; if(d.subject===exp){ let nh=prog.currentHour+1; let nu=prog.currentUnitIdx; if(nh>unit.hours){nh=1;nu++;} syllabusUp[i]=setClassProgress(syllabusUp[i],cls,nu,nh); return true; } return false; }; if(s.classes&&s.classes.length>0){ for(const cls of s.classes){ if(tryMatch(cls,cls)){ch=true;break;} } }else{ if(tryMatch('',null)){ch=true;} } if(ch) break; }else if(s.type==='history'){ const pat=s.classes&&s.classes.length>0 ? `^(?:${s.classes.join('|')})?${s.name}（(.+)）$` : `^${s.name}（(.+)）$`; const m=d.subject.match(new RegExp(pat)); if(m){ let h=s.history||[]; if(!h.includes(m[1])){ syllabusUp[i]={...s,history:[m[1],...h].slice(0,15)}; ch=true; } } } } } if(editingCell.isTemplate){ const n=setTemplateEntry(baseTemplate, templateEditKey, {...activeTemplate,[`${editingCell.dayIndex}-${editingCell.periodId}`]:d}); saveAll(n,templateSettings,weeklyData,weeklySettings); } else { if(editingCell.periodId==='event') syncEventToYearly(editingCell.dateStr, d.subject || ''); let n={...weeklyData,[`${editingCell.dateStr}-${editingCell.periodId}`]:{...d,useTemplate:false}}; if(editingCell.periodId.startsWith('p')){ const li=getCellLessonInfo(d.subject); if(li){ let nu=li.unitIdx, nh=li.hour+1; if(nh>li.unit.hours){ nh=1; nu++; } const res=fillUnitSequence({weekly:n, subj:li.subj, cls:li.cls, startUnitIdx:nu, startHour:nh, fromDateStr:editingCell.dateStr, fromPid:editingCell.periodId, startSlot:null, color:''}); if(res.filled||res.cleared){ n=res.weekly; syllabusUp=syllabusUp.map((x,ix)=>ix===li.idx?setClassProgress(x,li.cls,res.endUnitIdx,res.endHour):x); ch=true; } } } saveAll(baseTemplate,templateSettings,n,weeklySettings); } if(ch) saveSyllabus(syllabusUp); setEditingCell(null); };
       // 授業コマの編集で選んだまとめる範囲（まとめないときは from と to が同じ）
       const getEditSpanRange = () => {
         const from = editingCell?.span?.from || editingCell?.periodId;
@@ -4476,8 +4476,30 @@
       // 単元テスト・自習など手入力したコマは飛ばし、その次のコマから連番を続ける。
       // 週末で止めず、残りの全単元を埋め終わるか探索上限日数に達するまで続ける。
       const AUTO_FILL_HORIZON_DAYS = 180;
+      // 全単元を入れ終えた位置（afterDs の afterPid）より後に残っている、同じクラス・教科の自動入力コマを消す。
+      // 進度を戻して前の週から入れ直したときなどに、前に入れた連番（1/5 から）が単元の終わりの後ろに
+      // 残ってしまうのを防ぐ。消すのは同じ年度の「教科（単元 h/H）」の形のコマだけで、単元テスト・自習・手入力は残す。
+      // weekly はその場で書き換える（呼び出し側でコピーしたものを渡す）。消した数を返す
+      const clearAutoCellsAfterEnd = (weekly, subj, cls, afterDs, afterPid) => {
+        const periodIds = ['p1','p2','p3','p4','p5','p6'];
+        const escRe = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const pat = new RegExp(`^${escRe(cls || '')}${escRe(subj.name)}（.+ \\d+/\\d+）$`);
+        const sy = getSchoolYearOf(afterDs);
+        const afterPIdx = periodIds.indexOf(afterPid);
+        let removed = 0;
+        for (const key of Object.keys(weekly)) {
+          const ds = key.substring(0, 10), pIdx = periodIds.indexOf(key.substring(11));
+          if (pIdx < 0 || ds < afterDs || (ds === afterDs && pIdx <= afterPIdx)) continue;
+          if (getSchoolYearOf(ds) !== sy) continue;
+          const cell = weekly[key];
+          if (!cell?.subject || cell.useTemplate || !pat.test(cell.subject.trim())) continue;
+          delete weekly[key];
+          removed++;
+        }
+        return removed;
+      };
       const fillUnitSequence = ({ weekly, subj, cls, startUnitIdx, startHour, fromDateStr, fromPid, startSlot, color }) => {
-        const noop = { weekly, filled: 0, endUnitIdx: startUnitIdx, endHour: startHour, lastUnitName: '' };
+        const noop = { weekly, filled: 0, cleared: 0, endUnitIdx: startUnitIdx, endHour: startHour, lastUnitName: '' };
         if (!subj || subj.type !== 'auto' || !subj.units?.length) return noop;
 
         const periodIds = ['p1','p2','p3','p4','p5','p6'];
@@ -4489,7 +4511,12 @@
         for (let ui = startUnitIdx; ui < subj.units.length; ui++) {
           remaining += ui === startUnitIdx ? Math.max(0, subj.units[ui].hours - startHour + 1) : subj.units[ui].hours;
         }
-        if (remaining <= 0) return noop;
+        if (remaining <= 0) {
+          // 起点のコマで全単元が終わっている：その後ろに残った前の連番だけ消す
+          const nd = { ...weekly };
+          const cleared = clearAutoCellsAfterEnd(nd, subj, cls, fromDateStr, fromPid);
+          return cleared ? { ...noop, weekly: nd, cleared } : noop;
+        }
 
         const slots = startSlot ? [startSlot] : [];
         const escRe = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -4519,7 +4546,7 @@
         }
 
         const nd = { ...weekly };
-        let curUnitIdx = startUnitIdx, curHour = startHour, filled = 0, lastUnitName = '';
+        let curUnitIdx = startUnitIdx, curHour = startHour, filled = 0, lastUnitName = '', lastSlot = null;
         for (const { dstr, p, setting } of slots) {
           const unit = subj.units[curUnitIdx];
           if (!unit) break;
@@ -4535,8 +4562,10 @@
           };
           filled++; lastUnitName = unit.name; curHour++;
           if (curHour > unit.hours) { curHour = 1; curUnitIdx++; }
+          if (curUnitIdx >= subj.units.length) { lastSlot = { dstr, p }; }
         }
-        return { weekly: nd, filled, endUnitIdx: curUnitIdx, endHour: curHour, lastUnitName };
+        const cleared = lastSlot ? clearAutoCellsAfterEnd(nd, subj, cls, lastSlot.dstr, lastSlot.p) : 0;
+        return { weekly: nd, filled, cleared, endUnitIdx: curUnitIdx, endHour: curHour, lastUnitName };
       };
 
       // 単元計画パネルの「この時間目から続けて自動入力」。編集中のコマ自身も書き換える。
@@ -4790,7 +4819,7 @@
           const sk = sortKey(ds, pid);
           if (ds < startStr) {
             const prev = lastBefore[hit.t.key];
-            if (!prev || sk > prev.sk) lastBefore[hit.t.key] = { sk, ui: hit.ui, h: hit.h };
+            if (!prev || sk > prev.sk) lastBefore[hit.t.key] = { sk, ds, pid, ui: hit.ui, h: hit.h };
           } else if (inRange(ds)) {
             const prev = firstCleared[hit.t.key];
             if (!prev || sk < prev.sk) firstCleared[hit.t.key] = { sk, ui: hit.ui, h: hit.h };
@@ -4815,6 +4844,7 @@
         }
 
         let filled = 0;
+        const lastFilled = {};
         for (const cd = new Date(rangeStart); cd < endDate; cd.setDate(cd.getDate() + 1)) {
           const ds = formatDate(cd);
           const i = (cd.getDay() + 6) % 7;
@@ -4844,6 +4874,7 @@
             };
             filled++;
             touched.add(`${match.idx}|${match.cls || ''}`);
+            lastFilled[`${match.idx}|${match.cls || ''}`] = { ds, pid };
             let nh = prog.currentHour + 1;
             let nu = prog.currentUnitIdx;
             if (nh > unit.hours) { nh = 1; nu++; }
@@ -4851,11 +4882,21 @@
           }
         }
 
-        if (filled === 0 && cleared === 0) { showToast('自動入力できる授業がありません'); return; }
+        let leftover = 0;
+        // 全単元を入れ終えたクラス・教科は、終わりのコマより後ろ（範囲の外も含む）に残った前の連番を消す
+        for (const t of targets) {
+          const s = up[t.idx];
+          if (getClassProgress(s, t.cls).currentUnitIdx < s.units.length) continue;
+          const end = lastFilled[t.key] || lastBefore[t.key];
+          if (end) leftover += clearAutoCellsAfterEnd(nd, s, t.cls, end.ds, end.pid);
+        }
+
+        if (filled === 0 && cleared === 0 && leftover === 0) { showToast('自動入力できる授業がありません'); return; }
         saveSyllabus(up);
         saveAll(baseTemplate, templateSettings, nd, weeklySettings);
         const removed = cleared - filled;
-        showToast(removed > 0 ? `📚 ${filled}コマ自動入力しました（時間割にない古いコマ${removed}件を削除）` : `📚 ${filled}コマ自動入力しました`);
+        const notes = [removed > 0 ? `時間割にない古いコマ${removed}件を削除` : '', leftover > 0 ? `全単元の後ろに残っていたコマ${leftover}件を削除` : ''].filter(Boolean);
+        showToast(`📚 ${filled}コマ自動入力しました${notes.length ? `（${notes.join('、')}）` : ''}`);
       };
 
       // 週の自動入力：テンプレートの教科と進度データを照合し、自動的に週案を埋める
